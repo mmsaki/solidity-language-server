@@ -1,6 +1,6 @@
 # Solidity Language Server
 
-Solidy lsp server.
+Solidity lsp server using foundry's build process only.
 
 ## Install
 
