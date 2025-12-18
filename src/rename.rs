@@ -1,7 +1,50 @@
-use serde_json::Value;
-use tower_lsp::lsp_types::{Position, TextEdit, Url, WorkspaceEdit};
+use crate::goto;
 use crate::references;
+use serde_json::Value;
 use std::collections::HashMap;
+use tower_lsp::lsp_types::{Position, Range, TextEdit, Url, WorkspaceEdit};
+
+fn get_text_at_range(source_bytes: &[u8], range: &Range) -> Option<String> {
+    let start_byte = goto::pos_to_bytes(source_bytes, range.start);
+    let end_byte = goto::pos_to_bytes(source_bytes, range.end);
+    if end_byte > source_bytes.len() {
+        return None;
+    }
+    String::from_utf8(source_bytes[start_byte..end_byte].to_vec()).ok()
+}
+
+fn get_name_location_index(
+    ast_data: &Value,
+    file_uri: &Url,
+    position: Position,
+    source_bytes: &[u8],
+) -> Option<usize> {
+    let sources = ast_data.get("sources")?;
+    let (nodes, path_to_abs) = goto::cache_ids(sources);
+    let path = file_uri.to_file_path().ok()?;
+    let path_str = path.to_str()?;
+    let abs_path = path_to_abs.get(path_str)?;
+    let byte_position = goto::pos_to_bytes(source_bytes, position);
+    let node_id = references::byte_to_id(&nodes, abs_path, byte_position)?;
+    let file_nodes = nodes.get(abs_path)?;
+    let node_info = file_nodes.get(&node_id)?;
+
+    if !node_info.name_locations.is_empty() {
+        for (i, name_loc) in node_info.name_locations.iter().enumerate() {
+            let parts: Vec<&str> = name_loc.split(':').collect();
+            if parts.len() == 3
+                && let (Ok(start), Ok(length)) =
+                    (parts[0].parse::<usize>(), parts[1].parse::<usize>())
+            {
+                let end = start + length;
+                if start <= byte_position && byte_position < end {
+                    return Some(i);
+                }
+            }
+        }
+    }
+    None
+}
 
 pub fn get_identifier_at_position(source_bytes: &[u8], position: Position) -> Option<String> {
     let text = String::from_utf8_lossy(source_bytes);
@@ -16,7 +59,7 @@ pub fn get_identifier_at_position(source_bytes: &[u8], position: Position) -> Op
     let mut start = position.character as usize;
     let mut end = position.character as usize;
 
-    while start > 0 
+    while start > 0
         && (line.as_bytes()[start - 1].is_ascii_alphanumeric()
             || line.as_bytes()[start - 1] == b'_')
     {
@@ -38,32 +81,62 @@ pub fn get_identifier_at_position(source_bytes: &[u8], position: Position) -> Op
     Some(line[start..end].to_string())
 }
 
+type Type = HashMap<Url, HashMap<(u32, u32, u32, u32), TextEdit>>;
 
 pub fn rename_symbol(
     ast_data: &Value,
     file_uri: &Url,
     position: Position,
-    _source_bytes: &[u8],
-    new_name: String
+    source_bytes: &[u8],
+    new_name: String,
 ) -> Option<WorkspaceEdit> {
-    let locations = references::goto_references(ast_data, file_uri, position, _source_bytes);
+    let original_identifier = get_identifier_at_position(source_bytes, position)?;
+    let name_location_index = get_name_location_index(ast_data, file_uri, position, source_bytes);
+    let locations = references::goto_references_with_index(
+        ast_data,
+        file_uri,
+        position,
+        source_bytes,
+        name_location_index,
+    );
     if locations.is_empty() {
         return None;
     }
-    let mut changes: HashMap<Url, Vec<TextEdit>> = HashMap::new();
+    let mut changes: Type = HashMap::new();
     for location in locations {
-        let text_edit = TextEdit {
-            range: location.range,
-            new_text: new_name.clone(),
-
+        // Read the file to check the text at the range
+        let absolute_path = match location.uri.to_file_path() {
+            Ok(p) => p,
+            Err(_) => continue,
         };
-        changes.entry(location.uri).or_default().push(text_edit);
+        let file_source_bytes = match std::fs::read(&absolute_path) {
+            Ok(b) => b,
+            Err(_) => continue,
+        };
+        let text_at_range = match get_text_at_range(&file_source_bytes, &location.range) {
+            Some(t) => t,
+            None => continue,
+        };
+        if text_at_range == original_identifier {
+            let text_edit = TextEdit {
+                range: location.range,
+                new_text: new_name.clone(),
+            };
+            let key = (
+                location.range.start.line,
+                location.range.start.character,
+                location.range.end.line,
+                location.range.end.character,
+            );
+            changes.entry(location.uri).or_default().insert(key, text_edit);
+        }
     }
+    let changes_vec: HashMap<Url, Vec<TextEdit>> = changes.into_iter()
+        .map(|(uri, edits_map)| (uri, edits_map.into_values().collect()))
+        .collect();
     Some(WorkspaceEdit {
-        changes: Some(changes),
+        changes: Some(changes_vec),
         document_changes: None,
-        change_annotations: None
+        change_annotations: None,
     })
-
 }
-

@@ -83,12 +83,7 @@ pub fn id_to_location_with_index(
             return None;
         }
     } else {
-        let parts: Vec<&str> = node.src.split(':').collect();
-        if parts.len() == 3 {
-            (parts[0], parts[1], parts[2])
-        } else {
-            return None;
-        }
+        return None;
     };
 
     let byte_offset: usize = byte_str.parse().ok()?;
@@ -119,6 +114,16 @@ pub fn goto_references(
     file_uri: &Url,
     position: Position,
     source_bytes: &[u8],
+) -> Vec<Location> {
+    goto_references_with_index(ast_data, file_uri, position, source_bytes, None)
+}
+
+pub fn goto_references_with_index(
+    ast_data: &Value,
+    file_uri: &Url,
+    position: Position,
+    source_bytes: &[u8],
+    name_location_index: Option<usize>,
 ) -> Vec<Location> {
     let sources = match ast_data.get("sources") {
         Some(s) => s,
@@ -182,7 +187,9 @@ pub fn goto_references(
     }
     let mut locations = Vec::new();
     for id in results {
-        if let Some(location) = id_to_location(&nodes, &id_to_path_map, id) {
+        if let Some(location) =
+            id_to_location_with_index(&nodes, &id_to_path_map, id, name_location_index)
+        {
             locations.push(location);
         }
     }
@@ -202,4 +209,3 @@ pub fn goto_references(
     }
     unique_locations
 }
-
