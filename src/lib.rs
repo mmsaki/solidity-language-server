@@ -6,4 +6,5 @@ pub mod references;
 pub mod rename;
 pub mod runner;
 pub mod solar_runner;
+pub mod symbols;
 pub mod utils;

@@ -3,6 +3,7 @@ use crate::references;
 use crate::rename;
 use crate::runner::{ForgeRunner, Runner};
 use crate::utils;
+use crate::symbols;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -696,6 +697,131 @@ impl LanguageServer for ForgeLsp {
             }
         }
     }
+
+    async fn symbol(
+        &self,
+        params: WorkspaceSymbolParams
+    ) -> tower_lsp::jsonrpc::Result<Option<Vec<SymbolInformation>>> {
+        self.client
+            .log_message(
+                MessageType::INFO, "got workspace/symbol request"
+            )
+        .await;
+
+        let current_dir = std::env::current_dir().ok();
+        let ast_data = if let Some(dir) = current_dir {
+            let path_str = dir.to_str().unwrap_or(".");
+            match self.compiler.ast(path_str).await {
+                Ok(data) => data,
+                Err(e) => {
+                    self.client
+                        .log_message(
+                            MessageType::WARNING,
+                            format!("failed to get ast data: {e}")
+                        )
+                        .await;
+                    return Ok(None);
+
+                }
+            }
+        } else {
+            self.client
+                .log_message(
+                    MessageType::ERROR, "could not get current directory"
+                )
+                .await;
+            return Ok(None);
+        };
+
+        let mut all_symbols = symbols::extract_symbols(&ast_data);
+        if !params.query.is_empty() {
+            let query = params.query.to_lowercase();
+            all_symbols.retain(|symbol| symbol.name.to_lowercase().contains(&query));
+        }
+        if all_symbols.is_empty() {
+            self.client
+                .log_message(
+                    MessageType::INFO, "No symbols found"
+                )
+                .await;
+            Ok(None)
+        } else {
+            self.client
+                .log_message(
+                    MessageType::INFO, 
+                    format!("found {} symbol", all_symbols.len())
+                )
+                .await;
+            Ok(Some(all_symbols))
+        }
+
+    }
+
+    async fn document_symbol(
+        &self,
+        params: DocumentSymbolParams
+    ) -> tower_lsp::jsonrpc::Result<Option<DocumentSymbolResponse>> {
+        self.client
+            .log_message(
+                MessageType::INFO, "got textDocument/documentSymbol request"
+            )
+            .await;
+        let uri = params.text_document.uri;
+        let file_path = match uri.to_file_path() {
+            Ok(path) => path,
+            Err(_) => {
+                self.client
+                    .log_message(
+                        MessageType::ERROR, "invalid file uri"
+                    )
+                    .await;
+                return Ok(None);
+            }
+        };
+
+        let path_str = match file_path.to_str() {
+            Some(s) => s,
+            None => {
+                self.client
+                    .log_message(
+                        MessageType::ERROR, "invalid path"
+                    )
+                    .await;
+                return Ok(None);
+            }
+
+        };
+        let ast_data = match self.compiler.ast(path_str).await {
+            Ok(data) => data,
+            Err(e) => {
+                self.client
+                    .log_message(
+                        MessageType::WARNING,
+                        format!("failed to get ast data: {e}")
+                    )
+                    .await;
+                return Ok(None);
+            }
+        };
+        let symbols = symbols::extract_document_symbols(&ast_data, path_str);
+        if symbols.is_empty() {
+            self.client
+                .log_message(
+                    MessageType::INFO, "no document symbols found"
+                )
+                .await;
+            Ok(None)
+        } else {
+            self.client
+                .log_message(
+                    MessageType::INFO, 
+                    format!("found {} document symbols", symbols.len())
+                )
+                .await;
+            Ok(Some(DocumentSymbolResponse::Nested(symbols)))
+        }
+    }
+
 }
 
 fn byte_offset(content: &str, position: Position) -> Result<usize, String> {
