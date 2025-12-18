@@ -7,6 +7,7 @@ use tower_lsp::lsp_types::{Location,Position,Range, Url};
 pub struct NodeInfo {
     pub src: String,
     pub name_location: Option<String>,
+    pub name_locations: Vec<String>,
     pub referenced_declaration: Option<u64>,
     pub node_type: Option<String>,
     pub member_location: Option<String>,
@@ -59,19 +60,20 @@ pub fn cache_ids(
                 if let Some(id) = ast.get("id").and_then(|v| v.as_u64())
                     && let Some(src) = ast.get("src").and_then(|v| v.as_str())
                 {
-                    nodes.get_mut(&abs_path).unwrap().insert(
-                        id,
-                        NodeInfo {
-                            src: src.to_string(),
-                            name_location: None,
-                            referenced_declaration: None,
-                            node_type: ast
-                                .get("nodeType")
-                                .and_then(|v| v.as_str())
-                                .map(|s| s.to_string()),
-                            member_location: None,
-                        },
-                    );
+                     nodes.get_mut(&abs_path).unwrap().insert(
+                         id,
+                         NodeInfo {
+                             src: src.to_string(),
+                             name_location: None,
+                             name_locations: vec![],
+                             referenced_declaration: None,
+                             node_type: ast
+                                 .get("nodeType")
+                                 .and_then(|v| v.as_str())
+                                 .map(|s| s.to_string()),
+                             member_location: None,
+                         },
+                     );
                 }
 
                 let mut stack = vec![ast];
@@ -105,9 +107,21 @@ pub fn cache_ids(
                             }
                         }
 
+                        let name_locations = if let Some(name_locations) = tree.get("nameLocations")
+                            && let Some(locations_array) = name_locations.as_array()
+                        {
+                            locations_array
+                                .iter()
+                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                .collect()
+                        } else {
+                            vec![]
+                        };
+
                         let node_info = NodeInfo {
                             src: src.to_string(),
                             name_location,
+                            name_locations,
                             referenced_declaration: tree
                                 .get("referencedDeclaration")
                                 .and_then(|v| v.as_u64()),

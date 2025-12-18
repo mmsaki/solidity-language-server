@@ -46,6 +46,15 @@ pub fn id_to_location(
     id_to_path: &HashMap<String, String>,
     node_id: u64,
 ) -> Option<Location> {
+    id_to_location_with_index(nodes, id_to_path, node_id, None)
+}
+
+pub fn id_to_location_with_index(
+    nodes: &HashMap<String, HashMap<u64, NodeInfo>>,
+    id_to_path: &HashMap<String, String>,
+    node_id: u64,
+    name_location_index: Option<usize>,
+) -> Option<Location> {
     let mut target_node: Option<&NodeInfo> = None;
     for file_nodes in nodes.values() {
         if let Some(node) = file_nodes.get(&node_id) {
@@ -55,7 +64,18 @@ pub fn id_to_location(
     }
     let node = target_node?;
 
-    let (byte_str, length_str, file_id) = if let Some(name_location) = &node.name_location {
+    let (byte_str, length_str, file_id) = if let Some(index) = name_location_index {
+        if let Some(name_loc) = node.name_locations.get(index) {
+            let parts: Vec<&str> = name_loc.split(':').collect();
+            if parts.len() == 3 {
+                (parts[0], parts[1], parts[2])
+            } else {
+                return None;
+            }
+        } else {
+            return None;
+        }
+    } else if let Some(name_location) = &node.name_location {
         let parts: Vec<&str> = name_location.split(':').collect();
         if parts.len() == 3 {
             (parts[0], parts[1], parts[2])
