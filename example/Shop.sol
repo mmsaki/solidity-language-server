@@ -2,9 +2,6 @@
 pragma solidity 0.8.30;
 
 library Transaction {
-    uint256 constant TAX = 0x1000;
-    uint256 constant REFUND_RATE = 500;
-
     struct Order {
         address buyer;
         uint256 nonce;
@@ -12,25 +9,37 @@ library Transaction {
         uint256 date;
     }
 
-    function addTax(uint256 amount) internal pure returns (uint256) {
-        return amount + TAX;
+    function addTax(uint256 amount, uint256 tax) internal pure returns (uint256) {
+        return amount + tax;
     }
 
-    function getRefund(uint256 amount) internal pure returns (uint256) {
-        return amount * 500 / 1_000;
+    function getRefund(uint256 amount, uint256 rate, uint256 base) internal pure returns (uint256) {
+        return amount * rate / base;
     }
 }
 
 contract Shop {
     using Transaction for uint256;
-    uint256 immutable PRICE = 0x20_000_000;
+
+    uint256 immutable TAX = 1000;
+    // 500 / 1000 == 50% refund
+    // 1000 / 1000 == 100% refund
+    uint256 immutable REFUND_RATE = 500;
+    uint256 immutable REFUND_BASE = 1_000;
+
+    uint256 immutable PRICE;
     address payable owner;
+
     mapping(bytes32 => Transaction.Order) orders;
     mapping(address => uint256) nonces;
     mapping(bytes32 => bool) refunds;
 
-    constructor() {
+    constructor(uint256 price, uint256 tax, uint256 refundBase, uint256 refundRate) {
         owner = payable(msg.sender);
+        PRICE = price;
+        TAX = tax;
+        REFUND_BASE = refundBase;
+        REFUND_RATE = refundRate;
     }
 
     function buy() public payable {
@@ -45,7 +54,7 @@ contract Shop {
     }
 
     function addTax(bytes32 orderId) internal view returns (uint256 total) {
-        total = orders[orderId].amount.addTax();
+        total = orders[orderId].amount.addTax(TAX);
     }
 
     function withdraw() public {
@@ -58,7 +67,7 @@ contract Shop {
         require(block.timestamp < order.date + 24 hours);
         require(!refunds[orderId]);
         refunds[orderId] = true;
-        payable(msg.sender).transfer(PRICE.getRefund());
+        payable(msg.sender).transfer(PRICE.getRefund(REFUND_RATE, REFUND_BASE));
     }
 
     receive() external payable {}
