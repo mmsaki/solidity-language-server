@@ -75,8 +75,8 @@ solidity-language-server
 - [x] `workspace/didChangeConfiguration` - Acknowledges configuration changes (logs only)
 - [x] `workspace/didChangeWatchedFiles` - Acknowledges watched file changes (logs only)
 - [x] `workspace/didChangeWorkspaceFolders` - Acknowledges workspace folder changes (logs only)
+- [x] `workspace/applyEdit` - Apply workspace edits
 - [ ] `workspace/executeCommand` - Execute workspace commands (stub implementation)
-- [ ] `workspace/applyEdit` - Apply workspace edits
 - [ ] `workspace/willCreateFiles` - File creation preview
 - [ ] `workspace/willRenameFiles` - File rename preview
 - [ ] `workspace/willDeleteFiles` - File deletion preview
