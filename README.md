@@ -92,4 +92,4 @@ solidity-language-server
 - Solc / Forge build ast issues
   - No ast nodes supported for yul
   - Struct defined types e.g. `Lib.Sturct` nameLocations are not identified as separate ast nodes
-    - makes renaming, and references for `Lib` not show up in `Lib.Struct` type usage
+    - This makes renaming, and references for `Lib` not show up in `Lib.Struct` type usage
