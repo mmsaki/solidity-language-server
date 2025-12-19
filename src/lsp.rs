@@ -109,7 +109,7 @@ impl ForgeLsp {
                 self.client
                     .log_message(
                         MessageType::WARNING,
-                        format!("Fourge build diagnostics failed: {e}"),
+                        format!("Forge build diagnostics failed: {e}"),
                     )
                     .await;
             }
