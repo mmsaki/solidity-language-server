@@ -47,6 +47,7 @@ solidity-language-server
 - [x] `textDocument/references` - Find all references
 - [x] `textDocument/documentSymbol` - Document symbol outline (contracts, functions, variables, events, structs, enums, etc.)
 - [x] `textDocument/rename` - Rename symbols across files
+- [x] `textDocument/prepareRename` - Prepare rename validation
 - [ ] `textDocument/completion` - Code completion
 - [ ] `textDocument/hover` - Hover information
 - [ ] `textDocument/signatureHelp` - Function signature help
@@ -61,7 +62,6 @@ solidity-language-server
 - [ ] `textDocument/formatting` - Document formatting
 - [ ] `textDocument/rangeFormatting` - Range formatting
 - [ ] `textDocument/onTypeFormatting` - On-type formatting
-- [x] `textDocument/prepareRename` - Prepare rename validation
 - [ ] `textDocument/foldingRange` - Folding ranges
 - [ ] `textDocument/selectionRange` - Selection ranges
 - [ ] `textDocument/semanticTokens` - Semantic tokens

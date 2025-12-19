@@ -537,6 +537,54 @@ impl LanguageServer for ForgeLsp {
             Ok(Some(locations))
         }
     }
+
+    async fn prepare_rename(
+        &self,
+        params: TextDocumentPositionParams,
+    ) -> tower_lsp::jsonrpc::Result<Option<PrepareRenameResponse>> {
+        self.client
+            .log_message(MessageType::INFO, "got textDocument/prepareRename request")
+            .await;
+
+        let uri = params.text_document.uri;
+        let position = params.position;
+
+        let file_path = match uri.to_file_path() {
+            Ok(path) => path,
+            Err(_) => {
+                self.client
+                    .log_message(MessageType::ERROR, "invalid file uri")
+                    .await;
+                return Ok(None);
+            }
+        };
+
+        let source_bytes = match std::fs::read(&file_path) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                self.client
+                    .log_message(MessageType::ERROR, format!("failed to read file: {e}"))
+                    .await;
+                return Ok(None);
+            }
+        };
+
+        if let Some(range) = rename::get_identifier_range(&source_bytes, position) {
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    format!("prepare rename range: {}:{}", range.start.line, range.start.character),
+                )
+                .await;
+            Ok(Some(PrepareRenameResponse::Range(range)))
+        } else {
+            self.client
+                .log_message(MessageType::INFO, "no identifier found for prepare rename")
+                .await;
+            Ok(None)
+        }
+    }
+
     async fn rename(
         &self,
         params: RenameParams,
@@ -826,56 +874,6 @@ impl LanguageServer for ForgeLsp {
             Ok(Some(DocumentSymbolResponse::Nested(symbols)))
         }
     }
-
-    async fn prepare_rename(
-        &self,
-        params: TextDocumentPositionParams,
-    ) -> tower_lsp::jsonrpc::Result<Option<PrepareRenameResponse>> {
-        self.client
-            .log_message(MessageType::INFO, "got textDocument/prepareRename request")
-            .await;
-
-        let uri = params.text_document.uri;
-        let position = params.position;
-
-        let file_path = match uri.to_file_path() {
-            Ok(path) => path,
-            Err(_) => {
-                self.client
-                    .log_message(MessageType::ERROR, "invalid file uri")
-                    .await;
-                return Ok(None);
-            }
-        };
-
-        let source_bytes = match std::fs::read(&file_path) {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                self.client
-                    .log_message(MessageType::ERROR, format!("failed to read file: {e}"))
-                    .await;
-                return Ok(None);
-            }
-        };
-
-        if let Some(range) = rename::get_identifier_range(&source_bytes, position) {
-            self.client
-                .log_message(
-                    MessageType::INFO,
-                    format!("prepare rename range: {}:{}", range.start.line, range.start.character),
-                )
-                .await;
-            Ok(Some(PrepareRenameResponse::Range(range)))
-        } else {
-            self.client
-                .log_message(MessageType::INFO, "no identifier found for prepare rename")
-                .await;
-            Ok(None)
-        }
-    }
-
-
-
 }
 
 fn byte_offset(content: &str, position: Position) -> Result<usize, String> {
