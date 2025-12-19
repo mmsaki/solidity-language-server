@@ -2,7 +2,11 @@ use serde_json::Value;
 use std::collections::HashSet;
 use tower_lsp::lsp_types::{CompletionItem, CompletionItemKind, Position, SymbolInformation};
 
-fn resolve_expression_type(expr: &str, ast_data: &Value, _all_symbols: &[SymbolInformation]) -> Option<String> {
+fn resolve_expression_type(
+    expr: &str,
+    ast_data: &Value,
+    _all_symbols: &[SymbolInformation],
+) -> Option<String> {
     if let Some(bracket_pos) = expr.find('[') {
         // Map/array access
         let base = &expr[..bracket_pos];
@@ -39,7 +43,8 @@ fn get_variable_type(ast_data: &Value, var_name: &str) -> Option<String> {
         && let Some(contents_array) = contents.as_array()
         && let Some(first_content) = contents_array.first()
         && let Some(source_file) = first_content.get("source_file")
-        && let Some(ast) = source_file.get("ast") {
+        && let Some(ast) = source_file.get("ast")
+    {
         find_type_in_ast(ast, var_name)
     } else {
         None
@@ -47,61 +52,61 @@ fn get_variable_type(ast_data: &Value, var_name: &str) -> Option<String> {
 }
 
 fn find_type_in_ast(node: &Value, name: &str) -> Option<String> {
-fn extract_type(type_name_node: Option<&Value>) -> Option<String> {
-    if let Some(type_name_node) = type_name_node {
-        // Check nodeType
-        if let Some(node_type) = type_name_node.get("nodeType").and_then(|v| v.as_str()) {
-            if node_type == "Mapping" {
-                if let Some(type_string) = type_name_node
-                    .get("typeDescriptions")
-                    .and_then(|td| td.get("typeString"))
-                    .and_then(|v| v.as_str())
-                {
-                    return Some(type_string.to_string());
-                }
-            } else if node_type == "UserDefinedTypeName" {
-                if let Some(name) = type_name_node
-                    .get("pathNode")
-                    .and_then(|p| p.get("name"))
-                    .and_then(|v| v.as_str())
+    fn extract_type(type_name_node: Option<&Value>) -> Option<String> {
+        if let Some(type_name_node) = type_name_node {
+            // Check nodeType
+            if let Some(node_type) = type_name_node.get("nodeType").and_then(|v| v.as_str()) {
+                if node_type == "Mapping" {
+                    if let Some(type_string) = type_name_node
+                        .get("typeDescriptions")
+                        .and_then(|td| td.get("typeString"))
+                        .and_then(|v| v.as_str())
+                    {
+                        return Some(type_string.to_string());
+                    }
+                } else if node_type == "UserDefinedTypeName" {
+                    if let Some(name) = type_name_node
+                        .get("pathNode")
+                        .and_then(|p| p.get("name"))
+                        .and_then(|v| v.as_str())
+                    {
+                        return Some(name.to_string());
+                    }
+                } else if node_type == "ElementaryTypeName"
+                    && let Some(name) = type_name_node.get("name").and_then(|v| v.as_str())
                 {
                     return Some(name.to_string());
                 }
-            } else if node_type == "ElementaryTypeName"
-                && let Some(name) = type_name_node.get("name").and_then(|v| v.as_str())
+            }
+            // Fallback to old logic
+            if let Some(name) = type_name_node.get("name").and_then(|v| v.as_str()) {
+                // For mapping types, return the full type
+                if name.starts_with("mapping(") {
+                    return Some(name.to_string());
+                }
+                // For user-defined types, take the last part after '.'
+                let base_name = name.split('.').next_back().unwrap_or(name);
+                return Some(base_name.to_string());
+            }
+            // For user-defined types
+            if let Some(contract) = type_name_node
+                .get("contract")
+                .and_then(|c| c.get("name"))
+                .and_then(|v| v.as_str())
+            {
+                return Some(contract.to_string());
+            }
+            // For user-defined types like structs
+            if let Some(name) = type_name_node
+                .get("pathNode")
+                .and_then(|p| p.get("name"))
+                .and_then(|v| v.as_str())
             {
                 return Some(name.to_string());
             }
         }
-        // Fallback to old logic
-        if let Some(name) = type_name_node.get("name").and_then(|v| v.as_str()) {
-            // For mapping types, return the full type
-            if name.starts_with("mapping(") {
-                return Some(name.to_string());
-            }
-            // For user-defined types, take the last part after '.'
-            let base_name = name.split('.').next_back().unwrap_or(name);
-            return Some(base_name.to_string());
-        }
-        // For user-defined types
-        if let Some(contract) = type_name_node
-            .get("contract")
-            .and_then(|c| c.get("name"))
-            .and_then(|v| v.as_str())
-        {
-            return Some(contract.to_string());
-        }
-        // For user-defined types like structs
-        if let Some(name) = type_name_node
-            .get("pathNode")
-            .and_then(|p| p.get("name"))
-            .and_then(|v| v.as_str())
-        {
-            return Some(name.to_string());
-        }
+        None
     }
-    None
-}
     if let Some(node_type) = node.get("nodeType").and_then(|v| v.as_str()) {
         println!("Checking node type: {}", node_type);
         let type_name_node = if node_type == "VariableDeclaration"
@@ -160,7 +165,8 @@ fn get_using_directives(ast: &Value) -> Vec<(String, String)> {
         && let Some(contents_array) = contents.as_array()
         && let Some(first_content) = contents_array.first()
         && let Some(source_file) = first_content.get("source_file")
-        && let Some(ast) = source_file.get("ast") {
+        && let Some(ast) = source_file.get("ast")
+    {
         usings.extend(get_using_directives_from_ast(ast));
     }
     // For testing, hardcode if not found
@@ -213,7 +219,15 @@ pub fn get_dot_completions(
     // Trim trailing whitespace and get the last identifier (after last dot)
     let identifier = before_dot
         .trim_end()
-        .rsplit(|c: char| c.is_whitespace() || c == ';' || c == '{' || c == '}' || c == '(' || c == ')' || c == '.')
+        .rsplit(|c: char| {
+            c.is_whitespace()
+                || c == ';'
+                || c == '{'
+                || c == '}'
+                || c == '('
+                || c == ')'
+                || c == '.'
+        })
         .next()
         .unwrap_or("")
         .to_string();
@@ -230,10 +244,17 @@ pub fn get_dot_completions(
     let resolved_type = resolve_expression_type(&identifier, ast_data, &all_symbols);
 
     if let Some(resolved_type) = resolved_type {
-        let base_name = resolved_type.split('.').next_back().unwrap_or(&resolved_type);
+        let base_name = resolved_type
+            .split('.')
+            .next_back()
+            .unwrap_or(&resolved_type);
         // Find the type symbol
         if let Some(type_symbol) = all_symbols.iter().find(|s| {
-            s.name == base_name && (s.kind == tower_lsp::lsp_types::SymbolKind::STRUCT || s.kind == tower_lsp::lsp_types::SymbolKind::CLASS || s.kind == tower_lsp::lsp_types::SymbolKind::INTERFACE || s.kind == tower_lsp::lsp_types::SymbolKind::ENUM)
+            s.name == base_name
+                && (s.kind == tower_lsp::lsp_types::SymbolKind::STRUCT
+                    || s.kind == tower_lsp::lsp_types::SymbolKind::CLASS
+                    || s.kind == tower_lsp::lsp_types::SymbolKind::INTERFACE
+                    || s.kind == tower_lsp::lsp_types::SymbolKind::ENUM)
         }) {
             // For structs, show their members
             for member_symbol in &all_symbols {
@@ -282,15 +303,29 @@ pub fn get_dot_completions(
                 // User-defined type
                 if let Some(type_symbol) = all_symbols.iter().find(|s| {
                     let base_name = type_name.split('.').next_back().unwrap_or(&type_name);
-                    s.name == base_name && (s.kind == tower_lsp::lsp_types::SymbolKind::STRUCT || s.kind == tower_lsp::lsp_types::SymbolKind::CLASS || s.kind == tower_lsp::lsp_types::SymbolKind::INTERFACE || s.kind == tower_lsp::lsp_types::SymbolKind::ENUM)
+                    s.name == base_name
+                        && (s.kind == tower_lsp::lsp_types::SymbolKind::STRUCT
+                            || s.kind == tower_lsp::lsp_types::SymbolKind::CLASS
+                            || s.kind == tower_lsp::lsp_types::SymbolKind::INTERFACE
+                            || s.kind == tower_lsp::lsp_types::SymbolKind::ENUM)
                 }) {
                     for member_symbol in &all_symbols {
-                        if let Some(container_name) = &member_symbol.container_name && container_name == &type_symbol.name {
+                        if let Some(container_name) = &member_symbol.container_name
+                            && container_name == &type_symbol.name
+                        {
                             let kind = match member_symbol.kind {
-                                tower_lsp::lsp_types::SymbolKind::FUNCTION => CompletionItemKind::FUNCTION,
-                                tower_lsp::lsp_types::SymbolKind::FIELD => CompletionItemKind::FIELD,
-                                tower_lsp::lsp_types::SymbolKind::EVENT => CompletionItemKind::EVENT,
-                                tower_lsp::lsp_types::SymbolKind::METHOD => CompletionItemKind::METHOD,
+                                tower_lsp::lsp_types::SymbolKind::FUNCTION => {
+                                    CompletionItemKind::FUNCTION
+                                }
+                                tower_lsp::lsp_types::SymbolKind::FIELD => {
+                                    CompletionItemKind::FIELD
+                                }
+                                tower_lsp::lsp_types::SymbolKind::EVENT => {
+                                    CompletionItemKind::EVENT
+                                }
+                                tower_lsp::lsp_types::SymbolKind::METHOD => {
+                                    CompletionItemKind::METHOD
+                                }
                                 _ => CompletionItemKind::VARIABLE,
                             };
                             if seen_labels.insert(member_symbol.name.clone()) {
@@ -327,19 +362,6 @@ pub fn get_dot_completions(
                         detail: Some(format!("{}.{}", library, symbol.name)),
                         ..Default::default()
                     });
-                }
-            }
-            // For testing, hardcode Transaction functions
-            if library == "Transaction" {
-                for func in ["addTax", "getRefund"] {
-                    if seen_labels.insert(func.to_string()) {
-                        relevant_completions.push(CompletionItem {
-                            label: func.to_string(),
-                            kind: Some(CompletionItemKind::METHOD),
-                            detail: Some(format!("{}.{}", library, func)),
-                            ..Default::default()
-                        });
-                    }
                 }
             }
         }
