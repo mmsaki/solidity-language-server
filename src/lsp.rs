@@ -162,8 +162,14 @@ impl LanguageServer for ForgeLsp {
                 })),
                 workspace_symbol_provider: Some(OneOf::Left(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
-                text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::FULL,
+                text_document_sync: Some(TextDocumentSyncCapability::Options(
+                    TextDocumentSyncOptions {
+                        will_save: Some(true),
+                        will_save_wait_until: Some(true),
+                        open_close: Some(true),
+                        save: Some(TextDocumentSyncSaveOptions::Supported(true)),
+                        change: Some(TextDocumentSyncKind::FULL),
+                    },
                 )),
                 ..ServerCapabilities::default()
             },
@@ -239,6 +245,30 @@ impl LanguageServer for ForgeLsp {
         })
         .await;
         _ = self.client.semantic_tokens_refresh().await;
+    }
+
+    async fn will_save(&self, params: WillSaveTextDocumentParams) {
+        self.client
+            .log_message(
+                MessageType::INFO, 
+                format!(
+                    "file will save reason:{:?} {}", 
+                    params.reason, 
+                    params.text_document.uri
+                )
+            )
+            .await;
+    }
+
+    async fn will_save_wait_until(
+        &self,
+        _params: WillSaveTextDocumentParams,
+    ) -> tower_lsp::jsonrpc::Result<Option<Vec<TextEdit>>> {
+        self.client
+            .log_message(MessageType::INFO, "will save wait until")
+            .await;
+        // TODO: Implement formatting or other pre-save edits
+        Ok(None)
     }
 
     async fn did_close(&self, _: DidCloseTextDocumentParams) {

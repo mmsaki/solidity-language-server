@@ -32,8 +32,8 @@ solidity-language-server
 - [x] `textDocument/didChange` - Handle file content changes
 - [x] `textDocument/didSave` - Handle file saving with diagnostics refresh
 - [x] `textDocument/didClose` - Handle file closing
-- [ ] `textDocument/willSave` - File will save notification
-- [ ] `textDocument/willSaveWaitUntil` - File will save wait until
+- [x] `textDocument/willSave` - File will save notification
+- [x] `textDocument/willSaveWaitUntil` - File will save wait until
 
 **Diagnostics**
 
@@ -46,8 +46,8 @@ solidity-language-server
 - [x] `textDocument/declaration` - Go to declaration
 - [x] `textDocument/references` - Find all references
 - [x] `textDocument/documentSymbol` - Document symbol outline (contracts, functions, variables, events, structs, enums, etc.)
-- [x] `textDocument/rename` - Rename symbols across files
 - [x] `textDocument/prepareRename` - Prepare rename validation
+- [x] `textDocument/rename` - Rename symbols across files
 - [ ] `textDocument/completion` - Code completion
 - [ ] `textDocument/hover` - Hover information
 - [ ] `textDocument/signatureHelp` - Function signature help
