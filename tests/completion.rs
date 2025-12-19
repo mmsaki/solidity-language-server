@@ -2,7 +2,7 @@ use solidity_language_server::completion::member_access;
 use solidity_language_server::symbols::extract_symbols;
 use solidity_language_server::completion::handler::get_scoped_completions;
 use std::process::Command;
-use tower_lsp::lsp_types::{Position, CompletionItemKind};
+use tower_lsp::lsp_types::{Position, CompletionItemKind, InsertTextFormat};
 
 fn get_test_ast_data() -> Option<serde_json::Value> {
     println!("Running forge build in example directory");
@@ -26,15 +26,96 @@ fn get_test_ast_data() -> Option<serde_json::Value> {
                 Ok(j) => Some(j),
                 Err(e) => {
                     println!("JSON parse error: {:?}", e);
-                    None
+                    return None;
                 }
             }
         }
         Err(e) => {
             println!("Failed to run forge command: {:?}", e);
-            None
+            return None;
         }
     }
+}
+
+#[test]
+fn test_function_completion_with_snippets() {
+    let ast_data = get_test_ast_data().unwrap();
+    let completions = get_scoped_completions(&ast_data, "", Position::new(0, 0));
+
+    // Find function completions
+    let function_completions: Vec<_> = completions.iter()
+        .filter(|c| c.kind == Some(CompletionItemKind::FUNCTION))
+        .collect();
+
+    assert!(!function_completions.is_empty(), "Should have function completions");
+
+    // Check that function completions have snippets
+    let functions_with_snippets: Vec<_> = function_completions.iter()
+        .filter(|c| c.insert_text.is_some() && c.insert_text_format == Some(InsertTextFormat::SNIPPET))
+        .collect();
+
+    assert!(!functions_with_snippets.is_empty(), "Should have function completions with snippets");
+
+    // Verify snippet format for a function with parameters
+    let function_with_params = functions_with_snippets.iter()
+        .find(|c| {
+            if let Some(insert_text) = &c.insert_text {
+                insert_text.contains("${1:")
+            } else {
+                false
+            }
+        });
+
+    if let Some(completion) = function_with_params {
+        if let Some(insert_text) = &completion.insert_text {
+            // Should be in format: functionName(${1:param1}, ${2:param2})
+            assert!(insert_text.starts_with(&completion.label), "Snippet should start with function name");
+            assert!(insert_text.contains("(") && insert_text.contains(")"), "Snippet should have parentheses");
+            assert!(insert_text.contains("${1:"), "Snippet should have first parameter placeholder");
+        }
+    }
+
+    // Check for functions with no parameters (should have empty parentheses)
+    let function_no_params = functions_with_snippets.iter()
+        .find(|c| {
+            if let Some(insert_text) = &c.insert_text {
+                insert_text.ends_with("()")
+            } else {
+                false
+            }
+        });
+
+    assert!(function_no_params.is_some(), "Should have at least one function with no parameters");
+}
+
+#[test]
+fn test_function_snippet_edge_cases() {
+    // Test the create_function_snippet function directly with various edge cases
+    use solidity_language_server::completion::handler::create_function_snippet;
+
+    // Function with no parameters
+    let snippet = create_function_snippet("myFunction", "myFunction()");
+    assert_eq!(snippet, "myFunction()");
+
+    // Function with simple parameters
+    let snippet = create_function_snippet("add", "add(uint256 a, uint256 b)");
+    assert_eq!(snippet, "add(${1:a}, ${2:b})");
+
+    // Function with unnamed parameters (should use generic names)
+    let snippet = create_function_snippet("func", "func(uint256, address)");
+    assert_eq!(snippet, "func(${1:param1}, ${2:param2})");
+
+    // Function with complex types
+    let snippet = create_function_snippet("complex", "(mapping(address => uint256) storage orders, uint256[] memory amounts)");
+    assert_eq!(snippet, "complex(${1:orders}, ${2:amounts})");
+
+    // Function with return types (should ignore returns)
+    let snippet = create_function_snippet("withReturns", "withReturns(uint256 x) returns (uint256)");
+    assert_eq!(snippet, "withReturns(${1:x})");
+
+    // Malformed signature (should default to no parameters)
+    let snippet = create_function_snippet("malformed", "malformed");
+    assert_eq!(snippet, "malformed()");
 }
 
 #[test]
@@ -225,8 +306,6 @@ fn test_function_completion_with_signature() {
     let function_completions: Vec<_> = completions.iter()
         .filter(|c| c.kind == Some(CompletionItemKind::FUNCTION))
         .collect();
-
-
 
     assert!(!function_completions.is_empty(), "Should have function completions");
 

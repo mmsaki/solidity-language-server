@@ -1,5 +1,5 @@
 use serde_json::Value;
-use tower_lsp::lsp_types::{CompletionItem, CompletionItemKind, CompletionParams, Position};
+use tower_lsp::lsp_types::{CompletionItem, CompletionItemKind, CompletionParams, Position, InsertTextFormat};
 
 use super::{elementary_type, global_symbol, keyword, member_access};
 
@@ -110,10 +110,13 @@ pub fn get_scoped_completions(
             // For functions, create a completion item for each signature
             if let Some(signatures) = function_signatures.get(&symbol.name) {
                 for signature in signatures {
+                    let snippet = create_function_snippet(&symbol.name, signature);
                     completions.push(CompletionItem {
                         label: symbol.name.clone(),
                         kind: Some(kind),
                         detail: Some(signature.clone()),
+                        insert_text: Some(snippet),
+                        insert_text_format: Some(InsertTextFormat::SNIPPET),
                         ..Default::default()
                     });
                 }
@@ -144,6 +147,36 @@ pub fn get_scoped_completions(
     });
 
     completions
+}
+
+fn split_params_by_comma(params_str: &str) -> Vec<String> {
+    let mut params = Vec::new();
+    let mut current = String::new();
+    let mut paren_depth = 0;
+
+    for c in params_str.chars() {
+        match c {
+            '(' | '[' => {
+                paren_depth += 1;
+                current.push(c);
+            }
+            ')' | ']' => {
+                paren_depth -= 1;
+                current.push(c);
+            }
+            ',' if paren_depth == 0 => {
+                params.push(current.trim().to_string());
+                current = String::new();
+            }
+            _ => current.push(c),
+        }
+    }
+
+    if !current.trim().is_empty() {
+        params.push(current.trim().to_string());
+    }
+
+    params
 }
 
 fn collect_all_function_signatures_from_ast(node: &Value, all_signatures: &mut std::collections::HashMap<String, Vec<String>>) {
@@ -234,6 +267,67 @@ fn collect_all_function_signatures_from_ast(node: &Value, all_signatures: &mut s
             }
         }
     }
+}
+
+pub fn create_function_snippet(function_name: &str, signature: &str) -> String {
+    // Parse the signature to extract parameters
+    // Signature format: "(type1 param1, type2 param2)" or "functionName(type1 param1, type2 param2)"
+    if let Some(start) = signature.find('(') {
+        // Find the matching closing parenthesis
+        let mut paren_count = 0;
+        let mut end = None;
+        for (i, c) in signature[start..].chars().enumerate() {
+            match c {
+                '(' => paren_count += 1,
+                ')' => {
+                    paren_count -= 1;
+                    if paren_count == 0 {
+                        end = Some(start + i);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if let Some(end_pos) = end {
+            let params_str = &signature[start + 1..end_pos];
+            if !params_str.trim().is_empty() {
+                // Split parameters by comma, but be careful with commas inside types
+                let params = split_params_by_comma(params_str);
+                println!("DEBUG: params_str='{}', params={:?}", params_str, params);
+                println!("DEBUG: params_str='{}', params={:?}", params_str, params);
+                println!("DEBUG: params_str='{}', params={:?}", params_str, params);
+                let mut snippet_parts = Vec::new();
+                for (i, param) in params.iter().enumerate() {
+                    // Extract parameter name - since signatures are built as "type name" or just "type"
+                    let trimmed = param.trim();
+                    if trimmed.is_empty() {
+                        snippet_parts.push(format!("${{{}:param{}}}", i + 1, i + 1));
+                        continue;
+                    }
+
+                    // Find the last space - everything after it is the parameter name (if present)
+                    if let Some(last_space_idx) = trimmed.rfind(' ') {
+                        let after_space = &trimmed[last_space_idx + 1..];
+                        if !after_space.is_empty() {
+                            // Has a parameter name
+                            snippet_parts.push(format!("${{{}:{}}}", i + 1, after_space));
+                        } else {
+                            // Space but nothing after - treat as unnamed
+                            snippet_parts.push(format!("${{{}:param{}}}", i + 1, i + 1));
+                        }
+                    } else {
+                        // No space - just a type, unnamed parameter
+                        snippet_parts.push(format!("${{{}:param{}}}", i + 1, i + 1));
+                    }
+                }
+                return format!("{}({})", function_name, snippet_parts.join(", "));
+            }
+        }
+    }
+    // No parameters or couldn't parse
+    format!("{}()", function_name)
 }
 
 
