@@ -61,35 +61,182 @@ pub fn get_completions(
     (completions, query)
 }
 
-fn get_scoped_completions(
+pub fn get_scoped_completions(
     ast_data: &Value,
     _text: &str,
     _position: Position,
 ) -> Vec<CompletionItem> {
     // Extract symbols from AST and provide completions for in-scope items
     // This is a simplified version - a full implementation would need proper scope analysis
-    crate::symbols::extract_symbols(ast_data)
-        .into_iter()
-        .map(|symbol| {
-            let kind = match symbol.kind {
-                tower_lsp::lsp_types::SymbolKind::FUNCTION => CompletionItemKind::FUNCTION,
-                tower_lsp::lsp_types::SymbolKind::VARIABLE => CompletionItemKind::VARIABLE,
-                tower_lsp::lsp_types::SymbolKind::CLASS => CompletionItemKind::CLASS,
-                tower_lsp::lsp_types::SymbolKind::INTERFACE => CompletionItemKind::INTERFACE,
-                tower_lsp::lsp_types::SymbolKind::STRUCT => CompletionItemKind::STRUCT,
-                tower_lsp::lsp_types::SymbolKind::ENUM => CompletionItemKind::ENUM,
-                tower_lsp::lsp_types::SymbolKind::EVENT => CompletionItemKind::EVENT,
-                _ => CompletionItemKind::VARIABLE,
-            };
-            CompletionItem {
+    let symbols = crate::symbols::extract_symbols(ast_data);
+
+    // Group functions by name to handle overloads
+    let mut function_signatures: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+
+    // First, collect all function signatures
+    if let Some(sources) = ast_data.get("sources") {
+        if let Some(sources_obj) = sources.as_object() {
+            for (_path, contents) in sources_obj {
+                if let Some(contents_array) = contents.as_array() {
+                    if let Some(first_content) = contents_array.first() {
+                        if let Some(ast) = first_content.get("source_file").and_then(|sf| sf.get("ast")) {
+                            collect_all_function_signatures_from_ast(ast, &mut function_signatures);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut completions = Vec::new();
+
+    for symbol in symbols {
+        if symbol.name.is_empty() {
+            continue; // Filter out symbols with empty names
+        }
+
+        let kind = match symbol.kind {
+            tower_lsp::lsp_types::SymbolKind::FUNCTION => CompletionItemKind::FUNCTION,
+            tower_lsp::lsp_types::SymbolKind::VARIABLE => CompletionItemKind::VARIABLE,
+            tower_lsp::lsp_types::SymbolKind::CLASS => CompletionItemKind::CLASS,
+            tower_lsp::lsp_types::SymbolKind::INTERFACE => CompletionItemKind::INTERFACE,
+            tower_lsp::lsp_types::SymbolKind::STRUCT => CompletionItemKind::STRUCT,
+            tower_lsp::lsp_types::SymbolKind::ENUM => CompletionItemKind::ENUM,
+            tower_lsp::lsp_types::SymbolKind::EVENT => CompletionItemKind::EVENT,
+            _ => CompletionItemKind::VARIABLE,
+        };
+
+        if symbol.kind == tower_lsp::lsp_types::SymbolKind::FUNCTION {
+            // For functions, create a completion item for each signature
+            if let Some(signatures) = function_signatures.get(&symbol.name) {
+                for signature in signatures {
+                    completions.push(CompletionItem {
+                        label: symbol.name.clone(),
+                        kind: Some(kind),
+                        detail: Some(signature.clone()),
+                        ..Default::default()
+                    });
+                }
+            } else {
+                // Fallback if no signatures found
+                completions.push(CompletionItem {
+                    label: symbol.name.clone(),
+                    kind: Some(kind),
+                    detail: Some(symbol.name.clone()),
+                    ..Default::default()
+                });
+            }
+        } else {
+            completions.push(CompletionItem {
                 label: symbol.name.clone(),
                 kind: Some(kind),
-                detail: Some(symbol.name),
+                detail: Some(symbol.name.clone()),
                 ..Default::default()
-            }
-        })
-        .collect()
+            });
+        }
+    }
+
+    // Remove duplicates based on label and detail
+    let mut seen = std::collections::HashSet::new();
+    completions.retain(|completion| {
+        let key = format!("{}:{:?}", completion.label, completion.detail);
+        seen.insert(key)
+    });
+
+    completions
 }
+
+fn collect_all_function_signatures_from_ast(node: &Value, all_signatures: &mut std::collections::HashMap<String, Vec<String>>) {
+    if let Some(node_type) = node.get("nodeType").and_then(|v| v.as_str()) {
+        if node_type == "FunctionDefinition" {
+            if let Some(name) = node.get("name").and_then(|v| v.as_str()) {
+                if !name.is_empty() {
+                    // Build function signature
+                    let mut signature_parts = Vec::new();
+
+                    // Add parameters - handle both nested ParameterList and direct array structures
+                    let param_array = node.get("parameters").and_then(|p| p.get("parameters")).and_then(|p| p.as_array())
+                        .or_else(|| node.get("parameters").and_then(|p| p.as_array()));
+
+                    let mut param_strings = Vec::new();
+                    if let Some(parameters) = param_array {
+                        for param in parameters {
+                            let param_name = param.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                            let type_name = if let Some(type_node) = param.get("typeName") {
+                                crate::symbols::extract_type_name(type_node).unwrap_or_else(|| {
+                                    // Try to get a fallback type representation
+                                    if let Some(type_str) = type_node.get("name").and_then(|v| v.as_str()) {
+                                        type_str.to_string()
+                                    } else if let Some(node_type) = type_node.get("nodeType").and_then(|v| v.as_str()) {
+                                        node_type.to_string()
+                                    } else {
+                                        "unknown".to_string()
+                                    }
+                                })
+                            } else {
+                                "unknown".to_string()
+                            };
+
+                            if param_name.is_empty() {
+                                param_strings.push(type_name);
+                            } else {
+                                param_strings.push(format!("{} {}", type_name, param_name));
+                            }
+                        }
+                    }
+                    signature_parts.push(format!("({})", param_strings.join(", ")));
+
+                    // Add return types
+                    let return_array = node.get("returnParameters").and_then(|p| p.get("parameters")).and_then(|p| p.as_array())
+                        .or_else(|| node.get("returnParameters").and_then(|p| p.as_array()));
+
+                    let mut return_strings = Vec::new();
+                    if let Some(returns) = return_array {
+                        for ret in returns {
+                            let param_name = ret.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                            let type_name = if let Some(type_node) = ret.get("typeName") {
+                                crate::symbols::extract_type_name(type_node).unwrap_or_else(|| "unknown".to_string())
+                            } else {
+                                "unknown".to_string()
+                            };
+
+                            if param_name.is_empty() {
+                                return_strings.push(type_name);
+                            } else {
+                                return_strings.push(format!("{} {}", type_name, param_name));
+                            }
+                        }
+                    }
+                    if !return_strings.is_empty() {
+                        signature_parts.push(format!(" returns ({})", return_strings.join(", ")));
+                    }
+
+                    let result = format!("{}{}", name, signature_parts.join(""));
+                    all_signatures.entry(name.to_string()).or_insert_with(Vec::new).push(result);
+                }
+            }
+        }
+
+        // Recursively search child nodes
+        if let Some(children) = node.as_object() {
+            for value in children.values() {
+                match value {
+                    Value::Array(arr) => {
+                        for item in arr {
+                            collect_all_function_signatures_from_ast(item, all_signatures);
+                        }
+                    }
+                    Value::Object(_) => {
+                        collect_all_function_signatures_from_ast(value, all_signatures);
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+}
+
+
 
 fn get_dot_completions(text: &str, ast_data: &Value, position: Position) -> (Vec<CompletionItem>, Option<String>) {
     // Use the member_access module for proper type detection

@@ -1,7 +1,8 @@
 use solidity_language_server::completion::member_access;
 use solidity_language_server::symbols::extract_symbols;
+use solidity_language_server::completion::handler::get_scoped_completions;
 use std::process::Command;
-use tower_lsp::lsp_types::Position;
+use tower_lsp::lsp_types::{Position, CompletionItemKind};
 
 fn get_test_ast_data() -> Option<serde_json::Value> {
     println!("Running forge build in example directory");
@@ -213,4 +214,57 @@ fn test_library_function_completion_on_uint256() {
         completion_labels.contains(&"getRefund"),
         "Completions should include getRefund"
     );
+}
+
+#[test]
+fn test_function_completion_with_signature() {
+    let ast_data = get_test_ast_data().unwrap();
+    let completions = get_scoped_completions(&ast_data, "", Position::new(0, 0));
+
+    // Find function completions
+    let function_completions: Vec<_> = completions.iter()
+        .filter(|c| c.kind == Some(CompletionItemKind::FUNCTION))
+        .collect();
+
+
+
+    assert!(!function_completions.is_empty(), "Should have function completions");
+
+    // Check that at least one function has detailed signature information
+    let functions_with_signatures: Vec<_> = function_completions.iter()
+        .filter(|c| {
+            if let Some(detail) = &c.detail {
+                detail.contains("(") && detail.contains(")")
+            } else {
+                false
+            }
+        })
+        .collect();
+
+    // We should have at least some functions with signatures (like addTax, getRefund, etc.)
+    assert!(!functions_with_signatures.is_empty(), "Should have function completions with signature details");
+
+    // Verify that at least one function has detailed signature information
+    let detailed_function = function_completions.iter()
+        .find(|c| {
+            if let Some(detail) = &c.detail {
+                detail.contains("(") && detail.contains(")") && detail.len() > c.label.len() + 2
+            } else {
+                false
+            }
+        });
+
+    assert!(detailed_function.is_some(), "Should have at least one function with detailed signature");
+
+    if let Some(completion) = detailed_function {
+        if let Some(detail) = &completion.detail {
+            assert!(detail.contains(&completion.label), "Detail should contain function name");
+            assert!(detail.contains("("), "Detail should contain opening parenthesis");
+            assert!(detail.contains(")"), "Detail should contain closing parenthesis");
+            // Should show parameter types (at least one type should be present)
+            assert!(detail.contains("uint256") || detail.contains("address") || detail.contains("bytes32") ||
+                   detail.contains("bool") || detail.contains("string"),
+                   "Detail should show parameter types");
+        }
+    }
 }

@@ -16,17 +16,17 @@ pub fn extract_symbols(ast_data: &Value) -> Vec<SymbolInformation> {
                         && let Some(source_file) = first_content.get("source_file")
                             && let Some(ast) = source_file.get("ast") {
                                 let file_symbols = extract_symbols_from_ast(ast, path);
-                                for symbol in file_symbols {
-                                    // Deduplicate based on location (URI + range)
-                                    let key = format!("{}:{:?}:{:?}",
-                                        symbol.location.uri,
-                                        symbol.location.range.start,
-                                        symbol.location.range.end
-                                    );
+                                 for symbol in file_symbols {
+                                     // Deduplicate based on location (URI + range)
+                                     let key = format!("{}:{:?}:{:?}",
+                                         symbol.location.uri,
+                                         symbol.location.range.start,
+                                         symbol.location.range.end
+                                     );
                                      if seen.insert(key) {
                                          symbols.push(symbol);
                                      }
-                                 }
+                                  }
                              }
               }
           }
@@ -53,6 +53,39 @@ pub fn extract_symbols(ast_data: &Value) -> Vec<SymbolInformation> {
             }
         }
     }
+
+    // For functions, prefer symbols with containers over symbols without containers
+    // when they have the same location (to keep library functions properly contained)
+    let mut deduped_symbols = Vec::new();
+    let mut seen_locations = std::collections::HashSet::new();
+
+    for symbol in symbols {
+        let key = format!("{}:{:?}:{:?}",
+            symbol.location.uri,
+            symbol.location.range.start,
+            symbol.location.range.end
+        );
+
+        if seen_locations.insert(key) {
+            deduped_symbols.push(symbol);
+        } else {
+            // If we already have a symbol at this location, prefer one with a container
+            if let Some(existing_index) = deduped_symbols.iter().position(|s|
+                s.location.uri == symbol.location.uri
+                && s.location.range.start == symbol.location.range.start
+                && s.location.range.end == symbol.location.range.end
+            ) {
+                let existing = &deduped_symbols[existing_index];
+                if existing.container_name.is_none() && symbol.container_name.is_some() {
+                    // Replace with the one that has a container
+                    deduped_symbols[existing_index] = symbol;
+                }
+                // Otherwise keep the existing one
+            }
+        }
+    }
+
+    symbols = deduped_symbols;
 
       symbols
 }
@@ -116,6 +149,9 @@ fn extract_document_symbols_from_ast(ast: &Value, file_path: &str) -> Vec<Docume
 
 fn create_contract_document_symbol_with_children(node: &Value, file_path: &str) -> Option<DocumentSymbol> {
     let name = node.get("name").and_then(|v| v.as_str())?;
+    if name.is_empty() {
+        return None;
+    }
     let range = get_node_range(node, file_path)?;
     let mut children = Vec::new();
 
@@ -218,17 +254,75 @@ fn create_function_document_symbol_with_children(node: &Value, file_path: &str) 
         SymbolKind::FUNCTION
     };
 
-    // Extract parameters and local variables as children
-    let mut children = Vec::new();
+    // Build function signature detail
+    let mut signature_parts = Vec::new();
 
-    // Try different AST structures for parameters
+    // Add parameters to signature
     let param_array = node.get("parameters").and_then(|p| p.get("parameters")).and_then(|p| p.as_array())
         .or_else(|| node.get("parameters").and_then(|p| p.as_array()));
 
+    let mut param_strings = Vec::new();
+    if let Some(parameters) = param_array {
+        for param in parameters {
+            if let Some(param_name) = param.get("name").and_then(|v| v.as_str()) {
+                if !param_name.is_empty() {
+                    if let Some(type_node) = param.get("typeName") {
+                        if let Some(type_name) = extract_type_name(type_node) {
+                            param_strings.push(format!("{} {}", type_name, param_name));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    signature_parts.push(format!("({})", param_strings.join(", ")));
+
+    // Add return types to signature
+    if !is_constructor {
+        let return_array = node.get("returnParameters").and_then(|p| p.get("parameters")).and_then(|p| p.as_array())
+            .or_else(|| node.get("returnParameters").and_then(|p| p.as_array()));
+
+        let mut return_strings = Vec::new();
+        if let Some(returns) = return_array {
+            for ret in returns {
+                if let Some(type_node) = ret.get("typeName") {
+                    if let Some(type_name) = extract_type_name(type_node) {
+                        return_strings.push(type_name);
+                    }
+                }
+            }
+        }
+        if !return_strings.is_empty() {
+            signature_parts.push(format!(" returns ({})", return_strings.join(", ")));
+        }
+    }
+
+    let detail = if signature_parts.len() > 1 {
+        Some(signature_parts.join(""))
+    } else {
+        None
+    };
+
+    // Extract parameters, return parameters, and local variables as children
+    let mut children = Vec::new();
+
+    // Add input parameters as children
     if let Some(parameters) = param_array {
         for param in parameters {
             if let Some(param_symbol) = create_parameter_document_symbol(param, file_path) {
                 children.push(param_symbol);
+            }
+        }
+    }
+
+    // Add return parameters as children
+    if !is_constructor {
+        if let Some(returns) = node.get("returnParameters").and_then(|p| p.get("parameters")).and_then(|p| p.as_array())
+            .or_else(|| node.get("returnParameters").and_then(|p| p.as_array())) {
+            for ret in returns {
+                if let Some(ret_symbol) = create_return_parameter_document_symbol(ret, file_path) {
+                    children.push(ret_symbol);
+                }
             }
         }
     }
@@ -240,7 +334,7 @@ fn create_function_document_symbol_with_children(node: &Value, file_path: &str) 
 
     Some(DocumentSymbol {
         name,
-        detail: None,
+        detail,
         kind,
         range,
         selection_range: range,
@@ -252,6 +346,9 @@ fn create_function_document_symbol_with_children(node: &Value, file_path: &str) 
 
 fn create_variable_document_symbol(node: &Value, file_path: &str) -> Option<DocumentSymbol> {
     let name = node.get("name").and_then(|v| v.as_str())?;
+    if name.is_empty() {
+        return None;
+    }
     let range = get_node_range(node, file_path)?;
     let selection_range = get_symbol_range(node, file_path).unwrap_or(range);
 
@@ -276,6 +373,9 @@ fn create_variable_document_symbol(node: &Value, file_path: &str) -> Option<Docu
 
 fn create_event_document_symbol(node: &Value, file_path: &str) -> Option<DocumentSymbol> {
     let name = node.get("name").and_then(|v| v.as_str())?;
+    if name.is_empty() {
+        return None;
+    }
     let range = get_node_range(node, file_path)?;
 
     Some(DocumentSymbol {
@@ -292,6 +392,9 @@ fn create_event_document_symbol(node: &Value, file_path: &str) -> Option<Documen
 
 fn create_modifier_document_symbol(node: &Value, file_path: &str) -> Option<DocumentSymbol> {
     let name = node.get("name").and_then(|v| v.as_str())?;
+    if name.is_empty() {
+        return None;
+    }
     let range = get_node_range(node, file_path)?;
 
     Some(DocumentSymbol {
@@ -308,6 +411,9 @@ fn create_modifier_document_symbol(node: &Value, file_path: &str) -> Option<Docu
 
 fn create_struct_document_symbol_with_children(node: &Value, file_path: &str) -> Option<DocumentSymbol> {
     let name = node.get("name").and_then(|v| v.as_str())?;
+    if name.is_empty() {
+        return None;
+    }
     let range = get_node_range(node, file_path)?;
 
     // Extract struct members as children
@@ -334,6 +440,9 @@ fn create_struct_document_symbol_with_children(node: &Value, file_path: &str) ->
 
 fn create_struct_member_document_symbol(node: &Value, file_path: &str) -> Option<DocumentSymbol> {
     let name = node.get("name").and_then(|v| v.as_str())?;
+    if name.is_empty() {
+        return None;
+    }
     let range = get_node_range(node, file_path)?;
 
     Some(DocumentSymbol {
@@ -350,6 +459,9 @@ fn create_struct_member_document_symbol(node: &Value, file_path: &str) -> Option
 
 fn create_enum_document_symbol_with_children(node: &Value, file_path: &str) -> Option<DocumentSymbol> {
     let name = node.get("name").and_then(|v| v.as_str())?;
+    if name.is_empty() {
+        return None;
+    }
     let range = get_node_range(node, file_path)?;
 
     // Extract enum members as children
@@ -376,6 +488,9 @@ fn create_enum_document_symbol_with_children(node: &Value, file_path: &str) -> O
 
 fn create_enum_member_document_symbol(node: &Value, file_path: &str) -> Option<DocumentSymbol> {
     let name = node.get("name").and_then(|v| v.as_str())?;
+    if name.is_empty() {
+        return None;
+    }
     let range = get_node_range(node, file_path)?;
 
     Some(DocumentSymbol {
@@ -407,6 +522,9 @@ fn create_constructor_document_symbol(node: &Value, file_path: &str) -> Option<D
 
 fn create_error_document_symbol(node: &Value, file_path: &str) -> Option<DocumentSymbol> {
     let name = node.get("name").and_then(|v| v.as_str())?;
+    if name.is_empty() {
+        return None;
+    }
     let range = get_node_range(node, file_path)?;
 
     Some(DocumentSymbol {
@@ -497,16 +615,65 @@ fn extract_local_variables_from_block(node: &Value, file_path: &str, children: &
 }
 
 fn create_parameter_document_symbol(node: &Value, file_path: &str) -> Option<DocumentSymbol> {
-    let name = node.get("name").and_then(|v| v.as_str())?;
-    // Skip unnamed parameters
+    let name = node.get("name").and_then(|v| v.as_str()).unwrap_or(""); // Allow empty names for return parameters
     if name.is_empty() {
-        return None;
+        return None; // Skip unnamed parameters
     }
     let range = get_node_range(node, file_path)?;
 
+    let detail = if let Some(type_node) = node.get("typeName") {
+        if let Some(type_name) = extract_type_name(type_node) {
+            Some(format!("{} {}", type_name, name))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     Some(DocumentSymbol {
         name: name.to_string(),
-        detail: None,
+        detail,
+        kind: SymbolKind::VARIABLE,
+        range,
+        selection_range: range,
+        children: None,
+        tags: None,
+        deprecated: None,
+    })
+}
+
+fn create_return_parameter_document_symbol(node: &Value, file_path: &str) -> Option<DocumentSymbol> {
+    let name = node.get("name").and_then(|v| v.as_str()).unwrap_or("");
+    let range = get_node_range(node, file_path)?;
+
+    let display_name = if name.is_empty() {
+        if let Some(type_node) = node.get("typeName") {
+            if let Some(type_name) = extract_type_name(type_node) {
+                format!("<{}>", type_name)
+            } else {
+                "<return>".to_string()
+            }
+        } else {
+            "<return>".to_string()
+        }
+    } else {
+        name.to_string()
+    };
+
+    let detail = if let Some(type_node) = node.get("typeName") {
+        if let Some(type_name) = extract_type_name(type_node) {
+            Some(format!("{} {}", type_name, name))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    Some(DocumentSymbol {
+        name: display_name,
+        detail,
         kind: SymbolKind::VARIABLE,
         range,
         selection_range: range,
@@ -553,7 +720,7 @@ fn create_using_for_document_symbol(node: &Value, file_path: &str) -> Option<Doc
     })
 }
 
-fn extract_type_name(type_node: &Value) -> Option<String> {
+pub fn extract_type_name(type_node: &Value) -> Option<String> {
     if let Some(node_type) = type_node.get("nodeType").and_then(|v| v.as_str()) {
         match node_type {
             "ElementaryTypeName" => {
@@ -563,7 +730,34 @@ fn extract_type_name(type_node: &Value) -> Option<String> {
                 type_node.get("name").and_then(|v| v.as_str()).map(|s| s.to_string())
             }
             "Mapping" => {
-                Some("mapping".to_string())
+                let mut mapping_str = "mapping(".to_string();
+                if let Some(key_type) = type_node.get("keyType") {
+                    if let Some(key_name) = extract_type_name(key_type) {
+                        mapping_str.push_str(&key_name);
+                    }
+                }
+                mapping_str.push_str(" => ");
+                if let Some(value_type) = type_node.get("valueType") {
+                    if let Some(value_name) = extract_type_name(value_type) {
+                        mapping_str.push_str(&value_name);
+                    }
+                }
+                mapping_str.push(')');
+                Some(mapping_str)
+            }
+            "ArrayTypeName" => {
+                if let Some(base_type) = type_node.get("baseType") {
+                    if let Some(base_name) = extract_type_name(base_type) {
+                        Some(format!("{}[]", base_name))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+            "FunctionTypeName" => {
+                Some("function".to_string())
             }
             _ => None
         }
@@ -729,6 +923,9 @@ fn extract_symbols_from_ast_with_container(ast: &Value, file_path: &str, contain
 
 fn create_contract_symbol_info(node: &Value, file_path: &str, container_name: Option<String>) -> Option<SymbolInformation> {
     let name = node.get("name").and_then(|v| v.as_str())?;
+    if name.is_empty() {
+        return None;
+    }
     let range = get_node_range(node, file_path)?;
     let location = Location {
         uri: Url::from_file_path(file_path).ok()?,
@@ -747,6 +944,9 @@ fn create_contract_symbol_info(node: &Value, file_path: &str, container_name: Op
 
 fn create_library_symbol_info(node: &Value, file_path: &str, container_name: Option<String>) -> Option<SymbolInformation> {
     let name = node.get("name").and_then(|v| v.as_str())?;
+    if name.is_empty() {
+        return None;
+    }
     let range = get_node_range(node, file_path)?;
     let location = Location {
         uri: Url::from_file_path(file_path).ok()?,
@@ -776,6 +976,8 @@ fn create_function_symbol_info(node: &Value, file_path: &str, container_name: Op
         return None;
     }
 
+
+
     let kind = if node.get("kind").and_then(|v| v.as_str()) == Some("constructor") {
         SymbolKind::CONSTRUCTOR
     } else {
@@ -794,6 +996,9 @@ fn create_function_symbol_info(node: &Value, file_path: &str, container_name: Op
 
 fn create_variable_symbol_info(node: &Value, file_path: &str, container_name: Option<String>) -> Option<SymbolInformation> {
     let name = node.get("name").and_then(|v| v.as_str())?;
+    if name.is_empty() {
+        return None;
+    }
     let range = get_node_range(node, file_path)?;
     let location = Location {
         uri: Url::from_file_path(file_path).ok()?,
@@ -819,6 +1024,9 @@ fn create_variable_symbol_info(node: &Value, file_path: &str, container_name: Op
 
 fn create_event_symbol_info(node: &Value, file_path: &str, container_name: Option<String>) -> Option<SymbolInformation> {
     let name = node.get("name").and_then(|v| v.as_str())?;
+    if name.is_empty() {
+        return None;
+    }
     let range = get_node_range(node, file_path)?;
     let location = Location {
         uri: Url::from_file_path(file_path).ok()?,
@@ -837,6 +1045,9 @@ fn create_event_symbol_info(node: &Value, file_path: &str, container_name: Optio
 
 fn create_modifier_symbol_info(node: &Value, file_path: &str, container_name: Option<String>) -> Option<SymbolInformation> {
     let name = node.get("name").and_then(|v| v.as_str())?;
+    if name.is_empty() {
+        return None;
+    }
     let range = get_node_range(node, file_path)?;
     let location = Location {
         uri: Url::from_file_path(file_path).ok()?,
@@ -855,6 +1066,9 @@ fn create_modifier_symbol_info(node: &Value, file_path: &str, container_name: Op
 
 fn create_struct_symbol_info(node: &Value, file_path: &str, container_name: Option<String>) -> Option<SymbolInformation> {
     let name = node.get("name").and_then(|v| v.as_str())?;
+    if name.is_empty() {
+        return None;
+    }
     let range = get_node_range(node, file_path)?;
     let location = Location {
         uri: Url::from_file_path(file_path).ok()?,
@@ -873,6 +1087,9 @@ fn create_struct_symbol_info(node: &Value, file_path: &str, container_name: Opti
 
 fn create_enum_symbol_info(node: &Value, file_path: &str, container_name: Option<String>) -> Option<SymbolInformation> {
     let name = node.get("name").and_then(|v| v.as_str())?;
+    if name.is_empty() {
+        return None;
+    }
     let range = get_node_range(node, file_path)?;
     let location = Location {
         uri: Url::from_file_path(file_path).ok()?,

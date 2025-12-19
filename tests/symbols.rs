@@ -25,6 +25,16 @@ fn test_extract_symbols_basic() {
     // Should find some symbols
     assert!(!symbols.is_empty());
 
+    // Check that no symbols have empty names in completions (allow empty names for return params in symbol list)
+    let symbols_with_names: Vec<_> = symbols.iter().filter(|s| !s.name.is_empty()).collect();
+    assert!(!symbols_with_names.is_empty(), "Should have symbols with non-empty names");
+
+    // Check that function symbols exist
+    let function_symbols: Vec<_> = symbols.iter()
+        .filter(|s| s.kind == tower_lsp::lsp_types::SymbolKind::FUNCTION)
+        .collect();
+    assert!(!function_symbols.is_empty(), "Should have function symbols");
+
     // Check that we have contracts
     let contract_symbols: Vec<_> = symbols.iter()
         .filter(|s| s.kind == SymbolKind::CLASS)
