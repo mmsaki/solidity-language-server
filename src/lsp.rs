@@ -158,11 +158,6 @@ impl LanguageServer for ForgeLsp {
                 version: Some("0.0.1".to_string()),
             }),
             capabilities: ServerCapabilities {
-                completion_provider: Some(CompletionOptions {
-                    resolve_provider: Some(false),
-                    trigger_characters: Some(vec![".".to_string()]),
-                    ..Default::default()
-                }),
                 definition_provider: Some(OneOf::Left(true)),
                 declaration_provider: Some(DeclarationCapability::Simple(true)),
                 references_provider: Some(OneOf::Left(true)),
@@ -982,123 +977,6 @@ impl LanguageServer for ForgeLsp {
         }
     }
 
-    async fn completion(
-        &self,
-        params: CompletionParams,
-    ) -> tower_lsp::jsonrpc::Result<Option<CompletionResponse>> {
-        self.client
-            .log_message(MessageType::INFO, "completion request")
-            .await;
-
-        let uri = params.text_document_position.text_document.uri.clone();
-        let position = params.text_document_position.position;
-
-        // Get original content
-        let original_content = {
-            let text_cache = self.text_cache.read().await;
-            if let Some(content) = text_cache.get(&uri.to_string()) {
-                content.clone()
-            } else {
-                // Fallback to reading file
-                let file_path = match uri.to_file_path() {
-                    Ok(path) => path,
-                    Err(_) => {
-                        self.client
-                            .log_message(MessageType::ERROR, "Invalid file URI for completion")
-                            .await;
-                        return Ok(None);
-                    }
-                };
-                match std::fs::read_to_string(&file_path) {
-                    Ok(content) => content,
-                    Err(_) => {
-                        self.client
-                            .log_message(MessageType::ERROR, "Failed to read file for completion")
-                            .await;
-                        return Ok(None);
-                    }
-                }
-            }
-        };
-
-        // Get AST data
-        let ast_data = {
-            let cache = self.ast_cache.read().await;
-            if let Some(cached_ast) = cache.get(&uri.to_string()) {
-                self.client
-                    .log_message(MessageType::INFO, "using cached AST data")
-                    .await;
-                cached_ast.clone()
-            } else {
-                self.client
-                    .log_message(MessageType::INFO, "no cached AST data, fetching...")
-                    .await;
-                drop(cache);
-                if let Ok(file_path) = uri.to_file_path() {
-                    if let Some(path_str) = file_path.to_str() {
-                        match self.compiler.ast(path_str).await {
-                            Ok(data) => {
-                                self.client
-                                    .log_message(MessageType::INFO, "fetched AST data for completion")
-                                    .await;
-                                let mut cache = self.ast_cache.write().await;
-                                cache.insert(uri.to_string(), data.clone());
-                                data
-                            }
-                            Err(e) => {
-                                self.client
-                                    .log_message(
-                                        MessageType::ERROR,
-                                        format!("Failed to fetch AST for completion: {}", e),
-                                    )
-                                    .await;
-                                serde_json::Value::Null
-                            }
-                        }
-                    } else {
-                        self.client
-                            .log_message(MessageType::ERROR, "Invalid file path for AST fetch")
-                            .await;
-                        serde_json::Value::Null
-                    }
-                } else {
-                    self.client
-                        .log_message(MessageType::ERROR, "Invalid file URI for AST fetch")
-                        .await;
-                    serde_json::Value::Null
-                }
-            }
-        };
-
-        self.client
-            .log_message(
-                MessageType::INFO,
-                format!(
-                    "completion text length: {}, position: {}:{}",
-                    original_content.len(),
-                    position.line,
-                    position.character
-                ),
-            )
-            .await;
-
-        let (completions, query) =
-            crate::completion::get_completions(&original_content, &ast_data, position, &params);
-
-        let query_str = query.map(|q| format!(" for query '{}'", q)).unwrap_or_default();
-        self.client
-            .log_message(
-                MessageType::INFO,
-                format!("found {} completions{}", completions.len(), query_str),
-            )
-            .await;
-
-        if completions.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(CompletionResponse::Array(completions)))
-        }
-    }
 }
 
 fn byte_offset(content: &str, position: Position) -> Result<usize, String> {
