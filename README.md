@@ -18,6 +18,18 @@ Start the LSP server using:
 solidity-language-server
 ```
 
+## Optional Compilers Flags
+
+> [!info] Solar compiler (WIP)
+> [Solar](https://github.com/paradigmxyz/solar) is a solidity compiler, written in Rust by paradigmxyz.
+> This implementation is not fully featured, only diagnostics for now it is still a work in progress.
+>
+> - Use `--use-solar` flag for lsp implementation using solar compiler, currently only diagnostics.
+
+```sh
+solidity-language-server --use-solar
+```
+
 ### LSP Features
 
 **General**
