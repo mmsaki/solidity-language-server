@@ -99,7 +99,9 @@ solidity-language-server
 
 ## Optional Flags
 
-> [!WARNING] `--use-solar` flag (WIP)
+> [!WARNING]
+>
+> `--use-solar` flag (WIP)
 >
 > [Solar](https://github.com/paradigmxyz/solar) is a solidity compiler, written in Rust.
 >
