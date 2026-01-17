@@ -109,7 +109,7 @@ solidity-language-server
 > - Use `--use-solar` flag for lsp implementation using solar compiler,
 > - Without this flag, default compilation uses forge build.
 >
-> My LSP implementation using solar is will not contain all the features, this LSP will only give you build diagnostics.
+> My LSP implementation using solar is will not contain all the features, this flag will only give you build diagnostics.
 
 Usage:
 
