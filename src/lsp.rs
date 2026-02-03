@@ -63,16 +63,25 @@ impl ForgeLsp {
             self.compiler.ast(path_str)
         );
 
-        // cached
-        if let Ok(ast_data) = ast_result {
-            let mut cache = self.ast_cache.write().await;
-            cache.insert(uri.to_string(), ast_data);
+        // Only replace cache with new AST if build succeeded (no build errors)
+        let build_succeeded = matches!(&build_result, Ok(builds) if builds.is_empty());
+        
+        if build_succeeded {
+            if let Ok(ast_data) = ast_result {
+                let mut cache = self.ast_cache.write().await;
+                cache.insert(uri.to_string(), ast_data);
+                self.client
+                    .log_message(MessageType::INFO, "Build successful, AST cache updated")
+                    .await;
+            } else if let Err(e) = ast_result {
+                self.client
+                    .log_message(MessageType::INFO, format!("Build succeeded but failed to get AST: {e}"))
+                    .await;
+            }
+        } else {
+            // Build has errors - keep the existing cache (don't invalidate)
             self.client
-                .log_message(MessageType::INFO, "Ast data cached")
-                .await;
-        } else if let Err(e) = ast_result {
-            self.client
-                .log_message(MessageType::INFO, format!("Failed to cache ast data: {e}"))
+                .log_message(MessageType::INFO, "Build errors detected, keeping existing AST cache")
                 .await;
         }
 
@@ -431,14 +440,12 @@ impl LanguageServer for ForgeLsp {
                         return Ok(None);
                     }
                 };
+                // Fetch fresh AST but don't cache it - caching only happens in did_save
                 match self.compiler.ast(path_str).await {
                     Ok(data) => {
                         self.client
-                            .log_message(MessageType::INFO, "fetched and caching new ast data")
+                            .log_message(MessageType::INFO, "fetched fresh ast data (not caching)")
                             .await;
-
-                        let mut cache = self.ast_cache.write().await;
-                        cache.insert(uri.to_string(), data.clone());
                         data
                     }
                     Err(e) => {
@@ -466,15 +473,7 @@ impl LanguageServer for ForgeLsp {
             self.client
                 .log_message(MessageType::INFO, "no definition found")
                 .await;
-
-            let location = Location {
-                uri,
-                range: Range {
-                    start: position,
-                    end: position,
-                },
-            };
-            Ok(Some(GotoDefinitionResponse::from(location)))
+            Ok(None)
         }
     }
 
@@ -528,14 +527,12 @@ impl LanguageServer for ForgeLsp {
                     }
                 };
 
+                // Fetch fresh AST but don't cache it - caching only happens in did_save
                 match self.compiler.ast(path_str).await {
                     Ok(data) => {
                         self.client
-                            .log_message(MessageType::INFO, "fetched and caching new ast data")
+                            .log_message(MessageType::INFO, "fetched fresh ast data (not caching)")
                             .await;
-
-                        let mut cache = self.ast_cache.write().await;
-                        cache.insert(uri.to_string(), data.clone());
                         data
                     }
                     Err(e) => {
@@ -563,14 +560,7 @@ impl LanguageServer for ForgeLsp {
             self.client
                 .log_message(MessageType::INFO, "no declaration found")
                 .await;
-            let location = Location {
-                uri,
-                range: Range {
-                    start: position,
-                    end: position,
-                },
-            };
-            Ok(Some(request::GotoDeclarationResponse::from(location)))
+            Ok(None)
         }
     }
 
@@ -620,13 +610,12 @@ impl LanguageServer for ForgeLsp {
                         return Ok(None);
                     }
                 };
+                // Fetch fresh AST but don't cache it - caching only happens in did_save
                 match self.compiler.ast(path_str).await {
                     Ok(data) => {
                         self.client
-                            .log_message(MessageType::INFO, "Fetched and caching new AST data")
+                            .log_message(MessageType::INFO, "fetched fresh ast data (not caching)")
                             .await;
-                        let mut cache = self.ast_cache.write().await;
-                        cache.insert(uri.to_string(), data.clone());
                         data
                     }
                     Err(e) => {
@@ -780,13 +769,12 @@ impl LanguageServer for ForgeLsp {
                         return Ok(None);
                     }
                 };
+                // Fetch fresh AST but don't cache it - caching only happens in did_save
                 match self.compiler.ast(path_str).await {
                     Ok(data) => {
                         self.client
-                            .log_message(MessageType::INFO, "fetching and caching new ast data")
+                            .log_message(MessageType::INFO, "fetched fresh ast data (not caching)")
                             .await;
-                        let mut cache = self.ast_cache.write().await;
-                        cache.insert(uri.to_string(), data.clone());
                         data
                     }
                     Err(e) => {

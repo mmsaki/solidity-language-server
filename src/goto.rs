@@ -300,8 +300,6 @@ pub fn goto_bytes(
     // Find the reference with minimum diff (most specific)
     let min_diff = *refs.keys().min()?;
     let chosen_id = refs[&min_diff];
-
-    // Get the referenced declaration ID
     let ref_id = current_file_nodes[&chosen_id].referenced_declaration?;
 
     // Search for the referenced declaration across all files
@@ -386,13 +384,7 @@ pub fn goto_declaration(
 
     };
 
-    Some(Location {
-        uri: file_uri.clone(),
-        range: Range {
-            start: position,
-            end: position
-        }
-    })
+    None
 
 
 }
