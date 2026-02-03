@@ -30,6 +30,22 @@ return {
 vim.lsp.enable("solidity_lsp")
 ```
 
+### VSCode
+
+You can add the following to VSCode (or cursor) using a lsp-proxy extension see comment [here](https://github.com/foundry-rs/foundry/pull/11187#issuecomment-3148743488):
+
+```json
+[
+  {
+    "languageId": "solidity",
+    "command": "solidity-language-server",
+    "fileExtensions": [
+      ".sol"
+    ]
+  }
+]
+```
+
 ## Debugging
 
 ### Neovim
@@ -51,5 +67,8 @@ tail -f ~/.local/state/nvim/lsp.log
 Enable traces in neovim to view full traces in logs:
 
 ```sh
+# for [info] traces
+:lua vim.lsp.set_log_level("info")
+# for [debug] traces
 :lua vim.lsp.set_log_level("trace")
 ```
