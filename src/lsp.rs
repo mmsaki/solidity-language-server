@@ -212,17 +212,13 @@ impl LanguageServer for ForgeLsp {
             .log_message(MessageType::INFO, "file changed")
             .await;
 
-        // invalidate cached ast
+        // Note: We no longer invalidate the AST cache here.
+        // This allows go-to definition to continue working with cached (potentially stale)
+        // AST data even when the file has compilation errors.
+        // The cache is updated when on_change succeeds with a fresh build.
+        // Trade-off: Cached positions may be slightly off if file was edited.
+
         let uri = params.text_document.uri.clone();
-        let mut cache = self.ast_cache.write().await;
-        if cache.remove(&uri.to_string()).is_some() {
-            self.client
-                .log_message(
-                    MessageType::INFO,
-                    format!("Invalidated cached ast data from file {uri}"),
-                )
-                .await;
-        }
 
         // update text cache
         if let Some(change) = params.content_changes.into_iter().next() {
