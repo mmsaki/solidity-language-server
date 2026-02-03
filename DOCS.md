@@ -1,6 +1,8 @@
 ## Installation
 
-**Install from crate**
+Solidity lsp server using foundry's build process.
+
+**Install from crates.io**
 
 ```
 cargo install solidity-language-server
