@@ -1,8 +1,0 @@
-{
-  "tag_name": "v0.1.6",
-  "target_commitish": "main",
-  "name": "v0.1.6",
-  "body": "## What's Changed\n- fix: ignore bytecode size warnings for all sol files (#6)\n\n**Full Changelog**: https://github.com/mmsaki/solidity-language-server/compare/v0.1.5...v0.1.6",
-  "draft": false,
-  "prerelease": false
-}
