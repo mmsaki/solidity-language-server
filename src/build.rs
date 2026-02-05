@@ -2,20 +2,13 @@ use crate::utils::byte_offset_to_position;
 use std::path::Path;
 use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, NumberOrString, Position, Range};
 
-pub fn ignored_code_for_tests(value: &serde_json::Value) -> bool {
+pub fn ignored_error_code_warning(value: &serde_json::Value) -> bool {
     let error_code = value
         .get("errorCode")
         .and_then(|v| v.as_str())
         .unwrap_or_default();
-    let file_path = value
-        .get("sourceLocation")
-        .and_then(|loc| loc.get("file"))
-        .and_then(|f| f.as_str())
-        .unwrap_or_default();
 
-    // Ignore error code 5574, 3860 for test files (code size limit)
-    (error_code == "5574" && (file_path.contains(".t.sol") || file_path.contains(".s.sol")))
-        || (error_code == "3860" && (file_path.contains(".t.sol") || file_path.contains(".s.sol")))
+    error_code == "5574" || error_code == "3860"
 }
 
 pub fn build_output_to_diagnostics(
@@ -27,7 +20,7 @@ pub fn build_output_to_diagnostics(
 
     if let Some(errors) = forge_output.get("errors").and_then(|e| e.as_array()) {
         for err in errors {
-            if ignored_code_for_tests(err) {
+            if ignored_error_code_warning(err) {
                 continue;
             }
 
