@@ -18,6 +18,24 @@ Start the LSP server using:
 solidity-language-server
 ```
 
+## Benchmarks
+
+Benchmarked against **solc --lsp** (C++) and **Hardhat/Nomic** (Node.js) on Uniswap V4-core (`Pool.sol`, 618 lines). 10 iterations + 2 warmup. See [./bench](./bench)
+
+| Benchmark | Our LSP | solc --lsp | Hardhat/Nomic |
+|-----------|---------|------------|---------------|
+| Spawn + Init | 3ms ⚡ | 123ms | 867ms |
+| Diagnostics | 435ms | 133ms ⚡ | 911ms |
+| Go to Definition | 8.8ms ⚡ | - | timeout |
+| Go to Declaration | 8.9ms ⚡ | unsupported | timeout |
+| Find References | 10.2ms ⚡ | unsupported | timeout |
+| Document Symbols | 9.0ms ⚡ | unsupported | timeout |
+
+> Run benchmarks: `cd bench && cargo build --release && ./target/release/bench <subcommand>`
+>
+> Subcommands: `spawn`, `diagnostics`, `definition`, `declaration`, `hover`, `references`, `documentSymbol`
+>
+
 ### Flags
 
 | Flag | Values | Default | Description |
@@ -99,33 +117,3 @@ solidity-language-server --completion-mode full
 - [ ] `window/showMessage` - Show message to user
 - [ ] `window/showMessageRequest` - Show message request to user
 - [ ] `window/workDoneProgress` - Work done progress
-
-<!-- ## Future improvements -->
-<!---->
-<!-- - Solc / Forge build ast issues -->
-<!--   - No ast nodes supported for yul -->
-<!--   - Struct defined types e.g. `Lib.Sturct` nameLocations are not identified as separate ast nodes -->
-<!--     - This makes renaming, and references for `Lib` not show up in `Lib.Struct` type usage -->
-<!-- - Solar's hir and inmemory ast replacement for our `ast_cache` -->
-<!--   - Currently still in production -->
-<!--   - You can try add `--use-solar` for lsp that uses solar for ast production -->
-<!---->
-<!-- ## Optional Flags -->
-<!---->
-<!-- > [!TIP] -->
-<!-- > -->
-<!-- > `--use-solar` flag (WIP) -->
-<!-- > -->
-<!-- > [Solar](https://github.com/paradigmxyz/solar) is a solidity compiler, written in Rust. -->
-<!-- > -->
-<!-- > -->
-<!-- > - Use `--use-solar` flag for lsp implementation using solar compiler, -->
-<!-- > - Without this flag, default compilation uses forge build. -->
-<!-- > -->
-<!-- > My LSP implementation using solar is will not contain all the features, this flag will only give you build diagnostics. -->
-<!---->
-<!-- Usage: -->
-<!---->
-<!-- ```sh -->
-<!-- solidity-language-server --use-solar -->
-<!-- ``` -->
