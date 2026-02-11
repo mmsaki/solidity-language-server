@@ -61,7 +61,7 @@ The `.sources` and `.contracts` keys use the same absolute filesystem paths, so 
 
 ## CompletionCache
 
-Built once per completion request from the full compiler output.
+Built once when the AST updates (on save with successful build) and cached behind `Arc` for zero-copy reads. Rebuilt in the background on AST change — the old cache stays usable until the new one is ready.
 
 ```rust
 pub struct CompletionCache {
@@ -94,6 +94,10 @@ pub struct CompletionCache {
 
     /// Wildcard using-for: `using X for *` — available on all types.
     pub using_for_wildcard: Vec<CompletionItem>,
+
+    /// Pre-built general completions (names + keywords + globals + units).
+    /// Used in fast mode — returned directly with zero per-request computation.
+    pub general_completions: Vec<CompletionItem>,
 }
 ```
 
@@ -357,13 +361,12 @@ completion_provider: Some(CompletionOptions {
 
 ### Handler
 
-`handle_completion(ast_data, source_text, position, trigger_char)`:
+`handle_completion(cache, source_text, position, trigger_char, fast)`:
 
-1. Extract `.sources` and `.contracts` from `ast_data`
-2. Build `CompletionCache`
-3. If `trigger_char == "."` → `parse_dot_chain` to extract the full expression chain, call `get_chain_completions`
-4. Otherwise → call `get_general_completions`
-5. Return `CompletionResponse::List`
+1. If `cache` is `None`, serve static/magic completions immediately (keywords, globals, `msg.`, `block.`, etc.) with `is_incomplete: true` so the editor re-requests
+2. If `trigger_char == "."` → `parse_dot_chain` to extract the full expression chain, call `get_chain_completions`
+3. Otherwise → in fast mode, return `cache.general_completions` directly; in full mode, call `get_general_completions` (room for scope filtering)
+4. Return `CompletionResponse::List`
 
 ## Files
 
@@ -372,7 +375,7 @@ completion_provider: Some(CompletionOptions {
 | `src/completion.rs` | CompletionCache, build logic, dot/general completion, type resolution, magic types, keywords |
 | `src/lsp.rs` | LSP handler, server capabilities, trigger character registration |
 | `src/lib.rs` | `pub mod completion` |
-| `tests/completion.rs` | 75 tests against `pool-manager-ast.json` |
+| `tests/completion.rs` | 86 tests against `pool-manager-ast.json` |
 
 ## Exploration Tools
 
@@ -473,16 +476,48 @@ For nested mappings, it extracts the deepest value type (we don't count brackets
 
 Only single-return functions are stored in `function_return_types`. Functions returning tuples (multiple values) require destructuring and can't be dot-chained, so they're excluded.
 
+## Completion Mode
+
+The `--completion-mode` CLI flag controls how general (non-dot) completions are served:
+
+```sh
+# Default — zero per-request computation, pre-built list
+solidity-language-server --stdio --completion-mode fast
+
+# For power users — per-request filtering (scope-aware completions in the future)
+solidity-language-server --stdio --completion-mode full
+```
+
+### Fast Mode (default)
+
+Returns `cache.general_completions` directly — a pre-built list of all unique AST names + keywords + globals + units. Equivalent to:
+
+```sh
+jq '[.. | objects | select(has("name")) | .name] | unique' ast.json
+```
+
+No per-request computation, no clones of intermediate data. This is the recommended mode for large projects.
+
+### Full Mode
+
+Calls `get_general_completions(cache)` on each request, which currently produces the same result but allows for per-request filtering (e.g. scope-aware completions) in the future.
+
+## Caching Architecture
+
+The completion cache is designed for zero-blocking reads:
+
+- **AST cache** — stored as `Arc<serde_json::Value>` to avoid cloning 7MB+ JSON on every handler request
+- **Completion cache** — stored as `Arc<CompletionCache>` for zero-copy reads across concurrent requests
+- **On save** — old completion cache stays usable while a new one builds in the background via `tokio::spawn`; atomically swapped when ready
+- **Before cache exists** — static completions (keywords, globals, magic dot members like `msg.`, `block.`, `abi.`) are served immediately with `is_incomplete: true` so the editor re-requests once the full cache is built
+- **On every keystroke** — completion handler clones the `Arc` (pointer copy, ~8 bytes), drops the lock, and serves from the snapshot. No lock is held during computation.
+
 ## Future Work
 
 ### Scope-Aware Completions
 
-Every `VariableDeclaration` and `FunctionDefinition` has a `scope` field pointing to its containing node. Build `scope_id → Vec<CompletionItem>` and at completion time, determine the cursor's scope and walk up the chain (block → function → contract → file).
+Every `VariableDeclaration` and `FunctionDefinition` has a `scope` field pointing to its containing node. Build `scope_id → Vec<CompletionItem>` and at completion time, determine the cursor's scope and walk up the chain (block → function → contract → file). This would be enabled via `--completion-mode full`.
 
 ### Inherited Function Resolution
 
 For chain resolution across inheritance hierarchies, walk `linearizedBaseContracts` on the contract definition to resolve inherited function return types.
-
-### Caching
-
-Currently the `CompletionCache` is rebuilt on every completion request. The data doesn't change between compiler runs, so caching it (and invalidating on AST update) would improve latency for large projects.

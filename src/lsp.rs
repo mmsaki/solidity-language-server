@@ -16,10 +16,11 @@ pub struct ForgeLsp {
     ast_cache: Arc<RwLock<HashMap<String, Arc<serde_json::Value>>>>,
     text_cache: Arc<RwLock<HashMap<String, String>>>,
     completion_cache: Arc<RwLock<HashMap<String, Arc<completion::CompletionCache>>>>,
+    fast_completions: bool,
 }
 
 impl ForgeLsp {
-    pub fn new(client: Client, use_solar: bool) -> Self {
+    pub fn new(client: Client, use_solar: bool, fast_completions: bool) -> Self {
         let compiler: Arc<dyn Runner> = if use_solar {
             Arc::new(crate::solar_runner::SolarRunner)
         } else {
@@ -34,6 +35,7 @@ impl ForgeLsp {
             ast_cache,
             text_cache,
             completion_cache,
+            fast_completions,
         }
     }
 
@@ -417,10 +419,6 @@ impl LanguageServer for ForgeLsp {
         &self,
         params: CompletionParams,
     ) -> tower_lsp::jsonrpc::Result<Option<CompletionResponse>> {
-        self.client
-            .log_message(MessageType::INFO, "got textDocument/completion request")
-            .await;
-
         let uri = params.text_document_position.text_document.uri;
         let position = params.text_document_position.position;
 
@@ -429,7 +427,7 @@ impl LanguageServer for ForgeLsp {
             .as_ref()
             .and_then(|ctx| ctx.trigger_character.as_deref());
 
-        // Get source text from cache or disk
+        // Get source text — only needed for dot completions (to parse the line)
         let source_text = {
             let text_cache = self.text_cache.read().await;
             if let Some(text) = text_cache.get(&uri.to_string()) {
@@ -470,7 +468,7 @@ impl LanguageServer for ForgeLsp {
         }
 
         let cache_ref = cached.as_deref();
-        let result = completion::handle_completion(cache_ref, &source_text, position, trigger_char);
+        let result = completion::handle_completion(cache_ref, &source_text, position, trigger_char, self.fast_completions);
         Ok(result)
     }
 

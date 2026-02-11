@@ -1271,11 +1271,16 @@ pub fn get_general_completions(cache: &CompletionCache) -> Vec<CompletionItem> {
 /// When `cache` is `None`, only static completions (keywords, globals, units)
 /// and magic dot completions (msg., block., tx., abi., type().) are returned
 /// immediately — no blocking.
+///
+/// When `fast` is true, general completions use the pre-built list from the
+/// cache (zero per-request allocation). When false, `get_general_completions`
+/// is called which allows per-request filtering (e.g. scope-aware completions).
 pub fn handle_completion(
     cache: Option<&CompletionCache>,
     source_text: &str,
     position: Position,
     trigger_char: Option<&str>,
+    fast: bool,
 ) -> Option<CompletionResponse> {
     let lines: Vec<&str> = source_text.lines().collect();
     let line = lines.get(position.line as usize)?;
@@ -1298,6 +1303,7 @@ pub fn handle_completion(
         }
     } else {
         match cache {
+            Some(c) if fast => c.general_completions.clone(),
             Some(c) => get_general_completions(c),
             None => get_static_completions(),
         }
