@@ -979,13 +979,25 @@ impl LanguageServer for ForgeLsp {
                 return Ok(None);
             }
         };
-        let ast_data = match self.compiler.ast(path_str).await {
-            Ok(data) => data,
-            Err(e) => {
-                self.client
-                    .log_message(MessageType::WARNING, format!("failed to get ast data: {e}"))
-                    .await;
-                return Ok(None);
+        // Use cached AST if available, otherwise fetch fresh
+        let ast_data: Arc<serde_json::Value> = {
+            let cache = self.ast_cache.read().await;
+            if let Some(cached_ast) = cache.get(&uri.to_string()) {
+                cached_ast.clone()
+            } else {
+                drop(cache);
+                match self.compiler.ast(path_str).await {
+                    Ok(data) => Arc::new(data),
+                    Err(e) => {
+                        self.client
+                            .log_message(
+                                MessageType::WARNING,
+                                format!("failed to get ast data: {e}"),
+                            )
+                            .await;
+                        return Ok(None);
+                    }
+                }
             }
         };
         let symbols = symbols::extract_document_symbols(&ast_data, path_str);
