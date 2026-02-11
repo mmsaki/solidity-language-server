@@ -101,6 +101,23 @@ solidity-language-server --completion-mode full
 - [ ] `window/workDoneProgress` - Work done progress
 
 <!-- ## Future improvements -->
+
+## Benchmarks
+
+Benchmarked against **solc --lsp** (C++) and **Hardhat/Nomic** (Node.js) on Uniswap V4-core (`Pool.sol`, 618 lines). 10 iterations + 2 warmup.
+
+| Benchmark | Our LSP | solc --lsp | Hardhat/Nomic |
+|-----------|---------|------------|---------------|
+| Spawn + Init | 3ms ⚡ | 123ms | 867ms |
+| Diagnostics | 435ms | 133ms ⚡ | 911ms |
+| Go to Definition | 8.8ms ⚡ | - | timeout |
+| Go to Declaration | 8.9ms ⚡ | unsupported | timeout |
+| Find References | 10.2ms ⚡ | unsupported | timeout |
+| Document Symbols | 9.0ms ⚡ | unsupported | timeout |
+
+> Run benchmarks: `cd bench && cargo build --release && ./target/release/bench <subcommand>`
+>
+> Subcommands: `spawn`, `diagnostics`, `definition`, `declaration`, `hover`, `references`, `documentSymbol`
 <!---->
 <!-- - Solc / Forge build ast issues -->
 <!--   - No ast nodes supported for yul -->
