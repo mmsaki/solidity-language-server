@@ -2,7 +2,7 @@ use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use tower_lsp::lsp_types::{Location, Position, Range, Url};
 
-use crate::goto::{NodeInfo, bytes_to_pos, cache_ids, pos_to_bytes};
+use crate::goto::{bytes_to_pos, cache_ids, pos_to_bytes, src_to_location, ExternalRefs, NodeInfo};
 
 pub fn all_references(nodes: &HashMap<String, HashMap<u64, NodeInfo>>) -> HashMap<u64, Vec<u64>> {
     let mut all_refs: HashMap<u64, Vec<u64>> = HashMap::new();
@@ -15,6 +15,39 @@ pub fn all_references(nodes: &HashMap<String, HashMap<u64, NodeInfo>>) -> HashMa
         }
     }
     all_refs
+}
+
+/// Check if cursor byte position falls on a Yul external reference in the given file.
+/// Returns the Solidity declaration id if so.
+pub fn byte_to_decl_via_external_refs(
+    external_refs: &ExternalRefs,
+    id_to_path: &HashMap<String, String>,
+    abs_path: &str,
+    byte_position: usize,
+) -> Option<u64> {
+    // Build reverse map: file_path -> file_id
+    let path_to_file_id: HashMap<&str, &str> = id_to_path
+        .iter()
+        .map(|(id, p)| (p.as_str(), id.as_str()))
+        .collect();
+    let current_file_id = path_to_file_id.get(abs_path)?;
+
+    for (src_str, decl_id) in external_refs {
+        let parts: Vec<&str> = src_str.split(':').collect();
+        if parts.len() != 3 {
+            continue;
+        }
+        // Only consider refs in the current file
+        if parts[2] != *current_file_id {
+            continue;
+        }
+        if let (Ok(start), Ok(length)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>()) {
+            if start <= byte_position && byte_position < start + length {
+                return Some(*decl_id);
+            }
+        }
+    }
+    None
 }
 
 pub fn byte_to_id(
@@ -155,7 +188,7 @@ pub fn goto_references_with_index(
         .map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
         .collect();
 
-    let (nodes, path_to_abs) = cache_ids(sources);
+    let (nodes, path_to_abs, external_refs) = cache_ids(sources);
     let all_refs = all_references(&nodes);
     let path = match file_uri.to_file_path() {
         Ok(p) => p,
@@ -170,11 +203,17 @@ pub fn goto_references_with_index(
         None => return vec![],
     };
     let byte_position = pos_to_bytes(source_bytes, position);
-    let node_id = match byte_to_id(&nodes, abs_path, byte_position) {
-        Some(id) => id,
-        None => return vec![],
-    };
-    let target_node_id = {
+
+    // Check if cursor is on a Yul external reference first
+    let target_node_id = if let Some(decl_id) =
+        byte_to_decl_via_external_refs(&external_refs, &id_to_path_map, abs_path, byte_position)
+    {
+        decl_id
+    } else {
+        let node_id = match byte_to_id(&nodes, abs_path, byte_position) {
+            Some(id) => id,
+            None => return vec![],
+        };
         let file_nodes = match nodes.get(abs_path) {
             Some(nodes) => nodes,
             None => return vec![],
@@ -199,6 +238,16 @@ pub fn goto_references_with_index(
             locations.push(location);
         }
     }
+
+    // Also add Yul external reference use sites that point to our target declaration
+    for (src_str, decl_id) in &external_refs {
+        if *decl_id == target_node_id {
+            if let Some(location) = src_to_location(src_str, &id_to_path_map) {
+                locations.push(location);
+            }
+        }
+    }
+
     let mut unique_locations = Vec::new();
     let mut seen = std::collections::HashSet::new();
     for location in locations {

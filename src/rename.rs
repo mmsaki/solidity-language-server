@@ -20,7 +20,7 @@ fn get_name_location_index(
     source_bytes: &[u8],
 ) -> Option<usize> {
     let sources = ast_data.get("sources")?;
-    let (nodes, path_to_abs) = goto::cache_ids(sources);
+    let (nodes, path_to_abs, _external_refs) = goto::cache_ids(sources);
     let path = file_uri.to_file_path().ok()?;
     let path_str = path.to_str()?;
     let abs_path = path_to_abs.get(path_str)?;
