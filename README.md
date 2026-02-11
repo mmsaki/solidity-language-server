@@ -18,6 +18,19 @@ Start the LSP server using:
 solidity-language-server
 ```
 
+### Flags
+
+| Flag | Values | Default | Description |
+|------|--------|---------|-------------|
+| `--completion-mode` | `fast`, `full` | `fast` | Controls completion computation strategy |
+
+- **fast** — Pre-built completions served from cache. Zero per-request computation. Best for large projects like Uniswap v4.
+- **full** — Per-request scope filtering with full completion recomputation. For power users who want scope-aware results.
+
+```bash
+solidity-language-server --completion-mode full
+```
+
 ### LSP Features
 
 **General**
