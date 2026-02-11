@@ -182,8 +182,8 @@ impl LanguageServer for ForgeLsp {
     ) -> tower_lsp::jsonrpc::Result<InitializeResult> {
         Ok(InitializeResult {
             server_info: Some(ServerInfo {
-                name: "forge lsp".to_string(),
-                version: Some("0.0.1".to_string()),
+                name: "Solidity Language Server".to_string(),
+                version: Some(env!("CARGO_PKG_VERSION").to_string()),
             }),
             capabilities: ServerCapabilities {
                 completion_provider: Some(CompletionOptions {
