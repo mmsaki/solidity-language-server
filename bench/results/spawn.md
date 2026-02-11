@@ -3,10 +3,28 @@
 Measures: spawn process -> initialize request -> response -> initialized notification
 No files opened.
 
-| Server | p50 | p95 | mean | Result |
-|--------|-----|-----|------|--------|
-| Our LSP | 3.1 ⚡ | 3.3 ⚡ | 3.1 ⚡ | "ok" |
-| solc --lsp | 123.7 | 124.3 | 123.4 | "ok" |
-| Hardhat/Nomic | 877.0 | 892.5 | 872.2 | "ok" |
+| Server | p50 | p95 | mean |
+|--------|-----|-----|------|
+| Our LSP | 3.4 ⚡ | 3.9 ⚡ | 3.4 ⚡ |
+| solc --lsp | 124.1 | 131.0 | 124.8 |
+| Hardhat/Nomic | 871.6 | 881.5 | 863.3 |
 
-Our LSP fastest startup (3ms), solc --lsp 123ms, Hardhat/Nomic 872ms.
+### Responses
+
+**Our LSP**
+```json
+"ok"
+```
+
+**solc --lsp**
+```json
+"ok"
+```
+
+**Hardhat/Nomic**
+```json
+"ok"
+```
+
+
+Our LSP fastest startup (3ms), solc --lsp 125ms, Hardhat/Nomic 863ms.

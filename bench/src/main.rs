@@ -409,8 +409,8 @@ where
     F: Fn(&Server, &str, &Path) -> BenchResult,
 {
     let mut lines = header.to_vec();
-    lines.push("| Server | p50 | p95 | mean | Result |".to_string());
-    lines.push("|--------|-----|-----|------|--------|".to_string());
+    lines.push("| Server | p50 | p95 | mean |".to_string());
+    lines.push("|--------|-----|-----|------|".to_string());
 
     // Collect all results first so we can find the winner
     struct Row {
@@ -502,26 +502,45 @@ where
             0 => {
                 let bolt = if row.mean <= best_mean { " ⚡" } else { "" };
                 lines.push(format!(
-                    "| {} | {:.1}{} | {:.1}{} | {:.1}{} | {} |",
-                    row.label,
-                    row.p50,
-                    bolt,
-                    row.p95,
-                    bolt,
-                    row.mean,
-                    bolt,
-                    row.summary.clone() + &row.diag_suffix
+                    "| {} | {:.1}{} | {:.1}{} | {:.1}{} |",
+                    row.label, row.p50, bolt, row.p95, bolt, row.mean, bolt
                 ));
             }
             1 => {
-                lines.push(format!(
-                    "| {} | - | - | - | {} |",
-                    row.label,
-                    row.summary.clone() + &row.diag_suffix
-                ));
+                lines.push(format!("| {} | - | - | - |", row.label));
             }
             _ => {
-                lines.push(format!("| {} | FAIL ({}) |", row.label, row.fail_msg));
+                lines.push(format!("| {} | FAIL | FAIL | FAIL |", row.label));
+            }
+        }
+    }
+
+    // Add response details per server in code blocks
+    lines.push("".to_string());
+    lines.push("### Responses".to_string());
+    lines.push("".to_string());
+    for row in &rows {
+        match row.kind {
+            0 => {
+                lines.push(format!("**{}**{}", row.label, row.diag_suffix));
+                lines.push("```json".to_string());
+                lines.push(row.summary.clone());
+                lines.push("```".to_string());
+                lines.push("".to_string());
+            }
+            1 => {
+                lines.push(format!("**{}**{}", row.label, row.diag_suffix));
+                lines.push("```".to_string());
+                lines.push(row.summary.clone());
+                lines.push("```".to_string());
+                lines.push("".to_string());
+            }
+            _ => {
+                lines.push(format!("**{}**", row.label));
+                lines.push("```".to_string());
+                lines.push(format!("FAIL: {}", row.fail_msg));
+                lines.push("```".to_string());
+                lines.push("".to_string());
             }
         }
     }
