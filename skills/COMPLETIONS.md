@@ -4,7 +4,7 @@
 
 The completion system provides two kinds of completions:
 
-1. **General completions** — triggered on any keystroke (or Ctrl+Space). Returns all named AST identifiers, Solidity keywords, magic globals, and global functions.
+1. **General completions** — triggered on any keystroke (or Ctrl+X Ctrl+o). Returns all named AST identifiers, Solidity keywords, magic globals, and global functions.
 2. **Dot completions** — triggered by `.`. Resolves the identifier before the dot, looks up its type, and returns the members of that type.
 
 All data comes from the Solidity compiler's combined JSON output — specifically the `.sources` section (AST) and `.contracts` section (ABI / methodIdentifiers). No separate `forge build` invocation is needed at completion time.
@@ -29,6 +29,7 @@ The compiler AST gives us every named node in the project:
 ```
 
 We extract:
+
 - **Named identifiers** → general completion items (functions, variables, contracts, structs, enums, events, errors)
 - **Struct members** → dot-completion items for struct-typed variables
 - **Contract/library/interface members** → dot-completion items (functions, state variables, events, errors, modifiers)
@@ -54,6 +55,7 @@ The compiler's `.contracts` section contains the ABI and EVM output for each con
 The `.sources` and `.contracts` keys use the same absolute filesystem paths, so we can cross-reference them directly.
 
 **Why methodIdentifiers matters:**
+
 - Full function signatures with parameter types (AST `node_members` only gives function names)
 - Includes inherited functions (the flattened external ABI)
 - 4-byte selectors shown as `label_details` in the completion menu
@@ -215,6 +217,7 @@ For chains like `a.b().c[d].`, each segment is resolved step-by-step:
 #### `completions_for_type`
 
 Once a node id is resolved, `completions_for_type` collects all available members:
+
 - Check `method_identifiers[node_id]` first — functions with full signatures and 4-byte selectors
 - Supplement with `node_members[node_id]` — state variables, events, errors, modifiers (deduplicated by label)
 - Add `using_for` library functions for the type (with suffix normalization)
@@ -262,6 +265,7 @@ After the AST walk, iterates `contract_locations` and looks up:
 ```
 
 For each method signature key:
+
 - `label` = function name (text before `(`)
 - `detail` = full ABI signature (e.g. `swap((address,address,uint24,int24,address),(bool,int256,uint160),bytes)`)
 - `label_details.detail` = `0x` + 4-byte selector
@@ -283,9 +287,10 @@ settle() returns (uint256)
 mulDiv(uint256 a, uint256 b, uint256 denominator) returns (uint256 result)
 ```
 
-Type prefixes like `struct `, `contract `, `enum ` are stripped from `typeDescriptions.typeString` for readability (e.g. `struct PoolKey` → `PoolKey`).
+Type prefixes like `struct`, `contract`, `enum` are stripped from `typeDescriptions.typeString` for readability (e.g. `struct PoolKey` → `PoolKey`).
 
 These signatures appear in two places:
+
 1. **`method_identifiers` items** — as `label_details.description` (alongside the ABI signature in `detail` and the selector in `label_details.detail`)
 2. **`node_members` items** — as `detail` (replacing the raw `typeDescriptions.typeString` for functions)
 
