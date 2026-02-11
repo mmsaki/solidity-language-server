@@ -37,6 +37,10 @@ pub struct CompletionCache {
 
     /// Wildcard using-for: `using X for *` — available on all types.
     pub using_for_wildcard: Vec<CompletionItem>,
+
+    /// Pre-built general completions (AST names + keywords + globals + units).
+    /// Built once, returned by reference on every non-dot completion request.
+    pub general_completions: Vec<CompletionItem>,
 }
 
 fn push_if_node_or_array<'a>(tree: &'a Value, key: &str, stack: &mut Vec<&'a Value>) {
@@ -689,6 +693,10 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
         }
     }
 
+    // Pre-build the general completions list (names + statics) once
+    let mut general_completions = names.clone();
+    general_completions.extend(get_static_completions());
+
     CompletionCache {
         names,
         name_to_type,
@@ -699,6 +707,7 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
         function_return_types,
         using_for,
         using_for_wildcard,
+        general_completions,
     }
 }
 
@@ -1192,9 +1201,10 @@ pub fn get_chain_completions(cache: &CompletionCache, chain: &[DotSegment]) -> V
     }
 }
 
-/// Get general completions (all known names).
-pub fn get_general_completions(cache: &CompletionCache) -> Vec<CompletionItem> {
-    let mut items = cache.names.clone();
+/// Get static completions that never change (keywords, magic globals, global functions, units).
+/// These are available immediately without an AST cache.
+pub fn get_static_completions() -> Vec<CompletionItem> {
+    let mut items = Vec::new();
 
     // Add Solidity keywords
     for kw in SOLIDITY_KEYWORDS {
@@ -1248,17 +1258,25 @@ pub fn get_general_completions(cache: &CompletionCache) -> Vec<CompletionItem> {
     items
 }
 
+/// Get general completions (all known names + static completions).
+pub fn get_general_completions(cache: &CompletionCache) -> Vec<CompletionItem> {
+    let mut items = cache.names.clone();
+    items.extend(get_static_completions());
+    items
+}
+
 /// Handle a completion request.
+///
+/// When `cache` is `Some`, full AST-aware completions are returned.
+/// When `cache` is `None`, only static completions (keywords, globals, units)
+/// and magic dot completions (msg., block., tx., abi., type().) are returned
+/// immediately — no blocking.
 pub fn handle_completion(
-    ast_data: &Value,
+    cache: Option<&CompletionCache>,
     source_text: &str,
     position: Position,
     trigger_char: Option<&str>,
 ) -> Option<CompletionResponse> {
-    let sources = ast_data.get("sources")?;
-    let contracts = ast_data.get("contracts");
-    let cache = build_completion_cache(sources, contracts);
-
     let lines: Vec<&str> = source_text.lines().collect();
     let line = lines.get(position.line as usize)?;
 
@@ -1267,13 +1285,26 @@ pub fn handle_completion(
         if chain.is_empty() {
             return None;
         }
-        get_chain_completions(&cache, &chain)
+        match cache {
+            Some(c) => get_chain_completions(c, &chain),
+            None => {
+                // No cache yet — serve magic dot completions (msg., block., etc.)
+                if chain.len() == 1 && chain[0].kind == AccessKind::Plain {
+                    magic_members(&chain[0].name).unwrap_or_default()
+                } else {
+                    vec![]
+                }
+            }
+        }
     } else {
-        get_general_completions(&cache)
+        match cache {
+            Some(c) => get_general_completions(c),
+            None => get_static_completions(),
+        }
     };
 
     Some(CompletionResponse::List(CompletionList {
-        is_incomplete: false,
+        is_incomplete: cache.is_none(),
         items,
     }))
 }
