@@ -14,7 +14,7 @@ pub struct NodeInfo {
 }
 
 /// All AST child keys to traverse (Solidity + Yul).
-const CHILD_KEYS: &[&str] = &[
+pub const CHILD_KEYS: &[&str] = &[
     "AST",
     "arguments",
     "baseContracts",

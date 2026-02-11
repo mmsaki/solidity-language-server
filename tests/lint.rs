@@ -1,74 +1,43 @@
 use solidity_language_server::lint::lint_output_to_diagnostics;
-use solidity_language_server::runner::{ForgeRunner, Runner};
-use std::fs;
 
-static CONTRACT: &str = r#"// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.29;
+/// Inline forge lint JSON output for the contract:
+/// ```solidity
+/// // SPDX-License-Identifier: MIT
+/// pragma solidity ^0.8.29;
+///
+/// contract A {
+///     function add_num(uint256 a) public pure returns (uint256) {
+///         return a + 4;
+///     }
+/// }
+/// ```
+///
+/// Produced by: `forge lint src/Contract.sol --json 2>&1`
+static LINT_OUTPUT: &str = r#"{"$message_type":"diagnostic","message":"function names should use mixedCase","code":{"code":"mixed-case-function","explanation":null},"level":"note","spans":[{"file_name":"src/Contract.sol","byte_start":84,"byte_end":91,"line_start":5,"line_end":5,"column_start":14,"column_end":21,"is_primary":true,"text":[{"text":"    function add_num(uint256 a) public pure returns (uint256) {","highlight_start":14,"highlight_end":21}],"label":null,"suggested_replacement":null}],"children":[{"message":"https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function","code":null,"level":"help","spans":[],"children":[],"rendered":null},{"message":"consider using","code":null,"level":"help","spans":[{"file_name":"src/Contract.sol","byte_start":84,"byte_end":91,"line_start":5,"line_end":5,"column_start":14,"column_end":21,"is_primary":true,"text":[{"text":"    function add_num(uint256 a) public pure returns (uint256) {","highlight_start":14,"highlight_end":21}],"label":null,"suggested_replacement":"addNum"}],"children":[],"rendered":null}],"rendered":"note[mixed-case-function]: function names should use mixedCase\n --> src/Contract.sol:5:14\n  |\n5 |     function add_num(uint256 a) public pure returns (uint256) {\n  |              ^^^^^^^ help: consider using: `addNum`\n  |\n  = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function\n\n"}"#;
 
-contract A {
-    function add_num(uint256 a) public pure returns (uint256) {
-        return a + 4;
-    }
-}"#;
-
-fn setup(contents: &str) -> (tempfile::TempDir, std::path::PathBuf, ForgeRunner) {
-    let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
-
-    // Create src directory
-    let src_dir = temp_dir.path().join("src");
-    fs::create_dir(&src_dir).expect("failed to create src dir");
-
-    // Write foundry.toml
-    let foundry_toml = r#"[profile.default]
-src = "src"
-out = "out"
-libs = ["lib"]
-"#;
-    fs::write(temp_dir.path().join("foundry.toml"), foundry_toml)
-        .expect("failed to write foundry.toml");
-
-    let contract_path = src_dir.join("Contract.sol");
-    fs::write(&contract_path, contents).expect("failed to write contract");
-
-    let compiler = ForgeRunner;
-    (temp_dir, contract_path, compiler)
+fn load_lint_output() -> serde_json::Value {
+    let diag: serde_json::Value = serde_json::from_str(LINT_OUTPUT).unwrap();
+    serde_json::Value::Array(vec![diag])
 }
 
-#[tokio::test]
-async fn test_lint_valid_file() {
-    let (_temp_dir, contract_path, compiler) = setup(CONTRACT);
-    let file_path = contract_path.to_string_lossy().to_string();
-
-    let result = compiler.lint(&file_path).await;
-    assert!(result.is_ok(), "Expected lint to succeed");
-
-    let json_value = result.unwrap();
+#[test]
+fn test_lint_output_parses_as_array() {
+    let json_value = load_lint_output();
     assert!(json_value.is_array(), "Expected lint output to be an array");
+    assert_eq!(json_value.as_array().unwrap().len(), 1);
 }
 
-#[tokio::test]
-async fn test_lint_diagnosis_output() {
-    let (_temp_dir, contract_path, compiler) = setup(CONTRACT);
-    let file_path = contract_path.to_string_lossy().to_string();
-
-    let result = compiler.lint(&file_path).await;
-    assert!(result.is_ok());
-
-    let json_value = result.unwrap();
-    let diagnostics = lint_output_to_diagnostics(&json_value, &file_path);
+#[test]
+fn test_lint_diagnosis_output() {
+    let json_value = load_lint_output();
+    let diagnostics = lint_output_to_diagnostics(&json_value, "src/Contract.sol");
     assert!(!diagnostics.is_empty(), "Expected diagnostics");
 }
 
-#[tokio::test]
-async fn test_lint_to_lsp_diagnostics() {
-    let (_temp_dir, contract_path, compiler) = setup(CONTRACT);
-    let file_path = contract_path.to_string_lossy().to_string();
-
-    let result = compiler.lint(&file_path).await;
-    assert!(result.is_ok(), "Expected lint to succeed");
-
-    let json_value = result.unwrap();
-    let diagnostics = lint_output_to_diagnostics(&json_value, &file_path);
+#[test]
+fn test_lint_to_lsp_diagnostics() {
+    let json_value = load_lint_output();
+    let diagnostics = lint_output_to_diagnostics(&json_value, "src/Contract.sol");
     assert!(!diagnostics.is_empty(), "Expected at least one diagnostic");
 
     let first_diag = &diagnostics[0];

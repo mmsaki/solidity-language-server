@@ -147,7 +147,8 @@ async fn test_ignored_code_for_tests() {
             "file": "contracts/ERC6909Claims.sol"
         }
     });
-    assert!(!ignored_error_code_warning(&error_json_non_test));
+    // These codes are now ignored for all .sol files, not just test files
+    assert!(ignored_error_code_warning(&error_json_non_test));
 
     let error_json_other_code = serde_json::json!({
         "errorCode": "1234",

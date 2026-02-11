@@ -1,3 +1,4 @@
+use crate::completion;
 use crate::goto;
 use crate::references;
 use crate::rename;
@@ -167,6 +168,11 @@ impl LanguageServer for ForgeLsp {
                 version: Some("0.0.1".to_string()),
             }),
             capabilities: ServerCapabilities {
+                completion_provider: Some(CompletionOptions {
+                    trigger_characters: Some(vec![".".to_string()]),
+                    resolve_provider: Some(false),
+                    ..Default::default()
+                }),
                 definition_provider: Some(OneOf::Left(true)),
                 declaration_provider: Some(DeclarationCapability::Simple(true)),
                 references_provider: Some(OneOf::Left(true)),
@@ -389,6 +395,48 @@ impl LanguageServer for ForgeLsp {
         self.client
             .log_message(MessageType::INFO, "watched files have changed.")
             .await;
+    }
+
+    async fn completion(
+        &self,
+        params: CompletionParams,
+    ) -> tower_lsp::jsonrpc::Result<Option<CompletionResponse>> {
+        self.client
+            .log_message(MessageType::INFO, "got textDocument/completion request")
+            .await;
+
+        let uri = params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+
+        let trigger_char = params
+            .context
+            .as_ref()
+            .and_then(|ctx| ctx.trigger_character.as_deref());
+
+        // Get source text from cache or disk
+        let source_text = {
+            let text_cache = self.text_cache.read().await;
+            if let Some(text) = text_cache.get(&uri.to_string()) {
+                text.clone()
+            } else {
+                match uri.to_file_path() {
+                    Ok(path) => std::fs::read_to_string(&path).unwrap_or_default(),
+                    Err(_) => return Ok(None),
+                }
+            }
+        };
+
+        let ast_data = {
+            let cache = self.ast_cache.read().await;
+            if let Some(cached_ast) = cache.get(&uri.to_string()) {
+                cached_ast.clone()
+            } else {
+                return Ok(None);
+            }
+        };
+
+        let result = completion::handle_completion(&ast_data, &source_text, position, trigger_char);
+        Ok(result)
     }
 
     async fn goto_definition(
