@@ -370,7 +370,7 @@ struct Server {
 
 const SERVERS: &[Server] = &[
     Server {
-        label: "SLS (ours)",
+        label: "Our LSP",
         cmd: "../target/release/solidity-language-server",
         args: &[],
     },
@@ -412,6 +412,19 @@ where
     lines.push("| Server | p50 | p95 | mean | Result |".to_string());
     lines.push("|--------|-----|-----|------|--------|".to_string());
 
+    // Collect all results first so we can find the winner
+    struct Row {
+        label: String,
+        p50: f64,
+        p95: f64,
+        mean: f64,
+        summary: String,
+        diag_suffix: String,
+        kind: u8, // 0=ok, 1=invalid, 2=fail
+        fail_msg: String,
+    }
+
+    let mut rows: Vec<Row> = Vec::new();
     let mut results = Vec::new();
     for srv in servers {
         eprint!("  {} ... ", srv.label);
@@ -426,14 +439,18 @@ where
                 let diag_suffix = diag_info
                     .map(|di| format!("  [diag: {} in {:.0}ms]", di.count, di.elapsed_ms))
                     .unwrap_or_default();
-                let combined = summary.clone() + &diag_suffix;
-                let row = format!(
-                    "| {} | {:.1} | {:.1} | {:.1} | {} |",
-                    srv.label, p50, p95, mean, combined
-                );
                 eprintln!("done");
-                lines.push(row);
-                results.push((srv.label.to_string(), p50, p95, mean, summary));
+                results.push((srv.label.to_string(), p50, p95, mean, summary.clone()));
+                rows.push(Row {
+                    label: srv.label.to_string(),
+                    p50,
+                    p95,
+                    mean,
+                    summary,
+                    diag_suffix,
+                    kind: 0,
+                    fail_msg: String::new(),
+                });
             }
             BenchResult::Invalid {
                 first_response,
@@ -443,16 +460,68 @@ where
                 let diag_suffix = diag_info
                     .map(|di| format!("  [diag: {} in {:.0}ms]", di.count, di.elapsed_ms))
                     .unwrap_or_default();
-                let combined = summary.clone() + &diag_suffix;
-                let row = format!("| {} | - | - | - | {} |", srv.label, combined);
                 eprintln!("invalid");
-                lines.push(row);
                 results.push((srv.label.to_string(), 0.0, 0.0, 0.0, summary.clone()));
+                rows.push(Row {
+                    label: srv.label.to_string(),
+                    p50: 0.0,
+                    p95: 0.0,
+                    mean: 0.0,
+                    summary,
+                    diag_suffix,
+                    kind: 1,
+                    fail_msg: String::new(),
+                });
             }
             BenchResult::Fail(e) => {
                 eprintln!("fail");
-                lines.push(format!("| {} | FAIL ({}) |", srv.label, e));
                 results.push((srv.label.to_string(), 0.0, 0.0, 0.0, "fail".to_string()));
+                rows.push(Row {
+                    label: srv.label.to_string(),
+                    p50: 0.0,
+                    p95: 0.0,
+                    mean: 0.0,
+                    summary: String::new(),
+                    diag_suffix: String::new(),
+                    kind: 2,
+                    fail_msg: e,
+                });
+            }
+        }
+    }
+
+    // Find the fastest mean among valid (kind=0) rows
+    let best_mean = rows
+        .iter()
+        .filter(|r| r.kind == 0)
+        .map(|r| r.mean)
+        .fold(f64::MAX, f64::min);
+
+    for row in &rows {
+        match row.kind {
+            0 => {
+                let bolt = if row.mean <= best_mean { " ⚡" } else { "" };
+                lines.push(format!(
+                    "| {} | {:.1}{} | {:.1}{} | {:.1}{} | {} |",
+                    row.label,
+                    row.p50,
+                    bolt,
+                    row.p95,
+                    bolt,
+                    row.mean,
+                    bolt,
+                    row.summary.clone() + &row.diag_suffix
+                ));
+            }
+            1 => {
+                lines.push(format!(
+                    "| {} | - | - | - | {} |",
+                    row.label,
+                    row.summary.clone() + &row.diag_suffix
+                ));
+            }
+            _ => {
+                lines.push(format!("| {} | FAIL ({}) |", row.label, row.fail_msg));
             }
         }
     }
@@ -501,7 +570,7 @@ fn generate_summary(name: &str, results: &[(String, f64, f64, f64, String)]) -> 
             if valid.len() >= 1 {
                 let sls_diag = results
                     .iter()
-                    .find(|(n, _, _, _, _)| n == "SLS (ours)")
+                    .find(|(n, _, _, _, _)| n == "Our LSP")
                     .and_then(|(_, _, _, _, s)| {
                         s.strip_prefix("4 diagnostics: ").map(|s| s.to_string())
                     })
@@ -519,12 +588,12 @@ fn generate_summary(name: &str, results: &[(String, f64, f64, f64, String)]) -> 
                 .unwrap_or("");
             let sls = results
                 .iter()
-                .find(|(n, _, _, _, _)| n == "SLS (ours)")
+                .find(|(n, _, _, _, _)| n == "Our LSP")
                 .map(|(_, _, _, _, s)| s.as_str())
                 .unwrap_or("");
             format!(
                 "{} returns {}, {} {}, Hardhat timeout.",
-                "solc --lsp", solc, "SLS (ours)", sls
+                "solc --lsp", solc, "Our LSP", sls
             )
         }
         "declaration" => {
@@ -535,12 +604,12 @@ fn generate_summary(name: &str, results: &[(String, f64, f64, f64, String)]) -> 
                 .unwrap_or("");
             let sls = results
                 .iter()
-                .find(|(n, _, _, _, _)| n == "SLS (ours)")
+                .find(|(n, _, _, _, _)| n == "Our LSP")
                 .map(|(_, _, _, _, s)| s.as_str())
                 .unwrap_or("");
             format!(
                 "{} {}, {} {}, Hardhat timeout.",
-                "SLS (ours)", sls, "solc --lsp", solc
+                "Our LSP", sls, "solc --lsp", solc
             )
         }
         "hover" => {
@@ -551,12 +620,12 @@ fn generate_summary(name: &str, results: &[(String, f64, f64, f64, String)]) -> 
                 .unwrap_or("");
             let sls = results
                 .iter()
-                .find(|(n, _, _, _, _)| n == "SLS (ours)")
+                .find(|(n, _, _, _, _)| n == "Our LSP")
                 .map(|(_, _, _, _, s)| s.as_str())
                 .unwrap_or("");
             format!(
                 "{} {}, {} {}, Hardhat timeout.",
-                "SLS (ours)", sls, "solc --lsp", solc
+                "Our LSP", sls, "solc --lsp", solc
             )
         }
         "references" => {
@@ -567,12 +636,12 @@ fn generate_summary(name: &str, results: &[(String, f64, f64, f64, String)]) -> 
                 .unwrap_or("");
             let sls = results
                 .iter()
-                .find(|(n, _, _, _, _)| n == "SLS (ours)")
+                .find(|(n, _, _, _, _)| n == "Our LSP")
                 .map(|(_, _, _, _, s)| s.as_str())
                 .unwrap_or("");
             format!(
                 "{} {}, {} {}, Hardhat timeout.",
-                "SLS (ours)", sls, "solc --lsp", solc
+                "Our LSP", sls, "solc --lsp", solc
             )
         }
         "documentSymbol" => {
@@ -580,11 +649,10 @@ fn generate_summary(name: &str, results: &[(String, f64, f64, f64, String)]) -> 
                 .iter()
                 .filter(|(_, _, _, m, _)| *m > 0.0)
                 .collect::<Vec<_>>();
-            if let Some((_, _, _, mean, _)) = valid.iter().find(|(n, _, _, _, _)| n == "SLS (ours)")
-            {
+            if let Some((_, _, _, mean, _)) = valid.iter().find(|(n, _, _, _, _)| n == "Our LSP") {
                 format!(
                     "{} fast ({:.1}ms) returns symbols, solc unsupported, Hardhat timeout.",
-                    "SLS (ours)", *mean
+                    "Our LSP", *mean
                 )
             } else {
                 "No valid results.".to_string()

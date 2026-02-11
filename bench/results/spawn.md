@@ -5,8 +5,8 @@ No files opened.
 
 | Server | p50 | p95 | mean | Result |
 |--------|-----|-----|------|--------|
-| SLS (ours) | 3.1 | 3.7 | 3.1 | "ok" |
-| solc --lsp | 121.7 | 124.5 | 121.9 | "ok" |
-| Hardhat/Nomic | 869.1 | 900.6 | 866.0 | "ok" |
+| Our LSP | 3.1 ⚡ | 3.3 ⚡ | 3.1 ⚡ | "ok" |
+| solc --lsp | 123.7 | 124.3 | 123.4 | "ok" |
+| Hardhat/Nomic | 877.0 | 892.5 | 872.2 | "ok" |
 
-SLS (ours) fastest startup (3ms), solc --lsp 122ms, Hardhat/Nomic 866ms.
+Our LSP fastest startup (3ms), solc --lsp 123ms, Hardhat/Nomic 872ms.

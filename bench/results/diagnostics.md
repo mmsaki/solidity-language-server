@@ -5,8 +5,8 @@ Measures: didOpen notification -> first publishDiagnostics response
 
 | Server | p50 | p95 | mean | Result |
 |--------|-----|-----|------|--------|
-| SLS (ours) | 433.4 | 436.4 | 431.7 | "4 diagnostics: [3] [forge lint] function names should use mixedCase (forge-lint); [3] [forge lint] mutable variables sh... |
-| solc --lsp | 131.7 | 133.4 | 131.7 | "no diagnostics" |
-| Hardhat/Nomic | 905.7 | 914.3 | 904.0 | "no diagnostics" |
+| Our LSP | 435.7 | 439.8 | 435.4 | "4 diagnostics: [3] [forge lint] function names should use mixedCase (forge-lint); [3] [forge lint] mutable variables sh... |
+| solc --lsp | 132.9 ⚡ | 133.7 ⚡ | 132.8 ⚡ | "no diagnostics" |
+| Hardhat/Nomic | 911.9 | 917.3 | 911.3 | "no diagnostics" |
 
-solc --lsp fastest diagnostics (132ms), SLS (ours) 432ms with , Hardhat/Nomic 904ms with no diags.
+solc --lsp fastest diagnostics (133ms), Our LSP 435ms with , Hardhat/Nomic 911ms with no diags.

@@ -7,8 +7,8 @@ Waits for valid publishDiagnostics before sending requests.
 
 | Server | p50 | p95 | mean | Result |
 |--------|-----|-----|------|--------|
-| SLS (ours) | - | - | - | error: Method not found  [diag: 4 in 438ms] |
-| solc --lsp | - | - | - | null  [diag: 1 in 128ms] |
+| Our LSP | - | - | - | error: Method not found  [diag: 4 in 436ms] |
+| solc --lsp | - | - | - | null  [diag: 1 in 133ms] |
 | Hardhat/Nomic | FAIL (wait_for_diagnostics: timeout) |
 
-SLS (ours) error: Method not found, solc --lsp null, Hardhat timeout.
+Our LSP error: Method not found, solc --lsp null, Hardhat timeout.
