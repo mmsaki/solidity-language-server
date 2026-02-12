@@ -66,6 +66,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Run tests
+        id: tests
+        run: |
+          output=$(cargo test 2>&1)
+          echo "$output"
+          passed=$(echo "$output" | grep -oP '\d+ passed' | tail -1 | grep -oP '\d+')
+          echo "passed=$passed" >> "$GITHUB_OUTPUT"
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -95,4 +109,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          append_body: true
+          body: |
+            **Tests:** ${{ steps.tests.outputs.passed }} passed
           files: dist/*
