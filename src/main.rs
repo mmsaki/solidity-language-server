@@ -13,6 +13,7 @@ pub enum CompletionMode {
 }
 
 #[derive(Clone, Debug, Parser)]
+#[command(version)]
 pub struct LspArgs {
     #[arg(long)]
     pub stdio: bool,
