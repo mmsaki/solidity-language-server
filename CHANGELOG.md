@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.1.10
+
+### Features
+
+- `textDocument/hover` — show Solidity signatures, NatSpec documentation, and selectors on hover
+- Signature generation for functions, contracts, structs, enums, errors, events, modifiers, variables, UDVTs
+- NatSpec formatting: `@notice`, `@param`, `@return`, `@dev` rendered as structured markdown
+- Display `functionSelector`, `errorSelector`, `eventSelector` from AST in hover output
+- `@inheritdoc` resolution via `functionSelector` matching between implementation and parent interface — correctly handles overloaded functions
+- 25 hover tests against Uniswap v4 PoolManager AST
+
 ## v0.1.8
 
 ### Features
