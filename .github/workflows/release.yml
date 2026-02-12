@@ -86,7 +86,7 @@ jobs:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
           echo "$GPG_PRIVATE_KEY" | gpg --batch --import
-          gpg --batch --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" \
+          echo "$GPG_PASSPHRASE" | gpg --batch --pinentry-mode loopback --passphrase-fd 0 \
             --detach-sign --armor dist/checksums-sha256.txt
           echo "Signature created:"
           ls -la dist/checksums-sha256.txt.asc
