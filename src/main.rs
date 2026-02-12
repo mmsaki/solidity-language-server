@@ -14,8 +14,7 @@ pub enum CompletionMode {
 
 #[derive(Clone, Debug, Parser)]
 #[command(
-    version,
-    long_version = env!("LONG_VERSION"),
+    version = env!("LONG_VERSION"),
     about = "solidity-language-server, a Solidity LSP powered by foundry"
 )]
 pub struct LspArgs {
