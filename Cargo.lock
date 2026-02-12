@@ -2244,7 +2244,7 @@ dependencies = [
 
 [[package]]
 name = "solidity-language-server"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "clap",
  "eyre",
