@@ -1,5 +1,6 @@
 use crate::completion;
 use crate::goto;
+use crate::hover;
 use crate::references;
 use crate::rename;
 use crate::runner::{ForgeRunner, Runner};
@@ -202,6 +203,7 @@ impl LanguageServer for ForgeLsp {
                 })),
                 workspace_symbol_provider: Some(OneOf::Left(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
+                hover_provider: Some(HoverProviderCapability::Simple(true)),
                 document_formatting_provider: Some(OneOf::Left(true)),
                 text_document_sync: Some(TextDocumentSyncCapability::Options(
                     TextDocumentSyncOptions {
@@ -1015,6 +1017,79 @@ impl LanguageServer for ForgeLsp {
                 .await;
             Ok(Some(DocumentSymbolResponse::Nested(symbols)))
         }
+    }
+
+    async fn hover(&self, params: HoverParams) -> tower_lsp::jsonrpc::Result<Option<Hover>> {
+        self.client
+            .log_message(MessageType::INFO, "got textDocument/hover request")
+            .await;
+
+        let uri = params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        let file_path = match uri.to_file_path() {
+            Ok(path) => path,
+            Err(_) => {
+                self.client
+                    .log_message(MessageType::ERROR, "invalid file uri")
+                    .await;
+                return Ok(None);
+            }
+        };
+
+        let source_bytes = match std::fs::read(&file_path) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                self.client
+                    .log_message(MessageType::ERROR, format!("failed to read file: {e}"))
+                    .await;
+                return Ok(None);
+            }
+        };
+
+        let ast_data: Arc<serde_json::Value> = {
+            let cache = self.ast_cache.read().await;
+            if let Some(cached_ast) = cache.get(&uri.to_string()) {
+                cached_ast.clone()
+            } else {
+                drop(cache);
+                let path_str = match file_path.to_str() {
+                    Some(s) => s,
+                    None => {
+                        self.client
+                            .log_message(MessageType::ERROR, "invalid file path")
+                            .await;
+                        return Ok(None);
+                    }
+                };
+                match self.compiler.ast(path_str).await {
+                    Ok(data) => Arc::new(data),
+                    Err(e) => {
+                        self.client
+                            .log_message(
+                                MessageType::ERROR,
+                                format!("failed to get ast: {e}"),
+                            )
+                            .await;
+                        return Ok(None);
+                    }
+                }
+            }
+        };
+
+        let result = hover::hover_info(&ast_data, &uri, position, &source_bytes);
+
+        if result.is_some() {
+            self.client
+                .log_message(MessageType::INFO, "hover info found")
+                .await;
+        } else {
+            self.client
+                .log_message(MessageType::INFO, "no hover info found")
+                .await;
+        }
+
+        Ok(result)
     }
 
 }
