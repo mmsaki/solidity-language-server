@@ -30,10 +30,10 @@ jobs:
             archive: zip
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: mmsaki/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: mmsaki/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
@@ -54,7 +54,7 @@ jobs:
           Compress-Archive -Path "target/${{ matrix.target }}/release/solidity-language-server.exe" -DestinationPath "solidity-language-server-${{ matrix.target }}.zip"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: mmsaki/upload-artifact@v4
         with:
           name: solidity-language-server-${{ matrix.target }}
           path: solidity-language-server-${{ matrix.target }}.*
@@ -64,10 +64,10 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: mmsaki/checkout@v4
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: mmsaki/download-artifact@v4
         with:
           path: artifacts
 
@@ -92,7 +92,7 @@ jobs:
           ls -la dist/checksums-sha256.txt.asc
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: mmsaki/action-gh-release@v2
         with:
           generate_release_notes: true
           files: dist/*
