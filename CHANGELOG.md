@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.1.11
+
+### Features
+
+- `--version` / `-V` flag with full build metadata: version, commit hash, OS, architecture
+- GPG-signed release checksums for binary verification
+- `CONTRIBUTING.md` with project structure and development workflow
+
+### Improvements
+
+- Remove redundant timestamp from tracing log output
+- Add `build.rs` to embed git commit hash at compile time
+- Add `public-key.asc` for release signature verification
+- Updated README with CLI usage examples, all flags, and verification instructions
+
 ## v0.1.10
 
 ### Features
