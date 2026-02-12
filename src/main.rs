@@ -13,6 +13,10 @@ pub enum CompletionMode {
 }
 
 #[derive(Clone, Debug, Parser)]
+#[command(
+    version = env!("LONG_VERSION"),
+    about = "solidity-language-server, a Solidity LSP powered by foundry"
+)]
 pub struct LspArgs {
     #[arg(long)]
     pub stdio: bool,
@@ -26,6 +30,7 @@ impl LspArgs {
     pub async fn run(self) -> Result<()> {
         let sub = tracing_subscriber::fmt()
             .compact()
+            .without_time()
             .with_file(true)
             .with_line_number(true)
             .with_thread_ids(true)

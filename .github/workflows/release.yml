@@ -80,6 +80,17 @@ jobs:
           sha256sum * > checksums-sha256.txt
           cat checksums-sha256.txt
 
+      - name: Import GPG key and sign checksums
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          gpg --batch --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" \
+            --detach-sign --armor dist/checksums-sha256.txt
+          echo "Signature created:"
+          ls -la dist/checksums-sha256.txt.asc
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:

@@ -12,10 +12,11 @@ cargo install solidity-language-server
 
 ## Usage
 
-Start the LSP server using:
-
-```bash
-solidity-language-server
+```sh
+solidity-language-server                          # start LSP server
+solidity-language-server --version                # show version + commit + platform
+solidity-language-server --completion-mode full   # full scope-aware completions
+solidity-language-server --help                   # show all options
 ```
 
 ### Neovim
@@ -60,13 +61,24 @@ return {
 
 | Flag | Values | Default | Description |
 |------|--------|---------|-------------|
+| `--version`, `-V` | | | Show version, commit hash, OS, and architecture |
 | `--completion-mode` | `fast`, `full` | `fast` | Controls completion computation strategy |
+| `--use-solar` | | | Use solar compiler instead of forge |
+| `--stdio` | | | Use stdio transport |
+
+**Completion modes:**
 
 - **fast** — Pre-built completions served from cache. Zero per-request computation. Best for large projects like Uniswap v4.
 - **full** — Per-request scope filtering with full completion recomputation. For power users who want scope-aware results.
 
-```bash
-solidity-language-server --completion-mode full
+### Verify Release Binaries
+
+Release binaries are GPG-signed. To verify a download:
+
+```sh
+gpg --import public-key.asc
+gpg --verify checksums-sha256.txt.asc checksums-sha256.txt
+sha256sum -c checksums-sha256.txt
 ```
 
 ## Benchmarks
