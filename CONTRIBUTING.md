@@ -11,7 +11,7 @@
 ```sh
 git clone https://github.com/mmsaki/solidity-language-server.git
 cd solidity-language-server
-cargo build
+cargo build --release
 cargo test
 ```
 
@@ -51,8 +51,8 @@ Tests use `pool-manager-ast.json` (7.2MB Uniswap v4 fixture) committed in the re
 Build and point your editor at the binary:
 
 ```sh
-cargo build
-# binary is at target/debug/solidity-language-server
+cargo build --release
+# binary is at target/release/solidity-language-server
 ```
 
 Or install locally:
