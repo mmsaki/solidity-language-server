@@ -49,11 +49,16 @@ fn get_name_location_index(
 
 pub fn get_identifier_at_position(source_bytes: &[u8], position: Position) -> Option<String> {
     let text = String::from_utf8_lossy(source_bytes);
-    let abs_offset = crate::utils::position_to_byte_offset(&text, position.line, position.character);
+    let abs_offset =
+        crate::utils::position_to_byte_offset(&text, position.line, position.character);
     let lines: Vec<&str> = text.lines().collect();
     let line = lines.get(position.line as usize)?;
     // Compute byte offset within this line
-    let line_start = text.as_bytes().iter().take(abs_offset).enumerate()
+    let line_start = text
+        .as_bytes()
+        .iter()
+        .take(abs_offset)
+        .enumerate()
         .rev()
         .find(|&(_, &b)| b == b'\n')
         .map(|(i, _)| i + 1)
@@ -89,11 +94,16 @@ pub fn get_identifier_at_position(source_bytes: &[u8], position: Position) -> Op
 
 pub fn get_identifier_range(source_bytes: &[u8], position: Position) -> Option<Range> {
     let text = String::from_utf8_lossy(source_bytes);
-    let abs_offset = crate::utils::position_to_byte_offset(&text, position.line, position.character);
+    let abs_offset =
+        crate::utils::position_to_byte_offset(&text, position.line, position.character);
     let lines: Vec<&str> = text.lines().collect();
     let line = lines.get(position.line as usize)?;
     // Compute byte offset of line start and cursor column within line
-    let line_start = text.as_bytes().iter().take(abs_offset).enumerate()
+    let line_start = text
+        .as_bytes()
+        .iter()
+        .take(abs_offset)
+        .enumerate()
         .rev()
         .find(|&(_, &b)| b == b'\n')
         .map(|(i, _)| i + 1)

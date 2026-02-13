@@ -1268,7 +1268,8 @@ pub fn handle_completion(
     let line = lines.get(position.line as usize)?;
 
     // Convert encoding-aware column to a byte offset within this line.
-    let abs_byte = crate::utils::position_to_byte_offset(source_text, position.line, position.character);
+    let abs_byte =
+        crate::utils::position_to_byte_offset(source_text, position.line, position.character);
     let line_start_byte: usize = source_text[..abs_byte]
         .rfind('\n')
         .map(|i| i + 1)
