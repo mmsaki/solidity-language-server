@@ -261,7 +261,7 @@ def collect_yul_keys(obj, keys=set()):
     return keys
 ```
 
-## Files Changed
+## Files Changed (Yul)
 
 | File | Changes |
 |------|---------|
@@ -270,7 +270,7 @@ def collect_yul_keys(obj, keys=set()):
 | `src/rename.rs` | Destructure 3-tuple (`_external_refs`) |
 | `tests/yul_external_references.rs` | 6 tests against `pool-manager-ast.json` |
 
-## Pitfalls
+## Pitfalls (Yul)
 
 1. **Cross-file byte offset collisions**: Without file-id filtering, byte offsets from different files match falsely. Always check `src_parts[2]` against the current file id.
 
@@ -279,3 +279,117 @@ def collect_yul_keys(obj, keys=set()):
 3. **Synthetic ids don't work**: An earlier attempt minted fake `u64` ids (starting at `u64::MAX/2`) for Yul nodes. This caused cross-file collisions because node ids are global. The separate `ExternalRefs` map avoids this entirely.
 
 4. **Yul nodes inside `if let Some(id) = tree.get("id")`**: The main traversal loop only indexes nodes that have an `id` field. Yul nodes naturally skip this — they pass through the traversal (via CHILD_KEYS) but don't get inserted into the `HashMap<u64, NodeInfo>`. This is correct behavior.
+
+---
+
+# Cross-File References
+
+## Problem
+
+`forge build <file>` returns the AST for the file and its imports — not files that import it. From `Hooks.sol`, "Find All References" only shows references within Hooks.sol's dependency tree. References in `PoolManager.sol` (which imports Hooks) are invisible because PoolManager is not in Hooks' build output.
+
+## Why Node IDs Don't Work Across Builds
+
+Node IDs are assigned by the compiler per build invocation. The same `library Hooks` definition gets id `4422` when building PoolManager.sol but a different id when building Hooks.sol directly. You cannot search for `referenced_declaration == 4422` across builds — that number only means "Hooks" in the PoolManager build.
+
+## What Is Stable: Byte Offsets
+
+Byte offsets within a source file are stable across builds. `library Hooks` always starts at byte 1039 in `src/libraries/Hooks.sol` regardless of which file triggered the build. This is the cross-build bridging mechanism.
+
+## Architecture
+
+### Per-Build Cache (`ast_cache`)
+
+Each entry in `ast_cache` is a `CachedBuild` — one complete `forge build --ast` output plus pre-computed indexes:
+
+```rust
+pub struct CachedBuild {
+    pub ast: Value,                                          // raw forge output
+    pub nodes: HashMap<String, HashMap<u64, NodeInfo>>,      // abs_path -> id -> node
+    pub path_to_abs: HashMap<String, String>,                // fs_path -> abs_path
+    pub external_refs: ExternalRefs,                         // Yul src -> declaration id
+    pub id_to_path_map: HashMap<String, String>,             // file_id -> file_path
+}
+```
+
+`CachedBuild::new()` calls `cache_ids()` once at construction. Every subsequent request (goto, references, rename, hover) reuses the pre-computed data — no re-traversal.
+
+### Cache Lifecycle
+
+| Event | Action |
+|-------|--------|
+| File saved (`did_save`) | `forge build` runs. On success, `CachedBuild::new(ast)` is constructed and inserted into `ast_cache`. |
+| File opened (`did_open`) | Same as save. |
+| Cache miss on request | `get_or_fetch_build()` fetches the AST, builds the `CachedBuild`, optionally inserts into cache. |
+| Typing (`did_change`) | Cache not updated. Stale data keeps goto working during edits. |
+| Cross-file rename | Modified files have their cache entries removed (rebuilt on next save). |
+
+### Cross-File References Flow
+
+```
+User does "Find All References" on `Hooks` in PoolManager.sol:
+
+1. goto_references(pm_build.ast, ...) → refs within PM's 45-file build scope
+
+2. resolve_target_location(pm_build, ...) → ("src/libraries/Hooks.sol", 1039)
+   - Cursor at byte 70 in PoolManager.sol
+   - byte_to_id → node 553 (Identifier "Hooks")
+   - node 553 has referencedDeclaration = 4422
+   - Find node 4422 in nodes map → src = "1039:15471:23"
+   - Return ("src/libraries/Hooks.sol", 1039)
+
+3. For each other cached build:
+   goto_references_for_target(other_build, "src/libraries/Hooks.sol", 1039, ...)
+   - byte_to_id at byte 1039 in Hooks.sol → this build's node ID for Hooks
+   - Scan all nodes: referenced_declaration == that ID → collect locations
+
+4. Deduplicate and return combined results
+```
+
+### Key Functions
+
+| Function | File | Purpose |
+|----------|------|---------|
+| `resolve_target_location()` | `src/references.rs` | Cursor → `(abs_path, byte_offset)` of the definition. The stable cross-build identifier. |
+| `goto_references_for_target()` | `src/references.rs` | Given `(abs_path, byte_offset)`, find all references in a single build. Uses `byte_to_id` to re-resolve the stable identity into the build's own node ID, then scans `referenced_declaration`. |
+| `byte_to_id()` | `src/references.rs` | Given `(nodes, abs_path, byte_offset)`, find the smallest-span node containing that byte position. Returns the node's ID within that build. |
+| `CachedBuild::new()` | `src/goto.rs` | Constructs pre-computed indexes from raw AST. Calls `cache_ids()` once. |
+
+### Rename Uses the Same Flow
+
+`rename_symbol()` in `src/rename.rs` accepts `&CachedBuild` for the current file and `&[&CachedBuild]` for other cached builds. It calls `resolve_target_location` + `goto_references_for_target` identically to the references handler, then builds `TextEdit`s from the combined locations.
+
+## Why Not a Global Store
+
+An earlier approach merged ASTs from multiple builds into a single `GlobalStore`. This failed for two reasons:
+
+1. **Source ID conflicts**: `source_id_to_path` maps integer IDs to file paths, but different builds assign different IDs to the same file. ID 6 = PoolManager.sol in one build, ProtocolFees.sol in another. Merging corrupted location resolution.
+
+2. **Node ID instability**: Same definition, different IDs across builds. A merged store cannot use `referenced_declaration` lookups because the IDs are build-specific.
+
+The per-cache approach avoids both: each `CachedBuild` uses its own `id_to_path_map` and node IDs. Byte offsets bridge between builds.
+
+## Files Changed (Cross-File References)
+
+| File | Changes |
+|------|---------|
+| `src/goto.rs` | `CachedBuild` struct with `new()` constructor |
+| `src/references.rs` | `resolve_target_location()` accepts `&CachedBuild`, `goto_references_for_target()` accepts `&CachedBuild` |
+| `src/rename.rs` | `rename_symbol()` accepts `&CachedBuild` + `&[&CachedBuild]` |
+| `src/lsp.rs` | `ast_cache` type changed to `HashMap<String, Arc<CachedBuild>>`, `get_or_fetch_build()` helper, all handlers updated |
+| `tests/cross_file_references.rs` | 12 tests: CachedBuild construction, byte_to_id bridging, cross-file reference scanning |
+
+## Test Case: `library Hooks` Cross-File References
+
+From `pool-manager-ast.json`:
+
+- **Definition**: `library Hooks`, id=4422, src=`1039:15471:23`, file=`src/libraries/Hooks.sol`
+- **References in PoolManager.sol** (file id 6):
+  - id=553, Identifier at byte 70 (`using Hooks for ...`)
+  - id=623, IdentifierPath at byte 4953
+  - id=806, Identifier at byte 6804
+
+The tests verify:
+1. `byte_to_id("src/libraries/Hooks.sol", 1039)` resolves to the definition node
+2. Scanning `referenced_declaration` across all files finds the 3 PoolManager.sol references
+3. The end-to-end flow (usage node → referencedDeclaration → definition → byte_offset → re-resolve → scan) produces correct results

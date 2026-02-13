@@ -94,6 +94,49 @@ fn push_if_node_or_array<'a>(tree: &'a Value, key: &str, stack: &mut Vec<&'a Val
 /// to the Solidity declaration node id they refer to.
 pub type ExternalRefs = HashMap<String, u64>;
 
+/// Pre-computed AST index. Built once when an AST enters the cache,
+/// then reused on every goto/references/rename/hover request.
+#[derive(Debug, Clone)]
+pub struct CachedBuild {
+    pub ast: Value,
+    pub nodes: HashMap<String, HashMap<u64, NodeInfo>>,
+    pub path_to_abs: HashMap<String, String>,
+    pub external_refs: ExternalRefs,
+    pub id_to_path_map: HashMap<String, String>,
+}
+
+impl CachedBuild {
+    /// Build the index from raw `forge build --ast` output.
+    pub fn new(ast: Value) -> Self {
+        let (nodes, path_to_abs, external_refs) = if let Some(sources) = ast.get("sources") {
+            cache_ids(sources)
+        } else {
+            (HashMap::new(), HashMap::new(), HashMap::new())
+        };
+
+        let id_to_path_map = ast
+            .get("build_infos")
+            .and_then(|v| v.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|info| info.get("source_id_to_path"))
+            .and_then(|v| v.as_object())
+            .map(|obj| {
+                obj.iter()
+                    .map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        Self {
+            ast,
+            nodes,
+            path_to_abs,
+            external_refs,
+            id_to_path_map,
+        }
+    }
+}
+
 pub fn cache_ids(
     sources: &Value,
 ) -> (

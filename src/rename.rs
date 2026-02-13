@@ -1,4 +1,5 @@
 use crate::goto;
+use crate::goto::CachedBuild;
 use crate::references;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -128,21 +129,51 @@ pub fn get_identifier_range(source_bytes: &[u8], position: Position) -> Option<R
 type Type = HashMap<Url, HashMap<(u32, u32, u32, u32), TextEdit>>;
 
 pub fn rename_symbol(
-    ast_data: &Value,
+    build: &CachedBuild,
     file_uri: &Url,
     position: Position,
     source_bytes: &[u8],
     new_name: String,
+    other_builds: &[&CachedBuild],
 ) -> Option<WorkspaceEdit> {
     let original_identifier = get_identifier_at_position(source_bytes, position)?;
-    let name_location_index = get_name_location_index(ast_data, file_uri, position, source_bytes);
-    let locations = references::goto_references_with_index(
-        ast_data,
+    let name_location_index =
+        get_name_location_index(&build.ast, file_uri, position, source_bytes);
+    let mut locations = references::goto_references_with_index(
+        &build.ast,
         file_uri,
         position,
         source_bytes,
         name_location_index,
     );
+
+    // Cross-file: scan other cached ASTs for the same target definition
+    if let Some((def_abs_path, def_byte_offset)) =
+        references::resolve_target_location(build, file_uri, position, source_bytes)
+    {
+        for other_build in other_builds {
+            let other_locations = references::goto_references_for_target(
+                other_build,
+                &def_abs_path,
+                def_byte_offset,
+                name_location_index,
+            );
+            locations.extend(other_locations);
+        }
+    }
+
+    // Deduplicate
+    let mut seen = std::collections::HashSet::new();
+    locations.retain(|loc| {
+        seen.insert((
+            loc.uri.clone(),
+            loc.range.start.line,
+            loc.range.start.character,
+            loc.range.end.line,
+            loc.range.end.character,
+        ))
+    });
+
     if locations.is_empty() {
         return None;
     }

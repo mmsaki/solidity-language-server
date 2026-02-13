@@ -14,7 +14,7 @@ use tower_lsp::{Client, LanguageServer, lsp_types::*};
 pub struct ForgeLsp {
     client: Client,
     compiler: Arc<dyn Runner>,
-    ast_cache: Arc<RwLock<HashMap<String, Arc<serde_json::Value>>>>,
+    ast_cache: Arc<RwLock<HashMap<String, Arc<goto::CachedBuild>>>>,
     text_cache: Arc<RwLock<HashMap<String, String>>>,
     completion_cache: Arc<RwLock<HashMap<String, Arc<completion::CompletionCache>>>>,
     fast_completions: bool,
@@ -75,17 +75,17 @@ impl ForgeLsp {
         
         if build_succeeded {
             if let Ok(ast_data) = ast_result {
-                let ast_data = Arc::new(ast_data);
+                let cached_build = Arc::new(goto::CachedBuild::new(ast_data));
                 let mut cache = self.ast_cache.write().await;
-                cache.insert(uri.to_string(), ast_data.clone());
+                cache.insert(uri.to_string(), cached_build.clone());
                 drop(cache);
 
                 // Rebuild completion cache in the background; old cache stays usable until replaced
                 let completion_cache = self.completion_cache.clone();
                 let uri_string = uri.to_string();
                 tokio::spawn(async move {
-                    if let Some(sources) = ast_data.get("sources") {
-                        let contracts = ast_data.get("contracts");
+                    if let Some(sources) = cached_build.ast.get("sources") {
+                        let contracts = cached_build.ast.get("contracts");
                         let cc = completion::build_completion_cache(sources, contracts);
                         completion_cache.write().await.insert(uri_string, Arc::new(cc));
                     }
@@ -154,6 +154,40 @@ impl ForgeLsp {
         self.client
             .publish_diagnostics(uri, all_diagnostics, Some(version))
             .await;
+    }
+
+    /// Get a CachedBuild from the cache, or fetch and build one on demand.
+    /// If `insert_on_miss` is true, the freshly-built entry is inserted into the cache
+    /// (used by references handler so cross-file lookups can find it later).
+    async fn get_or_fetch_build(
+        &self,
+        uri: &Url,
+        file_path: &std::path::Path,
+        insert_on_miss: bool,
+    ) -> Option<Arc<goto::CachedBuild>> {
+        {
+            let cache = self.ast_cache.read().await;
+            if let Some(cached) = cache.get(&uri.to_string()) {
+                return Some(cached.clone());
+            }
+        }
+        let path_str = file_path.to_str()?;
+        match self.compiler.ast(path_str).await {
+            Ok(data) => {
+                let build = Arc::new(goto::CachedBuild::new(data));
+                if insert_on_miss {
+                    let mut cache = self.ast_cache.write().await;
+                    cache.insert(uri.to_string(), build.clone());
+                }
+                Some(build)
+            }
+            Err(e) => {
+                self.client
+                    .log_message(MessageType::ERROR, format!("failed to get AST: {e}"))
+                    .await;
+                None
+            }
+        }
     }
 
     async fn apply_workspace_edit(&self, workspace_edit: &WorkspaceEdit) -> Result<(), String> {
@@ -454,15 +488,15 @@ impl LanguageServer for ForgeLsp {
             let completion_cache = self.completion_cache.clone();
             let uri_string = uri.to_string();
             tokio::spawn(async move {
-                let ast_data = {
+                let cached_build = {
                     let cache = ast_cache.read().await;
                     match cache.get(&uri_string) {
                         Some(v) => v.clone(),
                         None => return,
                     }
                 };
-                if let Some(sources) = ast_data.get("sources") {
-                    let contracts = ast_data.get("contracts");
+                if let Some(sources) = cached_build.ast.get("sources") {
+                    let contracts = cached_build.ast.get("contracts");
                     let cc = completion::build_completion_cache(sources, contracts);
                     completion_cache.write().await.insert(uri_string, Arc::new(cc));
                 }
@@ -505,34 +539,13 @@ impl LanguageServer for ForgeLsp {
             }
         };
 
-        let ast_data: Arc<serde_json::Value> = {
-            let cache = self.ast_cache.read().await;
-            if let Some(cached_ast) = cache.get(&uri.to_string()) {
-                cached_ast.clone()
-            } else {
-                drop(cache);
-                let path_str = match file_path.to_str() {
-                    Some(s) => s,
-                    None => {
-                        self.client
-                            .log_message(MessageType::ERROR, "Invalid file path")
-                            .await;
-                        return Ok(None);
-                    }
-                };
-                match self.compiler.ast(path_str).await {
-                    Ok(data) => Arc::new(data),
-                    Err(e) => {
-                        self.client
-                            .log_message(MessageType::ERROR, format!("failed to get ast: {e}"))
-                            .await;
-                        return Ok(None);
-                    }
-                }
-            }
+        let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
+        let cached_build = match cached_build {
+            Some(cb) => cb,
+            None => return Ok(None),
         };
 
-        if let Some(location) = goto::goto_declaration(&ast_data, &uri, position, &source_bytes) {
+        if let Some(location) = goto::goto_declaration(&cached_build.ast, &uri, position, &source_bytes) {
             self.client
                 .log_message(
                     MessageType::INFO,
@@ -582,34 +595,13 @@ impl LanguageServer for ForgeLsp {
             }
         };
 
-        let ast_data: Arc<serde_json::Value> = {
-            let cache = self.ast_cache.read().await;
-            if let Some(cached_ast) = cache.get(&uri.to_string()) {
-                cached_ast.clone()
-            } else {
-                drop(cache);
-                let path_str = match file_path.to_str() {
-                    Some(s) => s,
-                    None => {
-                        self.client
-                            .log_message(MessageType::ERROR, "invalid path")
-                            .await;
-                        return Ok(None);
-                    }
-                };
-                match self.compiler.ast(path_str).await {
-                    Ok(data) => Arc::new(data),
-                    Err(e) => {
-                        self.client
-                            .log_message(MessageType::ERROR, format!("failed to get ast: {e}"))
-                            .await;
-                        return Ok(None);
-                    }
-                }
-            }
+        let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
+        let cached_build = match cached_build {
+            Some(cb) => cb,
+            None => return Ok(None),
         };
 
-        if let Some(location) = goto::goto_declaration(&ast_data, &uri, position, &source_bytes) {
+        if let Some(location) = goto::goto_declaration(&cached_build.ast, &uri, position, &source_bytes) {
             self.client
                 .log_message(
                     MessageType::INFO,
@@ -656,34 +648,47 @@ impl LanguageServer for ForgeLsp {
                 return Ok(None);
             }
         };
-        let ast_data: Arc<serde_json::Value> = {
-            let cache = self.ast_cache.read().await;
-            if let Some(cached_ast) = cache.get(&uri.to_string()) {
-                cached_ast.clone()
-            } else {
-                drop(cache);
-                let path_str = match file_path.to_str() {
-                    Some(s) => s,
-                    None => {
-                        self.client
-                            .log_message(MessageType::ERROR, "Invalid file path")
-                            .await;
-                        return Ok(None);
-                    }
-                };
-                match self.compiler.ast(path_str).await {
-                    Ok(data) => Arc::new(data),
-                    Err(e) => {
-                        self.client
-                            .log_message(MessageType::ERROR, format!("Failed to get AST: {e}"))
-                            .await;
-                        return Ok(None);
-                    }
-                }
-            }
+        let cached_build = self.get_or_fetch_build(&uri, &file_path, true).await;
+        let cached_build = match cached_build {
+            Some(cb) => cb,
+            None => return Ok(None),
         };
 
-        let locations = references::goto_references(&ast_data, &uri, position, &source_bytes);
+        // Get references from the current file's AST
+        let mut locations =
+            references::goto_references(&cached_build.ast, &uri, position, &source_bytes);
+
+        // Cross-file: resolve target definition location, then scan other cached ASTs
+        if let Some((def_abs_path, def_byte_offset)) =
+            references::resolve_target_location(&cached_build, &uri, position, &source_bytes)
+        {
+            let cache = self.ast_cache.read().await;
+            for (cached_uri, other_build) in cache.iter() {
+                if *cached_uri == uri.to_string() {
+                    continue;
+                }
+                let other_locations = references::goto_references_for_target(
+                    other_build,
+                    &def_abs_path,
+                    def_byte_offset,
+                    None,
+                );
+                locations.extend(other_locations);
+            }
+        }
+
+        // Deduplicate across all caches
+        let mut seen = std::collections::HashSet::new();
+        locations.retain(|loc| {
+            seen.insert((
+                loc.uri.clone(),
+                loc.range.start.line,
+                loc.range.start.character,
+                loc.range.end.line,
+                loc.range.end.character,
+            ))
+        });
+
         if locations.is_empty() {
             self.client
                 .log_message(MessageType::INFO, "No references found")
@@ -806,33 +811,23 @@ impl LanguageServer for ForgeLsp {
             return Ok(None);
         }
 
-        let ast_data: Arc<serde_json::Value> = {
-            let cache = self.ast_cache.read().await;
-            if let Some(cached_ast) = cache.get(&uri.to_string()) {
-                cached_ast.clone()
-            } else {
-                drop(cache);
-                let path_str = match file_path.to_str() {
-                    Some(s) => s,
-                    None => {
-                        self.client
-                            .log_message(MessageType::ERROR, "invalid file path")
-                            .await;
-                        return Ok(None);
-                    }
-                };
-                match self.compiler.ast(path_str).await {
-                    Ok(data) => Arc::new(data),
-                    Err(e) => {
-                        self.client
-                            .log_message(MessageType::ERROR, format!("failed to get ast: {e}"))
-                            .await;
-                        return Ok(None);
-                    }
-                }
-            }
+        let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
+        let cached_build = match cached_build {
+            Some(cb) => cb,
+            None => return Ok(None),
         };
-        match rename::rename_symbol(&ast_data, &uri, position, &source_bytes, new_name) {
+        let other_builds: Vec<Arc<goto::CachedBuild>> = {
+            let cache = self.ast_cache.read().await;
+            cache
+                .iter()
+                .filter(|(key, _)| **key != uri.to_string())
+                .map(|(_, v)| v.clone())
+                .collect()
+        };
+        let other_refs: Vec<&goto::CachedBuild> =
+            other_builds.iter().map(|v| v.as_ref()).collect();
+
+        match rename::rename_symbol(&cached_build, &uri, position, &source_bytes, new_name, &other_refs) {
             Some(workspace_edit) => {
                 self.client
                     .log_message(
@@ -982,27 +977,12 @@ impl LanguageServer for ForgeLsp {
             }
         };
         // Use cached AST if available, otherwise fetch fresh
-        let ast_data: Arc<serde_json::Value> = {
-            let cache = self.ast_cache.read().await;
-            if let Some(cached_ast) = cache.get(&uri.to_string()) {
-                cached_ast.clone()
-            } else {
-                drop(cache);
-                match self.compiler.ast(path_str).await {
-                    Ok(data) => Arc::new(data),
-                    Err(e) => {
-                        self.client
-                            .log_message(
-                                MessageType::WARNING,
-                                format!("failed to get ast data: {e}"),
-                            )
-                            .await;
-                        return Ok(None);
-                    }
-                }
-            }
+        let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
+        let cached_build = match cached_build {
+            Some(cb) => cb,
+            None => return Ok(None),
         };
-        let symbols = symbols::extract_document_symbols(&ast_data, path_str);
+        let symbols = symbols::extract_document_symbols(&cached_build.ast, path_str);
         if symbols.is_empty() {
             self.client
                 .log_message(MessageType::INFO, "no document symbols found")
@@ -1047,37 +1027,13 @@ impl LanguageServer for ForgeLsp {
             }
         };
 
-        let ast_data: Arc<serde_json::Value> = {
-            let cache = self.ast_cache.read().await;
-            if let Some(cached_ast) = cache.get(&uri.to_string()) {
-                cached_ast.clone()
-            } else {
-                drop(cache);
-                let path_str = match file_path.to_str() {
-                    Some(s) => s,
-                    None => {
-                        self.client
-                            .log_message(MessageType::ERROR, "invalid file path")
-                            .await;
-                        return Ok(None);
-                    }
-                };
-                match self.compiler.ast(path_str).await {
-                    Ok(data) => Arc::new(data),
-                    Err(e) => {
-                        self.client
-                            .log_message(
-                                MessageType::ERROR,
-                                format!("failed to get ast: {e}"),
-                            )
-                            .await;
-                        return Ok(None);
-                    }
-                }
-            }
+        let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
+        let cached_build = match cached_build {
+            Some(cb) => cb,
+            None => return Ok(None),
         };
 
-        let result = hover::hover_info(&ast_data, &uri, position, &source_bytes);
+        let result = hover::hover_info(&cached_build.ast, &uri, position, &source_bytes);
 
         if result.is_some() {
             self.client

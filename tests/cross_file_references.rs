@@ -1,0 +1,295 @@
+use serde_json::Value;
+use solidity_language_server::goto::CachedBuild;
+use solidity_language_server::references;
+use std::collections::HashSet;
+use std::fs;
+
+/// Load pool-manager-ast.json as a CachedBuild.
+fn load_cached_build() -> CachedBuild {
+    let ast_data: Value =
+        serde_json::from_str(&fs::read_to_string("pool-manager-ast.json").unwrap()).unwrap();
+    CachedBuild::new(ast_data)
+}
+
+// =============================================================================
+// CachedBuild construction tests
+// =============================================================================
+
+#[test]
+fn test_cached_build_has_nodes() {
+    let build = load_cached_build();
+    assert!(
+        !build.nodes.is_empty(),
+        "CachedBuild should have nodes after construction"
+    );
+}
+
+#[test]
+fn test_cached_build_has_path_to_abs() {
+    let build = load_cached_build();
+    assert!(
+        !build.path_to_abs.is_empty(),
+        "CachedBuild should have path_to_abs mappings"
+    );
+    let has_pm = build
+        .path_to_abs
+        .values()
+        .any(|v| v.contains("PoolManager"));
+    assert!(has_pm, "path_to_abs should contain PoolManager.sol");
+}
+
+#[test]
+fn test_cached_build_has_id_to_path_map() {
+    let build = load_cached_build();
+    assert!(
+        !build.id_to_path_map.is_empty(),
+        "CachedBuild should have id_to_path_map"
+    );
+    assert_eq!(
+        build.id_to_path_map.get("23").map(|s| s.as_str()),
+        Some("src/libraries/Hooks.sol"),
+    );
+}
+
+#[test]
+fn test_cached_build_has_external_refs() {
+    let build = load_cached_build();
+    assert!(
+        !build.external_refs.is_empty(),
+        "CachedBuild should have external_refs for Yul identifiers"
+    );
+}
+
+#[test]
+fn test_cached_build_preserves_raw_ast() {
+    let build = load_cached_build();
+    assert!(build.ast.get("sources").is_some());
+    assert!(build.ast.get("build_infos").is_some());
+}
+
+// =============================================================================
+// byte_to_id tests — the core cross-file bridging mechanism
+// =============================================================================
+
+#[test]
+fn test_byte_to_id_finds_hooks_definition() {
+    let build = load_cached_build();
+
+    // library Hooks: id=4422, src="1039:15471:23" in src/libraries/Hooks.sol
+    let node_id = references::byte_to_id(&build.nodes, "src/libraries/Hooks.sol", 1039);
+    assert!(node_id.is_some(), "should find node at byte 1039");
+
+    let id = node_id.unwrap();
+    let node = build
+        .nodes
+        .get("src/libraries/Hooks.sol")
+        .unwrap()
+        .get(&id)
+        .unwrap();
+    assert!(
+        node.src.starts_with("1039:"),
+        "node src should start at 1039, got: {}",
+        node.src
+    );
+}
+
+#[test]
+fn test_byte_to_id_returns_none_for_unknown_path() {
+    let build = load_cached_build();
+    assert!(references::byte_to_id(&build.nodes, "nonexistent/File.sol", 0).is_none());
+}
+
+#[test]
+fn test_byte_to_id_returns_none_for_invalid_offset() {
+    let build = load_cached_build();
+    assert!(references::byte_to_id(&build.nodes, "src/libraries/Hooks.sol", 999999).is_none());
+}
+
+// =============================================================================
+// Cross-file reference resolution tests
+// =============================================================================
+
+#[test]
+fn test_resolve_hooks_reference_from_pool_manager_node() {
+    let build = load_cached_build();
+
+    // In PoolManager.sol, node id=553 is an Identifier "Hooks" at src="70:5:6"
+    // with referencedDeclaration=4422 (the library Hooks in Hooks.sol).
+    //
+    // The cross-file flow resolves this: cursor on node 553 → follow
+    // referencedDeclaration to 4422 → find 4422's src → extract (path, byte_offset).
+
+    let pm_nodes = build
+        .nodes
+        .get("src/PoolManager.sol")
+        .expect("PoolManager.sol should be in nodes");
+
+    // Verify node 553 exists and points to 4422
+    let ref_node = pm_nodes.get(&553).expect("node 553 should exist");
+    assert_eq!(ref_node.referenced_declaration, Some(4422));
+    assert_eq!(ref_node.src, "70:5:6");
+
+    // Resolve the definition: find node 4422 across all files
+    let mut def_location = None;
+    for (file_path, file_nodes) in &build.nodes {
+        if let Some(def_node) = file_nodes.get(&4422) {
+            let parts: Vec<&str> = def_node.src.split(':').collect();
+            if parts.len() == 3 {
+                let byte_offset: usize = parts[0].parse().unwrap();
+                def_location = Some((file_path.clone(), byte_offset));
+            }
+            break;
+        }
+    }
+
+    let (def_path, def_offset) = def_location.expect("should find definition node 4422");
+    assert_eq!(def_path, "src/libraries/Hooks.sol");
+    assert_eq!(def_offset, 1039);
+}
+
+#[test]
+fn test_cross_file_scan_finds_pool_manager_references_to_hooks() {
+    let build = load_cached_build();
+
+    // Given the stable identity (src/libraries/Hooks.sol, byte 1039),
+    // use byte_to_id to re-resolve to this build's node ID, then scan
+    // for all nodes with referenced_declaration pointing to it.
+
+    let target_id = references::byte_to_id(&build.nodes, "src/libraries/Hooks.sol", 1039)
+        .expect("byte_to_id should resolve Hooks definition");
+
+    // Follow referenced_declaration if needed (definition nodes won't have one)
+    let hooks_nodes = build.nodes.get("src/libraries/Hooks.sol").unwrap();
+    let node_info = hooks_nodes.get(&target_id).unwrap();
+    let final_target = node_info.referenced_declaration.unwrap_or(target_id);
+
+    // Scan all files for references
+    let mut refs_by_file: std::collections::HashMap<String, Vec<u64>> =
+        std::collections::HashMap::new();
+    for (file_path, file_nodes) in &build.nodes {
+        for (id, info) in file_nodes {
+            if info.referenced_declaration == Some(final_target) {
+                refs_by_file.entry(file_path.clone()).or_default().push(*id);
+            }
+        }
+    }
+
+    // PoolManager.sol should have at least 3 references (ids 553, 623, 806)
+    let pm_refs = refs_by_file
+        .get("src/PoolManager.sol")
+        .expect("PoolManager.sol should have references to Hooks");
+    assert!(
+        pm_refs.len() >= 3,
+        "expected >= 3 PoolManager refs, got {}: {:?}",
+        pm_refs.len(),
+        pm_refs
+    );
+
+    // Known node IDs from the AST
+    assert!(
+        pm_refs.contains(&553),
+        "should contain Identifier at byte 70"
+    );
+    assert!(
+        pm_refs.contains(&623),
+        "should contain IdentifierPath at byte 4953"
+    );
+    assert!(
+        pm_refs.contains(&806),
+        "should contain Identifier at byte 6804"
+    );
+}
+
+#[test]
+fn test_cross_file_scan_finds_references_across_multiple_files() {
+    let build = load_cached_build();
+
+    let target_id = references::byte_to_id(&build.nodes, "src/libraries/Hooks.sol", 1039)
+        .expect("byte_to_id should resolve Hooks definition");
+    let hooks_nodes = build.nodes.get("src/libraries/Hooks.sol").unwrap();
+    let node_info = hooks_nodes.get(&target_id).unwrap();
+    let final_target = node_info.referenced_declaration.unwrap_or(target_id);
+
+    // Collect all files that have references to Hooks
+    let mut ref_files = HashSet::new();
+    for (file_path, file_nodes) in &build.nodes {
+        for (_id, info) in file_nodes {
+            if info.referenced_declaration == Some(final_target) {
+                ref_files.insert(file_path.clone());
+            }
+        }
+    }
+
+    assert!(
+        ref_files.contains("src/PoolManager.sol"),
+        "PoolManager.sol should reference Hooks"
+    );
+    assert!(
+        ref_files.contains("src/libraries/Hooks.sol"),
+        "Hooks.sol should have self-references"
+    );
+}
+
+#[test]
+fn test_end_to_end_cross_file_flow() {
+    // Full flow using only AST data:
+    // 1. Start at a usage node in PoolManager.sol
+    // 2. Follow referencedDeclaration to find the definition
+    // 3. Extract the definition's stable identity (abs_path, byte_offset)
+    // 4. Re-resolve that identity via byte_to_id in the same (or another) build
+    // 5. Scan for all references to the re-resolved target
+
+    let build = load_cached_build();
+
+    // Step 1-2: Start at node 553 (Hooks usage in PoolManager.sol), follow to definition
+    let pm_nodes = build.nodes.get("src/PoolManager.sol").unwrap();
+    let usage_node = pm_nodes.get(&553).unwrap();
+    let def_id = usage_node
+        .referenced_declaration
+        .expect("usage should have referencedDeclaration");
+
+    // Step 3: Find definition node, extract stable identity
+    let mut def_abs_path = String::new();
+    let mut def_byte_offset = 0usize;
+    for (file_path, file_nodes) in &build.nodes {
+        if let Some(def_node) = file_nodes.get(&def_id) {
+            let parts: Vec<&str> = def_node.src.split(':').collect();
+            def_abs_path = file_path.clone();
+            def_byte_offset = parts[0].parse().unwrap();
+            break;
+        }
+    }
+    assert_eq!(def_abs_path, "src/libraries/Hooks.sol");
+    assert_eq!(def_byte_offset, 1039);
+
+    // Step 4: Re-resolve via byte_to_id (simulates cross-build bridging)
+    let re_resolved_id = references::byte_to_id(&build.nodes, &def_abs_path, def_byte_offset)
+        .expect("byte_to_id should re-resolve the definition");
+    let re_node = build
+        .nodes
+        .get(&def_abs_path)
+        .unwrap()
+        .get(&re_resolved_id)
+        .unwrap();
+    let final_target = re_node.referenced_declaration.unwrap_or(re_resolved_id);
+
+    // Step 5: Scan for references
+    let mut total_refs = 0;
+    let mut ref_files = HashSet::new();
+    for (file_path, file_nodes) in &build.nodes {
+        for (_id, info) in file_nodes {
+            if info.referenced_declaration == Some(final_target) {
+                total_refs += 1;
+                ref_files.insert(file_path.clone());
+            }
+        }
+    }
+
+    assert!(
+        total_refs >= 4,
+        "should find >= 4 total references, got {}",
+        total_refs
+    );
+    assert!(ref_files.contains("src/PoolManager.sol"));
+    assert!(ref_files.contains("src/libraries/Hooks.sol"));
+}
