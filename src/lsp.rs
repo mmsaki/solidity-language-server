@@ -308,12 +308,13 @@ impl LanguageServer for ForgeLsp {
         // The cache is updated when on_change succeeds with a fresh build.
         // Trade-off: Cached positions may be slightly off if file was edited.
 
-        let uri = params.text_document.uri.clone();
-
         // update text cache
         if let Some(change) = params.content_changes.into_iter().next() {
             let mut text_cache = self.text_cache.write().await;
-            text_cache.insert(uri.to_string(), (params.text_document.version, change.text));
+            text_cache.insert(
+                params.text_document.uri.to_string(),
+                (params.text_document.version, change.text),
+            );
         }
     }
 
@@ -354,7 +355,6 @@ impl LanguageServer for ForgeLsp {
             language_id: "".to_string(),
         })
         .await;
-        _ = self.client.semantic_tokens_refresh().await;
     }
 
     async fn will_save(&self, params: WillSaveTextDocumentParams) {
