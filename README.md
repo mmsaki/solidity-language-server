@@ -14,6 +14,7 @@ The fastest Solidity language server — go-to-definition, references, rename, c
 - **Rename** — project-wide symbol rename with prepare support
 - **Hover** — signatures, NatSpec docs, function/error/event selectors, `@inheritdoc` resolution
 - **Completions** — scope-aware with two modes (fast cache vs full recomputation)
+- **Document Links** — every reference is a clickable link (imports, type names, function calls, etc.)
 - **Document Symbols** / **Workspace Symbols** — outline and search
 - **Formatting** — via `forge fmt`
 - **Diagnostics** — from `forge build` or `solar`

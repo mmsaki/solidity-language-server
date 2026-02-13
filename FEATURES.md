@@ -37,7 +37,7 @@
 - [ ] `textDocument/documentHighlight` - Document highlighting
 - [ ] `textDocument/codeAction` - Code actions (quick fixes, refactoring)
 - [ ] `textDocument/codeLens` - Code lens
-- [ ] `textDocument/documentLink` - Document links
+- [x] `textDocument/documentLink` - Document links (clickable references and import paths)
 - [ ] `textDocument/documentColor` - Color information
 - [ ] `textDocument/colorPresentation` - Color presentation
 - [ ] `textDocument/rangeFormatting` - Range formatting
