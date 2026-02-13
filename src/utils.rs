@@ -13,8 +13,6 @@ pub enum PositionEncoding {
     /// Column = number of UTF-16 code units from the start of the line.
     /// This is the **mandatory default** per the LSP specification.
     Utf16,
-    /// Column = number of Unicode code points from the start of the line.
-    Utf32,
 }
 
 impl PositionEncoding {
@@ -23,15 +21,13 @@ impl PositionEncoding {
 
     /// Pick the best encoding from the set the client advertises.
     ///
-    /// Preference order: UTF-8 > UTF-32 > UTF-16 (the mandatory fallback).
+    /// Preference: UTF-8 if supported, otherwise UTF-16 (the mandatory fallback).
     pub fn negotiate(client_encodings: Option<&[PositionEncodingKind]>) -> Self {
         let Some(encodings) = client_encodings else {
             return Self::DEFAULT;
         };
         if encodings.contains(&PositionEncodingKind::UTF8) {
             PositionEncoding::Utf8
-        } else if encodings.contains(&PositionEncodingKind::UTF32) {
-            PositionEncoding::Utf32
         } else {
             PositionEncoding::Utf16
         }
@@ -42,7 +38,6 @@ impl PositionEncoding {
         match self {
             PositionEncoding::Utf8 => PositionEncodingKind::UTF8,
             PositionEncoding::Utf16 => PositionEncodingKind::UTF16,
-            PositionEncoding::Utf32 => PositionEncodingKind::UTF32,
         }
     }
 }
@@ -103,12 +98,6 @@ pub fn byte_offset_to_position(source: &str, byte_offset: usize) -> (u32, u32) {
                         col += ch.chars().next().map(|c| c.len_utf16() as u32).unwrap_or(1);
                         i += ch_len;
                     }
-                    PositionEncoding::Utf32 => {
-                        // One code point = one unit.
-                        let ch_len = utf8_char_len(bytes[i]);
-                        col += 1;
-                        i += ch_len;
-                    }
                 }
             }
         }
@@ -141,7 +130,6 @@ pub fn position_to_byte_offset(source: &str, line: u32, character: u32) -> usize
                 current_col += match enc {
                     PositionEncoding::Utf8 => ch.len_utf8() as u32,
                     PositionEncoding::Utf16 => ch.len_utf16() as u32,
-                    PositionEncoding::Utf32 => 1,
                 };
             }
         }
