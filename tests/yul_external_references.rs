@@ -252,13 +252,15 @@ fn test_goto_bytes_resolves_yul_identifier() {
 // goto_bytes: range length tests
 // =============================================================================
 
-/// Helper: set up goto_bytes inputs from the fixture.
-fn setup_goto() -> (
+struct SetupGotoResult(
     HashMap<String, HashMap<u64, goto::NodeInfo>>,
     HashMap<String, String>,
     HashMap<String, String>,
     goto::ExternalRefs,
-) {
+);
+
+/// Helper: set up goto_bytes inputs from the fixture.
+fn setup_goto() -> SetupGotoResult {
     let ast_data: Value =
         serde_json::from_str(&fs::read_to_string("pool-manager-ast.json").unwrap()).unwrap();
     let sources = ast_data.get("sources").unwrap();
@@ -274,12 +276,12 @@ fn setup_goto() -> (
         .map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
         .collect();
     let (nodes, path_to_abs, external_refs) = goto::cache_ids(sources);
-    (nodes, path_to_abs, id_to_path, external_refs)
+    SetupGotoResult(nodes, path_to_abs, id_to_path, external_refs)
 }
 
 #[test]
 fn test_goto_bytes_returns_name_length_for_hooks() {
-    let (nodes, path_to_abs, id_to_path, external_refs) = setup_goto();
+    let SetupGotoResult(nodes, path_to_abs, id_to_path, external_refs) = setup_goto();
 
     let pm_abs = path_to_abs
         .keys()
@@ -300,7 +302,7 @@ fn test_goto_bytes_returns_name_length_for_hooks() {
 
 #[test]
 fn test_goto_bytes_returns_name_length_for_pool() {
-    let (nodes, path_to_abs, id_to_path, external_refs) = setup_goto();
+    let SetupGotoResult(nodes, path_to_abs, id_to_path, external_refs) = setup_goto();
 
     let pm_abs = path_to_abs
         .keys()
@@ -321,7 +323,7 @@ fn test_goto_bytes_returns_name_length_for_pool() {
 
 #[test]
 fn test_goto_bytes_range_is_nonzero() {
-    let (nodes, path_to_abs, id_to_path, external_refs) = setup_goto();
+    let SetupGotoResult(nodes, path_to_abs, id_to_path, external_refs) = setup_goto();
 
     let pm_abs = path_to_abs
         .keys()
@@ -339,7 +341,7 @@ fn test_goto_bytes_range_is_nonzero() {
 
 #[test]
 fn test_goto_bytes_yul_ref_returns_nonzero_length() {
-    let (nodes, path_to_abs, id_to_path, external_refs) = setup_goto();
+    let SetupGotoResult(nodes, path_to_abs, id_to_path, external_refs) = setup_goto();
 
     let swap_math_abs = path_to_abs.keys().find(|k| k.contains("SwapMath")).unwrap();
     let uri = format!("file://{}", swap_math_abs);
