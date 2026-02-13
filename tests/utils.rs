@@ -1,4 +1,6 @@
-use solidity_language_server::utils::{byte_offset_to_position, position_to_byte_offset, is_valid_solidity_identifier};
+use solidity_language_server::utils::{
+    byte_offset_to_position, is_valid_solidity_identifier, position_to_byte_offset,
+};
 
 #[test]
 fn test_byte_offset_to_position_unix_newlines() {

@@ -30,11 +30,7 @@ fn git_commit() -> Option<String> {
         return None;
     }
     let s = String::from_utf8(output.stdout).ok()?.trim().to_string();
-    if s.is_empty() {
-        None
-    } else {
-        Some(s)
-    }
+    if s.is_empty() { None } else { Some(s) }
 }
 
 /// Read commit hash from .cargo_vcs_info.json (present in crates.io builds).

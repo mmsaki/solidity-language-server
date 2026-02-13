@@ -1,4 +1,4 @@
-use crate::goto::{bytes_to_pos, CachedBuild};
+use crate::goto::{CachedBuild, bytes_to_pos};
 use crate::references::id_to_location;
 use tower_lsp::lsp_types::{DocumentLink, Range, Url};
 

@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use tower_lsp::lsp_types::{Location, Position, Range, Url};
 
 use crate::goto::{
-    bytes_to_pos, cache_ids, pos_to_bytes, src_to_location, CachedBuild, ExternalRefs, NodeInfo,
+    CachedBuild, ExternalRefs, NodeInfo, bytes_to_pos, cache_ids, pos_to_bytes, src_to_location,
 };
 
 pub fn all_references(nodes: &HashMap<String, HashMap<u64, NodeInfo>>) -> HashMap<u64, Vec<u64>> {
@@ -44,9 +44,11 @@ pub fn byte_to_decl_via_external_refs(
             continue;
         }
         if let (Ok(start), Ok(length)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>())
-            && start <= byte_position && byte_position < start + length {
-                return Some(*decl_id);
-            }
+            && start <= byte_position
+            && byte_position < start + length
+        {
+            return Some(*decl_id);
+        }
     }
     None
 }
@@ -289,9 +291,10 @@ pub fn goto_references_with_index(
     // Also add Yul external reference use sites that point to our target declaration
     for (src_str, decl_id) in &external_refs {
         if *decl_id == target_node_id
-            && let Some(location) = src_to_location(src_str, &id_to_path_map) {
-                locations.push(location);
-            }
+            && let Some(location) = src_to_location(src_str, &id_to_path_map)
+        {
+            locations.push(location);
+        }
     }
 
     let mut unique_locations = Vec::new();
@@ -361,9 +364,10 @@ pub fn goto_references_for_target(
     // Yul external reference use sites
     for (src_str, decl_id) in &build.external_refs {
         if *decl_id == target_node_id
-            && let Some(location) = src_to_location(src_str, &build.id_to_path_map) {
-                locations.push(location);
-            }
+            && let Some(location) = src_to_location(src_str, &build.id_to_path_map)
+        {
+            locations.push(location);
+        }
     }
 
     locations

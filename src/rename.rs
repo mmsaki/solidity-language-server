@@ -137,8 +137,7 @@ pub fn rename_symbol(
     other_builds: &[&CachedBuild],
 ) -> Option<WorkspaceEdit> {
     let original_identifier = get_identifier_at_position(source_bytes, position)?;
-    let name_location_index =
-        get_name_location_index(&build.ast, file_uri, position, source_bytes);
+    let name_location_index = get_name_location_index(&build.ast, file_uri, position, source_bytes);
     let mut locations = references::goto_references_with_index(
         &build.ast,
         file_uri,
@@ -203,10 +202,14 @@ pub fn rename_symbol(
                 location.range.end.line,
                 location.range.end.character,
             );
-            changes.entry(location.uri).or_default().insert(key, text_edit);
+            changes
+                .entry(location.uri)
+                .or_default()
+                .insert(key, text_edit);
         }
     }
-    let changes_vec: HashMap<Url, Vec<TextEdit>> = changes.into_iter()
+    let changes_vec: HashMap<Url, Vec<TextEdit>> = changes
+        .into_iter()
         .map(|(uri, edits_map)| (uri, edits_map.into_values().collect()))
         .collect();
     Some(WorkspaceEdit {

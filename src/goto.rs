@@ -143,9 +143,7 @@ type Type = (
     ExternalRefs,
 );
 
-pub fn cache_ids(
-    sources: &Value,
-) -> Type {
+pub fn cache_ids(sources: &Value) -> Type {
     let mut nodes: HashMap<String, HashMap<u64, NodeInfo>> = HashMap::new();
     let mut path_to_abs: HashMap<String, String> = HashMap::new();
     let mut external_refs: ExternalRefs = HashMap::new();
@@ -268,22 +266,19 @@ pub fn cache_ids(
                         nodes.get_mut(&abs_path).unwrap().insert(id, node_info);
 
                         // Collect externalReferences from InlineAssembly nodes
-                        if tree.get("nodeType").and_then(|v| v.as_str())
-                            == Some("InlineAssembly")
+                        if tree.get("nodeType").and_then(|v| v.as_str()) == Some("InlineAssembly")
                             && let Some(ext_refs) =
                                 tree.get("externalReferences").and_then(|v| v.as_array())
-                            {
-                                for ext_ref in ext_refs {
-                                    if let Some(src_str) =
-                                        ext_ref.get("src").and_then(|v| v.as_str())
-                                        && let Some(decl_id) =
-                                            ext_ref.get("declaration").and_then(|v| v.as_u64())
-                                        {
-                                            external_refs
-                                                .insert(src_str.to_string(), decl_id);
-                                        }
+                        {
+                            for ext_ref in ext_refs {
+                                if let Some(src_str) = ext_ref.get("src").and_then(|v| v.as_str())
+                                    && let Some(decl_id) =
+                                        ext_ref.get("declaration").and_then(|v| v.as_u64())
+                                {
+                                    external_refs.insert(src_str.to_string(), decl_id);
                                 }
                             }
+                        }
                     }
 
                     for key in CHILD_KEYS {
@@ -333,10 +328,7 @@ pub fn bytes_to_pos(source_bytes: &[u8], byte_offset: usize) -> Option<Position>
 }
 
 /// Convert a `"offset:length:fileId"` src string to an LSP Location.
-pub fn src_to_location(
-    src: &str,
-    id_to_path: &HashMap<String, String>,
-) -> Option<Location> {
+pub fn src_to_location(src: &str, id_to_path: &HashMap<String, String>) -> Option<Location> {
     let parts: Vec<&str> = src.split(':').collect();
     if parts.len() != 3 {
         return None;
@@ -544,7 +536,7 @@ pub fn goto_declaration(
     ast_data: &Value,
     file_uri: &Url,
     position: Position,
-    source_bytes: &[u8]
+    source_bytes: &[u8],
 ) -> Option<Location> {
     let sources = ast_data.get("sources")?;
     let build_infos = ast_data.get("build_infos")?.as_array()?;
@@ -553,7 +545,7 @@ pub fn goto_declaration(
 
     let id_to_path_map: HashMap<String, String> = id_to_path
         .iter()
-        .map(|(k,v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
+        .map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
         .collect();
 
     let (nodes, path_to_abs, external_refs) = cache_ids(sources);
@@ -584,7 +576,7 @@ pub fn goto_declaration(
                 range: Range {
                     start: start_pos,
                     end: end_pos,
-                }
+                },
             });
         }
     };

@@ -41,7 +41,8 @@ impl LspArgs {
         let stdin = tokio::io::stdin();
         let stdout = tokio::io::stdout();
         let fast_completions = matches!(self.completion_mode, CompletionMode::Fast);
-        let (service, socket) = LspService::new(|client| ForgeLsp::new(client, self.use_solar, fast_completions));
+        let (service, socket) =
+            LspService::new(|client| ForgeLsp::new(client, self.use_solar, fast_completions));
         Server::new(stdin, stdout, socket).serve(service).await;
 
         info!("Solidity LSP Server stopped.");

@@ -88,9 +88,10 @@ pub fn extract_node_id_from_type(type_id: &str) -> Option<u64> {
                 i += 1;
             }
             if i > start
-                && let Ok(id) = type_id[start..i].parse::<u64>() {
-                    last_id = Some(id);
-                }
+                && let Ok(id) = type_id[start..i].parse::<u64>()
+            {
+                last_id = Some(id);
+            }
         } else {
             i += 1;
         }
@@ -148,31 +149,32 @@ fn build_function_signature(node: &Value) -> Option<String> {
         .and_then(|v| v.as_array());
 
     if let Some(returns) = returns
-        && !returns.is_empty() {
-            sig.push_str(" returns (");
-            for (i, ret) in returns.iter().enumerate() {
-                if i > 0 {
-                    sig.push_str(", ");
-                }
-                let type_str = ret
-                    .get("typeDescriptions")
-                    .and_then(|td| td.get("typeString"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("?");
-                let clean_type = type_str
-                    .strip_prefix("struct ")
-                    .or_else(|| type_str.strip_prefix("contract "))
-                    .or_else(|| type_str.strip_prefix("enum "))
-                    .unwrap_or(type_str);
-                let ret_name = ret.get("name").and_then(|v| v.as_str()).unwrap_or("");
-                sig.push_str(clean_type);
-                if !ret_name.is_empty() {
-                    sig.push(' ');
-                    sig.push_str(ret_name);
-                }
+        && !returns.is_empty()
+    {
+        sig.push_str(" returns (");
+        for (i, ret) in returns.iter().enumerate() {
+            if i > 0 {
+                sig.push_str(", ");
             }
-            sig.push(')');
+            let type_str = ret
+                .get("typeDescriptions")
+                .and_then(|td| td.get("typeString"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            let clean_type = type_str
+                .strip_prefix("struct ")
+                .or_else(|| type_str.strip_prefix("contract "))
+                .or_else(|| type_str.strip_prefix("enum "))
+                .unwrap_or(type_str);
+            let ret_name = ret.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            sig.push_str(clean_type);
+            if !ret_name.is_empty() {
+                sig.push(' ');
+                sig.push_str(ret_name);
+            }
         }
+        sig.push(')');
+    }
 
     Some(sig)
 }
@@ -315,10 +317,7 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
                 let mut stack: Vec<&Value> = vec![ast];
 
                 while let Some(tree) = stack.pop() {
-                    let node_type = tree
-                        .get("nodeType")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
+                    let node_type = tree.get("nodeType").and_then(|v| v.as_str()).unwrap_or("");
                     let name = tree.get("name").and_then(|v| v.as_str()).unwrap_or("");
                     let node_id = tree.get("id").and_then(|v| v.as_u64());
 
@@ -356,105 +355,90 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
 
                     // Collect struct members
                     if node_type == "StructDefinition"
-                        && let Some(id) = node_id {
-                            let mut members = Vec::new();
-                            if let Some(member_array) =
-                                tree.get("members").and_then(|v| v.as_array())
-                            {
-                                for member in member_array {
-                                    let member_name =
-                                        member.get("name").and_then(|v| v.as_str()).unwrap_or("");
-                                    if member_name.is_empty() {
-                                        continue;
-                                    }
-                                    let member_type = member
-                                        .get("typeDescriptions")
-                                        .and_then(|td| td.get("typeString"))
-                                        .and_then(|v| v.as_str())
-                                        .map(|s| s.to_string());
-
-                                    members.push(CompletionItem {
-                                        label: member_name.to_string(),
-                                        kind: Some(CompletionItemKind::FIELD),
-                                        detail: member_type,
-                                        ..Default::default()
-                                    });
+                        && let Some(id) = node_id
+                    {
+                        let mut members = Vec::new();
+                        if let Some(member_array) = tree.get("members").and_then(|v| v.as_array()) {
+                            for member in member_array {
+                                let member_name =
+                                    member.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                                if member_name.is_empty() {
+                                    continue;
                                 }
-                            }
-                            if !members.is_empty() {
-                                node_members.insert(id, members);
-                            }
+                                let member_type = member
+                                    .get("typeDescriptions")
+                                    .and_then(|td| td.get("typeString"))
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| s.to_string());
 
-                            // Map typeIdentifier → node id
-                            if let Some(tid) = tree
-                                .get("typeDescriptions")
-                                .and_then(|td| td.get("typeIdentifier"))
-                                .and_then(|v| v.as_str())
-                            {
-                                type_to_node.insert(tid.to_string(), id);
+                                members.push(CompletionItem {
+                                    label: member_name.to_string(),
+                                    kind: Some(CompletionItemKind::FIELD),
+                                    detail: member_type,
+                                    ..Default::default()
+                                });
                             }
                         }
+                        if !members.is_empty() {
+                            node_members.insert(id, members);
+                        }
+
+                        // Map typeIdentifier → node id
+                        if let Some(tid) = tree
+                            .get("typeDescriptions")
+                            .and_then(|td| td.get("typeIdentifier"))
+                            .and_then(|v| v.as_str())
+                        {
+                            type_to_node.insert(tid.to_string(), id);
+                        }
+                    }
 
                     // Collect contract/library members (functions, state variables, events, etc.)
                     if node_type == "ContractDefinition"
-                        && let Some(id) = node_id {
-                            let mut members = Vec::new();
-                            let mut fn_sigs: HashMap<String, Vec<String>> = HashMap::new();
-                            if let Some(nodes_array) =
-                                tree.get("nodes").and_then(|v| v.as_array())
-                            {
-                                for member in nodes_array {
-                                    let member_type = member
-                                        .get("nodeType")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("");
-                                    let member_name =
-                                        member.get("name").and_then(|v| v.as_str()).unwrap_or("");
-                                    if member_name.is_empty() {
-                                        continue;
-                                    }
+                        && let Some(id) = node_id
+                    {
+                        let mut members = Vec::new();
+                        let mut fn_sigs: HashMap<String, Vec<String>> = HashMap::new();
+                        if let Some(nodes_array) = tree.get("nodes").and_then(|v| v.as_array()) {
+                            for member in nodes_array {
+                                let member_type = member
+                                    .get("nodeType")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("");
+                                let member_name =
+                                    member.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                                if member_name.is_empty() {
+                                    continue;
+                                }
 
-                                    // Build function signature and collect return types for FunctionDefinitions
-                                    let (member_detail, label_details) =
-                                        if member_type == "FunctionDefinition" {
-                                            // Collect return type for chain resolution.
-                                            // Only single-return functions can be dot-chained
-                                            // (tuples require destructuring).
-                                            if let Some(ret_params) = member
-                                                .get("returnParameters")
-                                                .and_then(|rp| rp.get("parameters"))
-                                                .and_then(|v| v.as_array())
-                                                && ret_params.len() == 1
-                                                    && let Some(ret_tid) = ret_params[0]
-                                                        .get("typeDescriptions")
-                                                        .and_then(|td| td.get("typeIdentifier"))
-                                                        .and_then(|v| v.as_str())
-                                                    {
-                                                        function_return_types.insert(
-                                                            (id, member_name.to_string()),
-                                                            ret_tid.to_string(),
-                                                        );
-                                                    }
+                                // Build function signature and collect return types for FunctionDefinitions
+                                let (member_detail, label_details) =
+                                    if member_type == "FunctionDefinition" {
+                                        // Collect return type for chain resolution.
+                                        // Only single-return functions can be dot-chained
+                                        // (tuples require destructuring).
+                                        if let Some(ret_params) = member
+                                            .get("returnParameters")
+                                            .and_then(|rp| rp.get("parameters"))
+                                            .and_then(|v| v.as_array())
+                                            && ret_params.len() == 1
+                                            && let Some(ret_tid) = ret_params[0]
+                                                .get("typeDescriptions")
+                                                .and_then(|td| td.get("typeIdentifier"))
+                                                .and_then(|v| v.as_str())
+                                        {
+                                            function_return_types.insert(
+                                                (id, member_name.to_string()),
+                                                ret_tid.to_string(),
+                                            );
+                                        }
 
-                                            if let Some(sig) = build_function_signature(member) {
-                                                fn_sigs
-                                                    .entry(member_name.to_string())
-                                                    .or_default()
-                                                    .push(sig.clone());
-                                                (
-                                                    Some(sig),
-                                                    None,
-                                                )
-                                            } else {
-                                                (
-                                                    member
-                                                        .get("typeDescriptions")
-                                                        .and_then(|td| td.get("typeString"))
-                                                        .and_then(|v| v.as_str())
-                                                        .map(|s| s.to_string()),
-                                                    None,
-                                                )
-                                            }
+                                        if let Some(sig) = build_function_signature(member) {
+                                            fn_sigs
+                                                .entry(member_name.to_string())
+                                                .or_default()
+                                                .push(sig.clone());
+                                            (Some(sig), None)
                                         } else {
                                             (
                                                 member
@@ -464,95 +448,97 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
                                                     .map(|s| s.to_string()),
                                                 None,
                                             )
-                                        };
+                                        }
+                                    } else {
+                                        (
+                                            member
+                                                .get("typeDescriptions")
+                                                .and_then(|td| td.get("typeString"))
+                                                .and_then(|v| v.as_str())
+                                                .map(|s| s.to_string()),
+                                            None,
+                                        )
+                                    };
 
-                                    let kind = node_type_to_completion_kind(member_type);
-                                    members.push(CompletionItem {
-                                        label: member_name.to_string(),
-                                        kind: Some(kind),
-                                        detail: member_detail,
-                                        label_details,
-                                        ..Default::default()
-                                    });
-                                }
-                            }
-                            if !members.is_empty() {
-                                node_members.insert(id, members);
-                            }
-                            if !fn_sigs.is_empty() {
-                                function_signatures.insert(id, fn_sigs);
-                            }
-
-                            if let Some(tid) = tree
-                                .get("typeDescriptions")
-                                .and_then(|td| td.get("typeIdentifier"))
-                                .and_then(|v| v.as_str())
-                            {
-                                type_to_node.insert(tid.to_string(), id);
-                            }
-
-                            // Record for methodIdentifiers lookup after traversal
-                            if !name.is_empty() {
-                                contract_locations.push((
-                                    path.clone(),
-                                    name.to_string(),
-                                    id,
-                                ));
-                                name_to_node_id.insert(name.to_string(), id);
+                                let kind = node_type_to_completion_kind(member_type);
+                                members.push(CompletionItem {
+                                    label: member_name.to_string(),
+                                    kind: Some(kind),
+                                    detail: member_detail,
+                                    label_details,
+                                    ..Default::default()
+                                });
                             }
                         }
+                        if !members.is_empty() {
+                            node_members.insert(id, members);
+                        }
+                        if !fn_sigs.is_empty() {
+                            function_signatures.insert(id, fn_sigs);
+                        }
+
+                        if let Some(tid) = tree
+                            .get("typeDescriptions")
+                            .and_then(|td| td.get("typeIdentifier"))
+                            .and_then(|v| v.as_str())
+                        {
+                            type_to_node.insert(tid.to_string(), id);
+                        }
+
+                        // Record for methodIdentifiers lookup after traversal
+                        if !name.is_empty() {
+                            contract_locations.push((path.clone(), name.to_string(), id));
+                            name_to_node_id.insert(name.to_string(), id);
+                        }
+                    }
 
                     // Collect enum members
                     if node_type == "EnumDefinition"
-                        && let Some(id) = node_id {
-                            let mut members = Vec::new();
-                            if let Some(member_array) =
-                                tree.get("members").and_then(|v| v.as_array())
-                            {
-                                for member in member_array {
-                                    let member_name =
-                                        member.get("name").and_then(|v| v.as_str()).unwrap_or("");
-                                    if member_name.is_empty() {
-                                        continue;
-                                    }
-                                    members.push(CompletionItem {
-                                        label: member_name.to_string(),
-                                        kind: Some(CompletionItemKind::ENUM_MEMBER),
-                                        detail: None,
-                                        ..Default::default()
-                                    });
+                        && let Some(id) = node_id
+                    {
+                        let mut members = Vec::new();
+                        if let Some(member_array) = tree.get("members").and_then(|v| v.as_array()) {
+                            for member in member_array {
+                                let member_name =
+                                    member.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                                if member_name.is_empty() {
+                                    continue;
                                 }
-                            }
-                            if !members.is_empty() {
-                                node_members.insert(id, members);
-                            }
-
-                            if let Some(tid) = tree
-                                .get("typeDescriptions")
-                                .and_then(|td| td.get("typeIdentifier"))
-                                .and_then(|v| v.as_str())
-                            {
-                                type_to_node.insert(tid.to_string(), id);
+                                members.push(CompletionItem {
+                                    label: member_name.to_string(),
+                                    kind: Some(CompletionItemKind::ENUM_MEMBER),
+                                    detail: None,
+                                    ..Default::default()
+                                });
                             }
                         }
+                        if !members.is_empty() {
+                            node_members.insert(id, members);
+                        }
+
+                        if let Some(tid) = tree
+                            .get("typeDescriptions")
+                            .and_then(|td| td.get("typeIdentifier"))
+                            .and_then(|v| v.as_str())
+                        {
+                            type_to_node.insert(tid.to_string(), id);
+                        }
+                    }
 
                     // Collect UsingForDirective: using Library for Type
                     if node_type == "UsingForDirective" {
                         // Get target type (None = wildcard `for *`)
-                        let target_type = tree
-                            .get("typeName")
-                            .and_then(|tn| {
-                                tn.get("typeDescriptions")
-                                    .and_then(|td| td.get("typeIdentifier"))
-                                    .and_then(|v| v.as_str())
-                                    .map(|s| s.to_string())
-                            });
+                        let target_type = tree.get("typeName").and_then(|tn| {
+                            tn.get("typeDescriptions")
+                                .and_then(|td| td.get("typeIdentifier"))
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string())
+                        });
 
                         // Form 1: library name object with referencedDeclaration
                         if let Some(lib) = tree.get("libraryName") {
-                            if let Some(lib_id) = lib
-                                .get("referencedDeclaration")
-                                .and_then(|v| v.as_u64())
+                            if let Some(lib_id) =
+                                lib.get("referencedDeclaration").and_then(|v| v.as_u64())
                             {
                                 using_for_directives.push((lib_id, target_type));
                             }
@@ -569,10 +555,8 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
                                     continue;
                                 }
                                 if let Some(def) = entry.get("definition") {
-                                    let fn_name = def
-                                        .get("name")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("");
+                                    let fn_name =
+                                        def.get("name").and_then(|v| v.as_str()).unwrap_or("");
                                     if !fn_name.is_empty() {
                                         let items = if let Some(ref tid) = target_type {
                                             using_for.entry(tid.clone()).or_default()
@@ -621,36 +605,32 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
 
     // Build method_identifiers from .contracts section
     if let Some(contracts_val) = contracts
-        && let Some(contracts_obj) = contracts_val.as_object() {
-            for (path, contract_name, node_id) in &contract_locations {
-                // Get AST function signatures for this contract (if available)
-                let fn_sigs = function_signatures.get(node_id);
+        && let Some(contracts_obj) = contracts_val.as_object()
+    {
+        for (path, contract_name, node_id) in &contract_locations {
+            // Get AST function signatures for this contract (if available)
+            let fn_sigs = function_signatures.get(node_id);
 
-                if let Some(path_entry) = contracts_obj.get(path)
-                    && let Some(contract_entry) = path_entry.get(contract_name)
-                    && let Some(first) = contract_entry.get(0)
-                    && let Some(evm) = first
-                        .get("contract")
-                        .and_then(|c| c.get("evm"))
-                    && let Some(methods) = evm.get("methodIdentifiers")
-                    && let Some(methods_obj) = methods.as_object()
-                {
-                    let mut items: Vec<CompletionItem> = Vec::new();
-                    for (signature, selector) in methods_obj {
-                        // signature is e.g. "swap((address,address,uint24,int24,address),(bool,int256,uint160),bytes)"
-                        // selector is e.g. "f3cd914c"
-                        let fn_name = signature
-                            .split('(')
-                            .next()
-                            .unwrap_or(signature)
-                            .to_string();
-                        let selector_str = selector
-                            .as_str()
-                            .map(|s| format!("0x{}", s))
-                            .unwrap_or_default();
+            if let Some(path_entry) = contracts_obj.get(path)
+                && let Some(contract_entry) = path_entry.get(contract_name)
+                && let Some(first) = contract_entry.get(0)
+                && let Some(evm) = first.get("contract").and_then(|c| c.get("evm"))
+                && let Some(methods) = evm.get("methodIdentifiers")
+                && let Some(methods_obj) = methods.as_object()
+            {
+                let mut items: Vec<CompletionItem> = Vec::new();
+                for (signature, selector) in methods_obj {
+                    // signature is e.g. "swap((address,address,uint24,int24,address),(bool,int256,uint160),bytes)"
+                    // selector is e.g. "f3cd914c"
+                    let fn_name = signature.split('(').next().unwrap_or(signature).to_string();
+                    let selector_str = selector
+                        .as_str()
+                        .map(|s| format!("0x{}", s))
+                        .unwrap_or_default();
 
-                        // Look up the AST signature with parameter names
-                        let description = fn_sigs
+                    // Look up the AST signature with parameter names
+                    let description =
+                        fn_sigs
                             .and_then(|sigs| sigs.get(&fn_name))
                             .and_then(|sig_list| {
                                 if sig_list.len() == 1 {
@@ -658,31 +638,31 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
                                     Some(sig_list[0].clone())
                                 } else {
                                     // Multiple overloads — match by parameter count
-                                    let abi_param_count =
-                                        count_abi_params(signature);
-                                    sig_list.iter().find(|s| {
-                                        count_signature_params(s) == abi_param_count
-                                    }).cloned()
+                                    let abi_param_count = count_abi_params(signature);
+                                    sig_list
+                                        .iter()
+                                        .find(|s| count_signature_params(s) == abi_param_count)
+                                        .cloned()
                                 }
                             });
 
-                        items.push(CompletionItem {
-                            label: fn_name,
-                            kind: Some(CompletionItemKind::FUNCTION),
-                            detail: Some(signature.clone()),
-                            label_details: Some(tower_lsp::lsp_types::CompletionItemLabelDetails {
-                                detail: Some(selector_str),
-                                description,
-                            }),
-                            ..Default::default()
-                        });
-                    }
-                    if !items.is_empty() {
-                        method_identifiers.insert(*node_id, items);
-                    }
+                    items.push(CompletionItem {
+                        label: fn_name,
+                        kind: Some(CompletionItemKind::FUNCTION),
+                        detail: Some(signature.clone()),
+                        label_details: Some(tower_lsp::lsp_types::CompletionItemLabelDetails {
+                            detail: Some(selector_str),
+                            description,
+                        }),
+                        ..Default::default()
+                    });
+                }
+                if !items.is_empty() {
+                    method_identifiers.insert(*node_id, items);
                 }
             }
         }
+    }
 
     // Pre-build the general completions list (names + statics) once
     let mut general_completions = names.clone();
@@ -768,9 +748,21 @@ fn address_members() -> Vec<CompletionItem> {
         ("codehash", "bytes32", CompletionItemKind::PROPERTY),
         ("transfer(uint256)", "", CompletionItemKind::FUNCTION),
         ("send(uint256)", "bool", CompletionItemKind::FUNCTION),
-        ("call(bytes memory)", "(bool, bytes memory)", CompletionItemKind::FUNCTION),
-        ("delegatecall(bytes memory)", "(bool, bytes memory)", CompletionItemKind::FUNCTION),
-        ("staticcall(bytes memory)", "(bool, bytes memory)", CompletionItemKind::FUNCTION),
+        (
+            "call(bytes memory)",
+            "(bool, bytes memory)",
+            CompletionItemKind::FUNCTION,
+        ),
+        (
+            "delegatecall(bytes memory)",
+            "(bool, bytes memory)",
+            CompletionItemKind::FUNCTION,
+        ),
+        (
+            "staticcall(bytes memory)",
+            "(bool, bytes memory)",
+            CompletionItemKind::FUNCTION,
+        ),
     ]
     .iter()
     .map(|(label, detail, kind)| CompletionItem {
@@ -932,9 +924,10 @@ fn lookup_using_for(cache: &CompletionCache, type_id: &str) -> Vec<CompletionIte
     ];
     for variant in &variants {
         if variant.as_str() != type_id
-            && let Some(items) = cache.using_for.get(variant.as_str()) {
-                return items.clone();
-            }
+            && let Some(items) = cache.using_for.get(variant.as_str())
+        {
+            return items.clone();
+        }
     }
 
     vec![]
@@ -1073,9 +1066,10 @@ fn resolve_member_type(
             }
             // Also check: the identifier itself might be a mapping variable
             if let Some(tid) = cache.name_to_type.get(member_name)
-                && tid.starts_with("t_mapping") {
-                    return extract_mapping_value_type(tid);
-                }
+                && tid.starts_with("t_mapping")
+            {
+                return extract_mapping_value_type(tid);
+            }
             None
         }
         AccessKind::Plain => {
@@ -1136,9 +1130,10 @@ pub fn get_chain_completions(cache: &CompletionCache, chain: &[DotSegment]) -> V
                 // foo[key]. — look up foo's type and extract mapping value type
                 if let Some(tid) = cache.name_to_type.get(&seg.name)
                     && tid.starts_with("t_mapping")
-                        && let Some(val_type) = extract_mapping_value_type(tid) {
-                            return completions_for_type(cache, &val_type);
-                        }
+                    && let Some(val_type) = extract_mapping_value_type(tid)
+                {
+                    return completions_for_type(cache, &val_type);
+                }
                 return vec![];
             }
         }
@@ -1372,11 +1367,7 @@ const SOLIDITY_KEYWORDS: &[&str] = &[
 ];
 
 /// Ether denomination units — suffixes for literal numbers.
-const ETHER_UNITS: &[(&str, &str)] = &[
-    ("wei", "1"),
-    ("gwei", "1e9"),
-    ("ether", "1e18"),
-];
+const ETHER_UNITS: &[(&str, &str)] = &[("wei", "1"), ("gwei", "1e9"), ("ether", "1e18")];
 
 /// Time units — suffixes for literal numbers.
 const TIME_UNITS: &[(&str, &str)] = &[

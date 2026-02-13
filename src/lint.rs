@@ -107,5 +107,3 @@ pub struct ForgeLintChild {
     pub children: Vec<ForgeLintChild>,
     pub rendered: Option<String>,
 }
-
-

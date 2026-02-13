@@ -68,5 +68,3 @@ pub fn is_valid_solidity_identifier(name: &str) -> bool {
     }
     true
 }
-
-

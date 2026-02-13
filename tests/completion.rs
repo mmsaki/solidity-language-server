@@ -1,8 +1,8 @@
 use serde_json::Value;
 use solidity_language_server::completion::{
-    build_completion_cache, extract_identifier_before_dot, extract_mapping_value_type,
-    extract_node_id_from_type, get_dot_completions, get_general_completions, parse_dot_chain,
-    AccessKind, DotSegment,
+    AccessKind, DotSegment, build_completion_cache, extract_identifier_before_dot,
+    extract_mapping_value_type, extract_node_id_from_type, get_dot_completions,
+    get_general_completions, parse_dot_chain,
 };
 use std::fs;
 use tower_lsp::lsp_types::CompletionItemKind;
