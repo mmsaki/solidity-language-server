@@ -6,7 +6,7 @@ use crate::goto::{cache_ids, pos_to_bytes, CHILD_KEYS};
 use crate::references::{byte_to_decl_via_external_refs, byte_to_id};
 
 /// Find the raw AST node with the given id by walking all sources.
-pub fn find_node_by_id<'a>(sources: &'a Value, target_id: u64) -> Option<&'a Value> {
+pub fn find_node_by_id(sources: &Value, target_id: u64) -> Option<&Value> {
     let sources_obj = sources.as_object()?;
     for (_path, contents) in sources_obj {
         let contents_array = contents.as_array()?;
@@ -131,11 +131,10 @@ pub fn resolve_inheritdoc<'a>(
     // Search parent's children for matching selector
     let parent_nodes = parent_contract.get("nodes").and_then(|v| v.as_array())?;
     for child in parent_nodes {
-        if let Some((child_selector, _)) = extract_selector(child) {
-            if child_selector == impl_selector {
+        if let Some((child_selector, _)) = extract_selector(child)
+            && child_selector == impl_selector {
                 return extract_documentation(child);
             }
-        }
     }
 
     None
@@ -279,7 +278,7 @@ fn build_function_signature(node: &Value) -> Option<String> {
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
 
-            let mut sig = format!("{type_str}");
+            let mut sig = type_str.to_string();
             if !visibility.is_empty() {
                 sig.push_str(&format!(" {visibility}"));
             }
@@ -298,8 +297,8 @@ fn build_function_signature(node: &Value) -> Option<String> {
             let mut sig = format!("{contract_kind} {name}");
 
             // Add base contracts
-            if let Some(bases) = node.get("baseContracts").and_then(|v| v.as_array()) {
-                if !bases.is_empty() {
+            if let Some(bases) = node.get("baseContracts").and_then(|v| v.as_array())
+                && !bases.is_empty() {
                     let base_names: Vec<&str> = bases
                         .iter()
                         .filter_map(|b| {
@@ -312,7 +311,6 @@ fn build_function_signature(node: &Value) -> Option<String> {
                         sig.push_str(&format!(" is {}", base_names.join(", ")));
                     }
                 }
-            }
             Some(sig)
         }
         "StructDefinition" => {

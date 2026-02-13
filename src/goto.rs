@@ -137,13 +137,15 @@ impl CachedBuild {
     }
 }
 
-pub fn cache_ids(
-    sources: &Value,
-) -> (
+type Type = (
     HashMap<String, HashMap<u64, NodeInfo>>,
     HashMap<String, String>,
     ExternalRefs,
-) {
+);
+
+pub fn cache_ids(
+    sources: &Value,
+) -> Type {
     let mut nodes: HashMap<String, HashMap<u64, NodeInfo>> = HashMap::new();
     let mut path_to_abs: HashMap<String, String> = HashMap::new();
     let mut external_refs: ExternalRefs = HashMap::new();
@@ -268,24 +270,20 @@ pub fn cache_ids(
                         // Collect externalReferences from InlineAssembly nodes
                         if tree.get("nodeType").and_then(|v| v.as_str())
                             == Some("InlineAssembly")
-                        {
-                            if let Some(ext_refs) =
+                            && let Some(ext_refs) =
                                 tree.get("externalReferences").and_then(|v| v.as_array())
                             {
                                 for ext_ref in ext_refs {
                                     if let Some(src_str) =
                                         ext_ref.get("src").and_then(|v| v.as_str())
-                                    {
-                                        if let Some(decl_id) =
+                                        && let Some(decl_id) =
                                             ext_ref.get("declaration").and_then(|v| v.as_u64())
                                         {
                                             external_refs
                                                 .insert(src_str.to_string(), decl_id);
                                         }
-                                    }
                                 }
                             }
-                        }
                     }
 
                     for key in CHILD_KEYS {

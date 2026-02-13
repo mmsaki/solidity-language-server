@@ -87,11 +87,10 @@ pub fn extract_node_id_from_type(type_id: &str) -> Option<u64> {
             while i < bytes.len() && bytes[i].is_ascii_digit() {
                 i += 1;
             }
-            if i > start {
-                if let Ok(id) = type_id[start..i].parse::<u64>() {
+            if i > start
+                && let Ok(id) = type_id[start..i].parse::<u64>() {
                     last_id = Some(id);
                 }
-            }
         } else {
             i += 1;
         }
@@ -148,8 +147,8 @@ fn build_function_signature(node: &Value) -> Option<String> {
         .and_then(|p| p.get("parameters"))
         .and_then(|v| v.as_array());
 
-    if let Some(returns) = returns {
-        if !returns.is_empty() {
+    if let Some(returns) = returns
+        && !returns.is_empty() {
             sig.push_str(" returns (");
             for (i, ret) in returns.iter().enumerate() {
                 if i > 0 {
@@ -174,7 +173,6 @@ fn build_function_signature(node: &Value) -> Option<String> {
             }
             sig.push(')');
         }
-    }
 
     Some(sig)
 }
@@ -357,8 +355,8 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
                     }
 
                     // Collect struct members
-                    if node_type == "StructDefinition" {
-                        if let Some(id) = node_id {
+                    if node_type == "StructDefinition"
+                        && let Some(id) = node_id {
                             let mut members = Vec::new();
                             if let Some(member_array) =
                                 tree.get("members").and_then(|v| v.as_array())
@@ -396,11 +394,10 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
                                 type_to_node.insert(tid.to_string(), id);
                             }
                         }
-                    }
 
                     // Collect contract/library members (functions, state variables, events, etc.)
-                    if node_type == "ContractDefinition" {
-                        if let Some(id) = node_id {
+                    if node_type == "ContractDefinition"
+                        && let Some(id) = node_id {
                             let mut members = Vec::new();
                             let mut fn_sigs: HashMap<String, Vec<String>> = HashMap::new();
                             if let Some(nodes_array) =
@@ -427,9 +424,8 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
                                                 .get("returnParameters")
                                                 .and_then(|rp| rp.get("parameters"))
                                                 .and_then(|v| v.as_array())
-                                            {
-                                                if ret_params.len() == 1 {
-                                                    if let Some(ret_tid) = ret_params[0]
+                                                && ret_params.len() == 1
+                                                    && let Some(ret_tid) = ret_params[0]
                                                         .get("typeDescriptions")
                                                         .and_then(|td| td.get("typeIdentifier"))
                                                         .and_then(|v| v.as_str())
@@ -439,8 +435,6 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
                                                             ret_tid.to_string(),
                                                         );
                                                     }
-                                                }
-                                            }
 
                                             if let Some(sig) = build_function_signature(member) {
                                                 fn_sigs
@@ -507,11 +501,10 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
                                 name_to_node_id.insert(name.to_string(), id);
                             }
                         }
-                    }
 
                     // Collect enum members
-                    if node_type == "EnumDefinition" {
-                        if let Some(id) = node_id {
+                    if node_type == "EnumDefinition"
+                        && let Some(id) = node_id {
                             let mut members = Vec::new();
                             if let Some(member_array) =
                                 tree.get("members").and_then(|v| v.as_array())
@@ -542,7 +535,6 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
                                 type_to_node.insert(tid.to_string(), id);
                             }
                         }
-                    }
 
                     // Collect UsingForDirective: using Library for Type
                     if node_type == "UsingForDirective" {
@@ -628,8 +620,8 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
     }
 
     // Build method_identifiers from .contracts section
-    if let Some(contracts_val) = contracts {
-        if let Some(contracts_obj) = contracts_val.as_object() {
+    if let Some(contracts_val) = contracts
+        && let Some(contracts_obj) = contracts_val.as_object() {
             for (path, contract_name, node_id) in &contract_locations {
                 // Get AST function signatures for this contract (if available)
                 let fn_sigs = function_signatures.get(node_id);
@@ -691,7 +683,6 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
                 }
             }
         }
-    }
 
     // Pre-build the general completions list (names + statics) once
     let mut general_completions = names.clone();
@@ -906,12 +897,12 @@ pub fn extract_identifier_before_dot(line: &str, character: u32) -> Option<Strin
     segments.last().map(|s| s.name.clone())
 }
 
-/// Strip all storage/memory location suffixes from a typeIdentifier to get the base type.
-/// Solidity AST uses different suffixes in different contexts:
-///   - `t_struct$_State_$4809_storage_ptr` (UsingForDirective typeName)
-///   - `t_struct$_State_$4809_storage` (mapping value type after extraction)
-///   - `t_struct$_PoolKey_$8887_memory_ptr` (function parameter)
-/// All refer to the same logical type. This strips `_ptr` and `_storage`/`_memory`/`_calldata`.
+#[doc = r"Strip all storage/memory location suffixes from a typeIdentifier to get the base type.
+Solidity AST uses different suffixes in different contexts:
+  - `t_struct$_State_$4809_storage_ptr` (UsingForDirective typeName)
+  - `t_struct$_State_$4809_storage` (mapping value type after extraction)
+  - `t_struct$_PoolKey_$8887_memory_ptr` (function parameter)
+All refer to the same logical type. This strips `_ptr` and `_storage`/`_memory`/`_calldata`."]
 fn strip_type_suffix(type_id: &str) -> &str {
     let s = type_id.strip_suffix("_ptr").unwrap_or(type_id);
     s.strip_suffix("_storage")
@@ -940,11 +931,10 @@ fn lookup_using_for(cache: &CompletionCache, type_id: &str) -> Vec<CompletionIte
         format!("{}_calldata", base),
     ];
     for variant in &variants {
-        if variant.as_str() != type_id {
-            if let Some(items) = cache.using_for.get(variant.as_str()) {
+        if variant.as_str() != type_id
+            && let Some(items) = cache.using_for.get(variant.as_str()) {
                 return items.clone();
             }
-        }
     }
 
     vec![]
@@ -1082,11 +1072,10 @@ fn resolve_member_type(
                 }
             }
             // Also check: the identifier itself might be a mapping variable
-            if let Some(tid) = cache.name_to_type.get(member_name) {
-                if tid.starts_with("t_mapping") {
+            if let Some(tid) = cache.name_to_type.get(member_name)
+                && tid.starts_with("t_mapping") {
                     return extract_mapping_value_type(tid);
                 }
-            }
             None
         }
         AccessKind::Plain => {
@@ -1145,13 +1134,11 @@ pub fn get_chain_completions(cache: &CompletionCache, chain: &[DotSegment]) -> V
             }
             AccessKind::Index => {
                 // foo[key]. — look up foo's type and extract mapping value type
-                if let Some(tid) = cache.name_to_type.get(&seg.name) {
-                    if tid.starts_with("t_mapping") {
-                        if let Some(val_type) = extract_mapping_value_type(tid) {
+                if let Some(tid) = cache.name_to_type.get(&seg.name)
+                    && tid.starts_with("t_mapping")
+                        && let Some(val_type) = extract_mapping_value_type(tid) {
                             return completions_for_type(cache, &val_type);
                         }
-                    }
-                }
                 return vec![];
             }
         }

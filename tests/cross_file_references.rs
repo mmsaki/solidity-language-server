@@ -213,7 +213,8 @@ fn test_cross_file_scan_finds_references_across_multiple_files() {
     // Collect all files that have references to Hooks
     let mut ref_files = HashSet::new();
     for (file_path, file_nodes) in &build.nodes {
-        for (_id, info) in file_nodes {
+        let tmp = file_nodes.iter();
+        for (_id, info) in tmp {
             if info.referenced_declaration == Some(final_target) {
                 ref_files.insert(file_path.clone());
             }
@@ -277,7 +278,8 @@ fn test_end_to_end_cross_file_flow() {
     let mut total_refs = 0;
     let mut ref_files = HashSet::new();
     for (file_path, file_nodes) in &build.nodes {
-        for (_id, info) in file_nodes {
+        let tmp = file_nodes.iter();
+        for (_id, info) in tmp {
             if info.referenced_declaration == Some(final_target) {
                 total_refs += 1;
                 ref_files.insert(file_path.clone());

@@ -43,11 +43,10 @@ pub fn byte_to_decl_via_external_refs(
         if parts[2] != *current_file_id {
             continue;
         }
-        if let (Ok(start), Ok(length)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>()) {
-            if start <= byte_position && byte_position < start + length {
+        if let (Ok(start), Ok(length)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>())
+            && start <= byte_position && byte_position < start + length {
                 return Some(*decl_id);
             }
-        }
     }
     None
 }
@@ -289,11 +288,10 @@ pub fn goto_references_with_index(
 
     // Also add Yul external reference use sites that point to our target declaration
     for (src_str, decl_id) in &external_refs {
-        if *decl_id == target_node_id {
-            if let Some(location) = src_to_location(src_str, &id_to_path_map) {
+        if *decl_id == target_node_id
+            && let Some(location) = src_to_location(src_str, &id_to_path_map) {
                 locations.push(location);
             }
-        }
     }
 
     let mut unique_locations = Vec::new();
@@ -362,11 +360,10 @@ pub fn goto_references_for_target(
 
     // Yul external reference use sites
     for (src_str, decl_id) in &build.external_refs {
-        if *decl_id == target_node_id {
-            if let Some(location) = src_to_location(src_str, &build.id_to_path_map) {
+        if *decl_id == target_node_id
+            && let Some(location) = src_to_location(src_str, &build.id_to_path_map) {
                 locations.push(location);
             }
-        }
     }
 
     locations

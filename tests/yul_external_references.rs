@@ -3,12 +3,14 @@ use solidity_language_server::goto;
 use std::collections::HashMap;
 use std::fs;
 
-/// Load pool-manager-ast.json and run cache_ids.
-fn load_ast() -> (
+type Type = (
     HashMap<String, HashMap<u64, goto::NodeInfo>>,
     HashMap<String, String>,
     goto::ExternalRefs,
-) {
+);
+
+/// Load pool-manager-ast.json and run cache_ids.
+fn load_ast() -> Type {
     let ast_data: Value =
         serde_json::from_str(&fs::read_to_string("pool-manager-ast.json").unwrap()).unwrap();
     let sources = ast_data.get("sources").unwrap();
