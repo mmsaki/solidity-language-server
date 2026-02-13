@@ -373,7 +373,7 @@ pub fn goto_bytes(
     external_refs: &ExternalRefs,
     uri: &str,
     position: usize,
-) -> Option<(String, usize)> {
+) -> Option<(String, usize, usize)> {
     let path = match uri.starts_with("file://") {
         true => &uri[7..],
         false => uri,
@@ -426,24 +426,26 @@ pub fn goto_bytes(
                 }
             }
             let node = target_node?;
-            let (location_str, file_id) = if let Some(name_location) = &node.name_location {
-                let parts: Vec<&str> = name_location.split(':').collect();
-                if parts.len() == 3 {
-                    (parts[0], parts[2])
+            let (location_str, length_str, file_id) =
+                if let Some(name_location) = &node.name_location {
+                    let parts: Vec<&str> = name_location.split(':').collect();
+                    if parts.len() == 3 {
+                        (parts[0], parts[1], parts[2])
+                    } else {
+                        return None;
+                    }
                 } else {
-                    return None;
-                }
-            } else {
-                let parts: Vec<&str> = node.src.split(':').collect();
-                if parts.len() == 3 {
-                    (parts[0], parts[2])
-                } else {
-                    return None;
-                }
-            };
+                    let parts: Vec<&str> = node.src.split(':').collect();
+                    if parts.len() == 3 {
+                        (parts[0], parts[1], parts[2])
+                    } else {
+                        return None;
+                    }
+                };
             let location: usize = location_str.parse().ok()?;
+            let len: usize = length_str.parse().ok()?;
             let file_path = id_to_path.get(file_id)?.clone();
-            return Some((file_path, location));
+            return Some((file_path, location, len));
         }
     }
 
@@ -491,7 +493,7 @@ pub fn goto_bytes(
                     && position < end_b
                     && let Some(import_path) = &content.absolute_path
                 {
-                    return Some((import_path.clone(), 0));
+                    return Some((import_path.clone(), 0, 0));
                 }
             }
         }
@@ -515,26 +517,27 @@ pub fn goto_bytes(
     let node = target_node?;
 
     // Get location from nameLocation or src
-    let (location_str, file_id) = if let Some(name_location) = &node.name_location {
+    let (location_str, length_str, file_id) = if let Some(name_location) = &node.name_location {
         let parts: Vec<&str> = name_location.split(':').collect();
         if parts.len() == 3 {
-            (parts[0], parts[2])
+            (parts[0], parts[1], parts[2])
         } else {
             return None;
         }
     } else {
         let parts: Vec<&str> = node.src.split(':').collect();
         if parts.len() == 3 {
-            (parts[0], parts[2])
+            (parts[0], parts[1], parts[2])
         } else {
             return None;
         }
     };
 
     let location: usize = location_str.parse().ok()?;
+    let len: usize = length_str.parse().ok()?;
     let file_path = id_to_path.get(file_id)?.clone();
 
-    Some((file_path, location))
+    Some((file_path, location, len))
 }
 
 pub fn goto_declaration(
@@ -556,7 +559,7 @@ pub fn goto_declaration(
     let (nodes, path_to_abs, external_refs) = cache_ids(sources);
     let byte_position = pos_to_bytes(source_bytes, position);
 
-    if let Some((file_path, location_bytes)) = goto_bytes(
+    if let Some((file_path, location_bytes, length)) = goto_bytes(
         &nodes,
         &path_to_abs,
         &id_to_path_map,
@@ -572,21 +575,19 @@ pub fn goto_declaration(
         };
 
         if let Ok(target_source_bytes) = std::fs::read(&absolute_path)
-            && let Some(target_position) = bytes_to_pos(&target_source_bytes, location_bytes)
+            && let Some(start_pos) = bytes_to_pos(&target_source_bytes, location_bytes)
+            && let Some(end_pos) = bytes_to_pos(&target_source_bytes, location_bytes + length)
             && let Ok(target_uri) = Url::from_file_path(&absolute_path)
         {
             return Some(Location {
                 uri: target_uri,
                 range: Range {
-                    start: target_position,
-                    end: target_position,
+                    start: start_pos,
+                    end: end_pos,
                 }
             });
         }
-
     };
 
     None
-
-
 }
