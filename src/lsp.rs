@@ -52,7 +52,7 @@ impl ForgeLsp {
             Ok(path) => path,
             Err(_) => {
                 self.client
-                    .log_message(MessageType::ERROR, "Invalied file URI")
+                    .log_message(MessageType::ERROR, "Invalid file URI")
                     .await;
                 return;
             }
