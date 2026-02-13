@@ -166,8 +166,9 @@ impl ForgeLsp {
             }
         }
 
+        // publish diags with no version, so we are sure they get displayed
         self.client
-            .publish_diagnostics(uri, all_diagnostics, Some(version))
+            .publish_diagnostics(uri, all_diagnostics, None)
             .await;
     }
 
