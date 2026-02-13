@@ -223,7 +223,7 @@ fn test_goto_bytes_resolves_yul_identifier() {
         "goto_bytes should resolve Yul identifier at byte 1802"
     );
 
-    let (target_path, target_offset) = result.unwrap();
+    let (target_path, target_offset, _target_length) = result.unwrap();
     // Target should be in SwapMath.sol (same file for this case)
     assert!(
         target_path.contains("SwapMath"),
@@ -246,4 +246,114 @@ fn test_goto_bytes_resolves_yul_identifier() {
             break;
         }
     }
+}
+
+// =============================================================================
+// goto_bytes: range length tests
+// =============================================================================
+
+/// Helper: set up goto_bytes inputs from the fixture.
+fn setup_goto() -> (
+    HashMap<String, HashMap<u64, goto::NodeInfo>>,
+    HashMap<String, String>,
+    HashMap<String, String>,
+    goto::ExternalRefs,
+) {
+    let ast_data: Value =
+        serde_json::from_str(&fs::read_to_string("pool-manager-ast.json").unwrap()).unwrap();
+    let sources = ast_data.get("sources").unwrap();
+    let build_infos = ast_data.get("build_infos").unwrap().as_array().unwrap();
+    let id_to_path: HashMap<String, String> = build_infos
+        .first()
+        .unwrap()
+        .get("source_id_to_path")
+        .unwrap()
+        .as_object()
+        .unwrap()
+        .iter()
+        .map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
+        .collect();
+    let (nodes, path_to_abs, external_refs) = goto::cache_ids(sources);
+    (nodes, path_to_abs, id_to_path, external_refs)
+}
+
+#[test]
+fn test_goto_bytes_returns_name_length_for_hooks() {
+    let (nodes, path_to_abs, id_to_path, external_refs) = setup_goto();
+
+    let pm_abs = path_to_abs
+        .keys()
+        .find(|k| k.ends_with("src/PoolManager.sol"))
+        .unwrap();
+    let uri = format!("file://{}", pm_abs);
+
+    // "Hooks" identifier at byte 70 in PoolManager.sol (length 5)
+    let result = goto::goto_bytes(&nodes, &path_to_abs, &id_to_path, &external_refs, &uri, 70);
+    let (path, _offset, length) = result.expect("should resolve Hooks reference");
+
+    assert!(
+        path.contains("Hooks"),
+        "should resolve to Hooks.sol, got: {path}"
+    );
+    assert_eq!(length, 5, "Hooks nameLocation length should be 5");
+}
+
+#[test]
+fn test_goto_bytes_returns_name_length_for_pool() {
+    let (nodes, path_to_abs, id_to_path, external_refs) = setup_goto();
+
+    let pm_abs = path_to_abs
+        .keys()
+        .find(|k| k.ends_with("src/PoolManager.sol"))
+        .unwrap();
+    let uri = format!("file://{}", pm_abs);
+
+    // "Pool" identifier at byte 115 in PoolManager.sol (length 4)
+    let result = goto::goto_bytes(&nodes, &path_to_abs, &id_to_path, &external_refs, &uri, 115);
+    let (path, _offset, length) = result.expect("should resolve Pool reference");
+
+    assert!(
+        path.contains("Pool"),
+        "should resolve to Pool.sol, got: {path}"
+    );
+    assert_eq!(length, 4, "Pool nameLocation length should be 4");
+}
+
+#[test]
+fn test_goto_bytes_range_is_nonzero() {
+    let (nodes, path_to_abs, id_to_path, external_refs) = setup_goto();
+
+    let pm_abs = path_to_abs
+        .keys()
+        .find(|k| k.ends_with("src/PoolManager.sol"))
+        .unwrap();
+    let uri = format!("file://{}", pm_abs);
+
+    // "SafeCast" identifier at byte 158 in PoolManager.sol (length 8)
+    let result = goto::goto_bytes(&nodes, &path_to_abs, &id_to_path, &external_refs, &uri, 158);
+    let (_path, _offset, length) = result.expect("should resolve SafeCast reference");
+
+    assert!(length > 0, "goto range length should never be zero");
+    assert_eq!(length, 8, "SafeCast nameLocation length should be 8");
+}
+
+#[test]
+fn test_goto_bytes_yul_ref_returns_nonzero_length() {
+    let (nodes, path_to_abs, id_to_path, external_refs) = setup_goto();
+
+    let swap_math_abs = path_to_abs.keys().find(|k| k.contains("SwapMath")).unwrap();
+    let uri = format!("file://{}", swap_math_abs);
+
+    // sqrtPriceNextX96 Yul reference at byte 1802
+    let result = goto::goto_bytes(
+        &nodes,
+        &path_to_abs,
+        &id_to_path,
+        &external_refs,
+        &uri,
+        1802,
+    );
+    let (_path, _offset, length) = result.expect("should resolve Yul reference");
+
+    assert!(length > 0, "Yul goto range length should never be zero");
 }
