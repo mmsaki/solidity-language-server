@@ -35,7 +35,8 @@ pub fn document_links(
         None => return links,
     };
 
-    for (_id, node_info) in file_nodes {
+    let tmp = file_nodes.iter();
+    for (_id, node_info) in tmp {
         // ImportDirective: link the import path to the imported file
         if node_info.node_type.as_deref() == Some("ImportDirective") {
             if let Some(link) = import_link(node_info, source_bytes) {
