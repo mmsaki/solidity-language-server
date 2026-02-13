@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.1.12
+
+### Features
+
+- Cross-file "Find All References" — scans all cached AST builds to find usages across files that don't share a build scope
+- Cross-file "Rename" — renames symbols across all cached builds, not just the current file's dependency tree
+- `CachedBuild` struct — pre-computes `cache_ids()` once per cache insert instead of N+1 times per request
+
+### Performance
+
+- `cache_ids()` no longer called at request time — all node indexing happens on file save
+- `get_or_fetch_build()` deduplicates cache-miss logic across goto, references, rename, hover, and document symbol handlers
+
+### Tests
+
+- 12 new cross-file reference tests (CI-safe, hardcoded AST values from fixture)
+- 153 total tests, 0 warnings
+
 ## v0.1.11
 
 ### Features
