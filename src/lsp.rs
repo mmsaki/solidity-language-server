@@ -16,7 +16,10 @@ pub struct ForgeLsp {
     client: Client,
     compiler: Arc<dyn Runner>,
     ast_cache: Arc<RwLock<HashMap<String, Arc<goto::CachedBuild>>>>,
-    text_cache: Arc<RwLock<HashMap<String, String>>>,
+    /// Text cache for opened documents
+    ///
+    /// The key is the file's URI converted to string, and the value is a tuple of (version, content).
+    text_cache: Arc<RwLock<HashMap<String, (i32, String)>>>,
     completion_cache: Arc<RwLock<HashMap<String, Arc<completion::CompletionCache>>>>,
     fast_completions: bool,
 }
@@ -49,7 +52,7 @@ impl ForgeLsp {
             Ok(path) => path,
             Err(_) => {
                 self.client
-                    .log_message(MessageType::ERROR, "Invalied file URI")
+                    .log_message(MessageType::ERROR, "Invalid file URI")
                     .await;
                 return;
             }
@@ -73,7 +76,7 @@ impl ForgeLsp {
 
         // Only replace cache with new AST if build succeeded (no build errors)
         let build_succeeded = matches!(&build_result, Ok(builds) if builds.is_empty());
-        
+
         if build_succeeded {
             if let Ok(ast_data) = ast_result {
                 let cached_build = Arc::new(goto::CachedBuild::new(ast_data));
@@ -88,7 +91,10 @@ impl ForgeLsp {
                     if let Some(sources) = cached_build.ast.get("sources") {
                         let contracts = cached_build.ast.get("contracts");
                         let cc = completion::build_completion_cache(sources, contracts);
-                        completion_cache.write().await.insert(uri_string, Arc::new(cc));
+                        completion_cache
+                            .write()
+                            .await
+                            .insert(uri_string, Arc::new(cc));
                     }
                 });
                 self.client
@@ -96,19 +102,27 @@ impl ForgeLsp {
                     .await;
             } else if let Err(e) = ast_result {
                 self.client
-                    .log_message(MessageType::INFO, format!("Build succeeded but failed to get AST: {e}"))
+                    .log_message(
+                        MessageType::INFO,
+                        format!("Build succeeded but failed to get AST: {e}"),
+                    )
                     .await;
             }
         } else {
             // Build has errors - keep the existing cache (don't invalidate)
             self.client
-                .log_message(MessageType::INFO, "Build errors detected, keeping existing AST cache")
+                .log_message(
+                    MessageType::INFO,
+                    "Build errors detected, keeping existing AST cache",
+                )
                 .await;
         }
 
         // cache text
-        let mut text_cache = self.text_cache.write().await;
-        text_cache.insert(uri.to_string(), params.text);
+        {
+            let mut text_cache = self.text_cache.write().await;
+            text_cache.insert(uri.to_string(), (version, params.text));
+        }
 
         let mut all_diagnostics = vec![];
 
@@ -152,8 +166,9 @@ impl ForgeLsp {
             }
         }
 
+        // publish diags with no version, so we are sure they get displayed
         self.client
-            .publish_diagnostics(uri, all_diagnostics, Some(version))
+            .publish_diagnostics(uri, all_diagnostics, None)
             .await;
     }
 
@@ -294,12 +309,13 @@ impl LanguageServer for ForgeLsp {
         // The cache is updated when on_change succeeds with a fresh build.
         // Trade-off: Cached positions may be slightly off if file was edited.
 
-        let uri = params.text_document.uri.clone();
-
         // update text cache
         if let Some(change) = params.content_changes.into_iter().next() {
             let mut text_cache = self.text_cache.write().await;
-            text_cache.insert(uri.to_string(), change.text);
+            text_cache.insert(
+                params.text_document.uri.to_string(),
+                (params.text_document.version, change.text),
+            );
         }
     }
 
@@ -325,14 +341,21 @@ impl LanguageServer for ForgeLsp {
             }
         };
 
+        let version = self
+            .text_cache
+            .read()
+            .await
+            .get(params.text_document.uri.as_str())
+            .map(|(version, _)| *version)
+            .unwrap_or_default();
+
         self.on_change(TextDocumentItem {
             uri: params.text_document.uri,
             text: text_content,
-            version: 0,
+            version,
             language_id: "".to_string(),
         })
         .await;
-        _ = self.client.semantic_tokens_refresh().await;
     }
 
     async fn will_save(&self, params: WillSaveTextDocumentParams) {
@@ -378,7 +401,7 @@ impl LanguageServer for ForgeLsp {
         // Get original content
         let original_content = {
             let text_cache = self.text_cache.read().await;
-            if let Some(content) = text_cache.get(&uri.to_string()) {
+            if let Some((_, content)) = text_cache.get(&uri.to_string()) {
                 content.clone()
             } else {
                 // Fallback to reading file
@@ -473,7 +496,7 @@ impl LanguageServer for ForgeLsp {
         // Get source text — only needed for dot completions (to parse the line)
         let source_text = {
             let text_cache = self.text_cache.read().await;
-            if let Some(text) = text_cache.get(&uri.to_string()) {
+            if let Some((_, text)) = text_cache.get(&uri.to_string()) {
                 text.clone()
             } else {
                 match uri.to_file_path() {
@@ -505,13 +528,22 @@ impl LanguageServer for ForgeLsp {
                 if let Some(sources) = cached_build.ast.get("sources") {
                     let contracts = cached_build.ast.get("contracts");
                     let cc = completion::build_completion_cache(sources, contracts);
-                    completion_cache.write().await.insert(uri_string, Arc::new(cc));
+                    completion_cache
+                        .write()
+                        .await
+                        .insert(uri_string, Arc::new(cc));
                 }
             });
         }
 
         let cache_ref = cached.as_deref();
-        let result = completion::handle_completion(cache_ref, &source_text, position, trigger_char, self.fast_completions);
+        let result = completion::handle_completion(
+            cache_ref,
+            &source_text,
+            position,
+            trigger_char,
+            self.fast_completions,
+        );
         Ok(result)
     }
 
@@ -552,7 +584,9 @@ impl LanguageServer for ForgeLsp {
             None => return Ok(None),
         };
 
-        if let Some(location) = goto::goto_declaration(&cached_build.ast, &uri, position, &source_bytes) {
+        if let Some(location) =
+            goto::goto_declaration(&cached_build.ast, &uri, position, &source_bytes)
+        {
             self.client
                 .log_message(
                     MessageType::INFO,
@@ -608,7 +642,9 @@ impl LanguageServer for ForgeLsp {
             None => return Ok(None),
         };
 
-        if let Some(location) = goto::goto_declaration(&cached_build.ast, &uri, position, &source_bytes) {
+        if let Some(location) =
+            goto::goto_declaration(&cached_build.ast, &uri, position, &source_bytes)
+        {
             self.client
                 .log_message(
                     MessageType::INFO,
@@ -831,10 +867,16 @@ impl LanguageServer for ForgeLsp {
                 .map(|(_, v)| v.clone())
                 .collect()
         };
-        let other_refs: Vec<&goto::CachedBuild> =
-            other_builds.iter().map(|v| v.as_ref()).collect();
+        let other_refs: Vec<&goto::CachedBuild> = other_builds.iter().map(|v| v.as_ref()).collect();
 
-        match rename::rename_symbol(&cached_build, &uri, position, &source_bytes, new_name, &other_refs) {
+        match rename::rename_symbol(
+            &cached_build,
+            &uri,
+            position,
+            &source_bytes,
+            new_name,
+            &other_refs,
+        ) {
             Some(workspace_edit) => {
                 self.client
                     .log_message(
@@ -1107,7 +1149,6 @@ impl LanguageServer for ForgeLsp {
             Ok(Some(result))
         }
     }
-
 }
 
 fn byte_offset(content: &str, position: Position) -> Result<usize, String> {
