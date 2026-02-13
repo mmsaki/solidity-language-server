@@ -1,6 +1,7 @@
 use crate::completion;
 use crate::goto;
 use crate::hover;
+use crate::links;
 use crate::references;
 use crate::rename;
 use crate::runner::{ForgeRunner, Runner};
@@ -238,6 +239,12 @@ impl LanguageServer for ForgeLsp {
                 workspace_symbol_provider: Some(OneOf::Left(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
+                document_link_provider: Some(DocumentLinkOptions {
+                    resolve_provider: Some(false),
+                    work_done_progress_options: WorkDoneProgressOptions {
+                        work_done_progress: None,
+                    },
+                }),
                 document_formatting_provider: Some(OneOf::Left(true)),
                 text_document_sync: Some(TextDocumentSyncCapability::Options(
                     TextDocumentSyncOptions {
@@ -1046,6 +1053,59 @@ impl LanguageServer for ForgeLsp {
         }
 
         Ok(result)
+    }
+
+    async fn document_link(
+        &self,
+        params: DocumentLinkParams,
+    ) -> tower_lsp::jsonrpc::Result<Option<Vec<DocumentLink>>> {
+        self.client
+            .log_message(MessageType::INFO, "got textDocument/documentLink request")
+            .await;
+
+        let uri = params.text_document.uri;
+        let file_path = match uri.to_file_path() {
+            Ok(path) => path,
+            Err(_) => {
+                self.client
+                    .log_message(MessageType::ERROR, "invalid file uri")
+                    .await;
+                return Ok(None);
+            }
+        };
+
+        let source_bytes = match std::fs::read(&file_path) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                self.client
+                    .log_message(MessageType::ERROR, format!("failed to read file: {e}"))
+                    .await;
+                return Ok(None);
+            }
+        };
+
+        let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
+        let cached_build = match cached_build {
+            Some(cb) => cb,
+            None => return Ok(None),
+        };
+
+        let result = links::document_links(&cached_build, &uri, &source_bytes);
+
+        if result.is_empty() {
+            self.client
+                .log_message(MessageType::INFO, "no document links found")
+                .await;
+            Ok(None)
+        } else {
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    format!("found {} document links", result.len()),
+                )
+                .await;
+            Ok(Some(result))
+        }
     }
 
 }

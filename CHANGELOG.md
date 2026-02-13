@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.1.13
+
+### Features
+
+- `textDocument/documentLink` — every reference in a file is a clickable link
+- Import paths link to the imported file (resolves `absolutePath` from AST)
+- All nodes with `referencedDeclaration` link to their definition via `id_to_location`
+- Uses pre-indexed `CachedBuild.nodes` — no extra AST traversal at request time
+
+### Tests
+
+- 11 document link tests (CI-safe, real fixture data from `pool-manager-ast.json`)
+- 164 total tests, 0 warnings
+
 ## v0.1.12
 
 ### Features
