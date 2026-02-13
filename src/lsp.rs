@@ -18,7 +18,7 @@ pub struct ForgeLsp {
     ast_cache: Arc<RwLock<HashMap<String, Arc<goto::CachedBuild>>>>,
     /// Text cache for opened documents
     ///
-    /// The key is the file's URI, and the value is a tuple of (version, content).
+    /// The key is the file's URI converted to string, and the value is a tuple of (version, content).
     text_cache: Arc<RwLock<HashMap<String, (i32, String)>>>,
     completion_cache: Arc<RwLock<HashMap<String, Arc<completion::CompletionCache>>>>,
     fast_completions: bool,
