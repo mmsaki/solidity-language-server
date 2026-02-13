@@ -308,53 +308,22 @@ impl LanguageServer for ForgeLsp {
         // The cache is updated when on_change succeeds with a fresh build.
         // Trade-off: Cached positions may be slightly off if file was edited.
 
-        let uri = params.text_document.uri.clone();
-
-        // update text cache
         if let Some(change) = params.content_changes.into_iter().next() {
-            let mut text_cache = self.text_cache.write().await;
-            text_cache.insert(uri.to_string(), (params.text_document.version, change.text));
+            // text cache is populated in `on_change`
+            self.on_change(TextDocumentItem {
+                uri: params.text_document.uri,
+                text: change.text,
+                version: params.text_document.version,
+                language_id: "".to_string(),
+            })
+            .await;
         }
     }
 
-    async fn did_save(&self, params: DidSaveTextDocumentParams) {
+    async fn did_save(&self, _: DidSaveTextDocumentParams) {
         self.client
             .log_message(MessageType::INFO, "file saved")
             .await;
-
-        let text_content = if let Some(text) = params.text {
-            text
-        } else {
-            match std::fs::read_to_string(params.text_document.uri.path()) {
-                Ok(content) => content,
-                Err(e) => {
-                    self.client
-                        .log_message(
-                            MessageType::ERROR,
-                            format!("Failed to read file on save: {e}"),
-                        )
-                        .await;
-                    return;
-                }
-            }
-        };
-
-        let version = self
-            .text_cache
-            .read()
-            .await
-            .get(params.text_document.uri.as_str())
-            .map(|(version, _)| *version)
-            .unwrap_or_default();
-
-        self.on_change(TextDocumentItem {
-            uri: params.text_document.uri,
-            text: text_content,
-            version,
-            language_id: "".to_string(),
-        })
-        .await;
-        _ = self.client.semantic_tokens_refresh().await;
     }
 
     async fn will_save(&self, params: WillSaveTextDocumentParams) {
