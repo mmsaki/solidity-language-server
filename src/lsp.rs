@@ -229,14 +229,24 @@ impl ForgeLsp {
 impl LanguageServer for ForgeLsp {
     async fn initialize(
         &self,
-        _: InitializeParams,
+        params: InitializeParams,
     ) -> tower_lsp::jsonrpc::Result<InitializeResult> {
+        // Negotiate position encoding with the client (once, for the session).
+        let client_encodings = params
+            .capabilities
+            .general
+            .as_ref()
+            .and_then(|g| g.position_encodings.as_deref());
+        let encoding = utils::PositionEncoding::negotiate(client_encodings);
+        utils::set_encoding(encoding);
+
         Ok(InitializeResult {
             server_info: Some(ServerInfo {
                 name: "Solidity Language Server".to_string(),
                 version: Some(env!("CARGO_PKG_VERSION").to_string()),
             }),
             capabilities: ServerCapabilities {
+                position_encoding: Some(encoding.to_encoding_kind()),
                 completion_provider: Some(CompletionOptions {
                     trigger_characters: Some(vec![".".to_string()]),
                     resolve_provider: Some(false),
@@ -430,15 +440,8 @@ impl LanguageServer for ForgeLsp {
 
         // If changed, return edit to replace whole document
         if original_content != formatted_content {
-            let lines: Vec<&str> = original_content.lines().collect();
-            let (end_line, end_character) = if original_content.ends_with('\n') {
-                (lines.len() as u32, 0)
-            } else {
-                (
-                    (lines.len().saturating_sub(1)) as u32,
-                    lines.last().map(|l| l.len() as u32).unwrap_or(0),
-                )
-            };
+            let (end_line, end_character) =
+                utils::byte_offset_to_position(&original_content, original_content.len());
             let edit = TextEdit {
                 range: Range {
                     start: Position {
@@ -1152,15 +1155,7 @@ impl LanguageServer for ForgeLsp {
 }
 
 fn byte_offset(content: &str, position: Position) -> Result<usize, String> {
-    let lines: Vec<&str> = content.lines().collect();
-    if position.line as usize >= lines.len() {
-        return Err("Line out of range".to_string());
-    }
-    let mut offset = 0;
-    (0..position.line as usize).for_each(|i| {
-        offset += lines[i].len() + 1; // +1 for \n
-    });
-    offset += position.character as usize;
+    let offset = utils::position_to_byte_offset(content, position.line, position.character);
     if offset > content.len() {
         return Err("Character out of range".to_string());
     }

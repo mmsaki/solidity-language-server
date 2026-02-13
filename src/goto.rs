@@ -294,37 +294,13 @@ pub fn cache_ids(sources: &Value) -> Type {
 
 pub fn pos_to_bytes(source_bytes: &[u8], position: Position) -> usize {
     let text = String::from_utf8_lossy(source_bytes);
-    let lines: Vec<&str> = text.lines().collect();
-
-    let mut byte_offset = 0;
-
-    for (line_num, line_text) in lines.iter().enumerate() {
-        if line_num < position.line as usize {
-            byte_offset += line_text.len() + 1; // +1 for newline
-        } else if line_num == position.line as usize {
-            let char_offset = std::cmp::min(position.character as usize, line_text.len());
-            byte_offset += char_offset;
-            break;
-        }
-    }
-
-    byte_offset
+    crate::utils::position_to_byte_offset(&text, position.line, position.character)
 }
 
 pub fn bytes_to_pos(source_bytes: &[u8], byte_offset: usize) -> Option<Position> {
     let text = String::from_utf8_lossy(source_bytes);
-    let mut curr_offset = 0;
-
-    for (line_num, line_text) in text.lines().enumerate() {
-        let line_bytes = line_text.len() + 1; // +1 for newline
-        if curr_offset + line_bytes > byte_offset {
-            let col = byte_offset - curr_offset;
-            return Some(Position::new(line_num as u32, col as u32));
-        }
-        curr_offset += line_bytes;
-    }
-
-    None
+    let (line, col) = crate::utils::byte_offset_to_position(&text, byte_offset);
+    Some(Position::new(line, col))
 }
 
 /// Convert a `"offset:length:fileId"` src string to an LSP Location.
