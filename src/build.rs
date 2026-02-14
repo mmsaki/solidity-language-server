@@ -77,18 +77,7 @@ fn parse_diagnostic(
         .unwrap_or(start_offset);
 
     let (start_line, start_col) = byte_offset_to_position(content, start_offset);
-    let (mut end_line, mut end_col) = byte_offset_to_position(content, end_offset);
-
-    if end_col > 0 {
-        end_col -= 1;
-    } else if end_line > 0 {
-        end_line -= 1;
-        end_col = content
-            .lines()
-            .nth(end_line.try_into().unwrap())
-            .map(|l| l.len() as u32)
-            .unwrap_or(0);
-    }
+    let (end_line, end_col) = byte_offset_to_position(content, end_offset);
 
     let range = Range {
         start: Position {
@@ -97,15 +86,14 @@ fn parse_diagnostic(
         },
         end: Position {
             line: end_line,
-            character: end_col + 1,
+            character: end_col,
         },
     };
 
     let message = err
         .get("message")
         .and_then(|m| m.as_str())
-        .unwrap_or("Unknown error")
-        .to_string();
+        .unwrap_or("Unknown error");
 
     let severity = match err.get("severity").and_then(|s| s.as_str()) {
         Some("error") => Some(DiagnosticSeverity::ERROR),
