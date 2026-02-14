@@ -28,6 +28,23 @@ pub fn build_output_to_diagnostics(
         .collect()
 }
 
+fn source_location_matches(source_path: &str, path: &Path, project_root: Option<&Path>) -> bool {
+    let source_path = Path::new(source_path);
+    // source_file can be absolute or relative to the project root.
+    // path is the absolute path from the LSP client.
+    if source_path.is_absolute() {
+        source_path == path
+    } else if let Some(root) = project_root {
+        // Make path relative to the project root and compare with forge's relative path
+        path.strip_prefix(root)
+            .map(|rel| rel == source_path)
+            .unwrap_or(false)
+    } else {
+        // Fallback: compare filenames only
+        source_path.file_name() == path.file_name()
+    }
+}
+
 fn parse_diagnostic(
     err: &Value,
     path: &Path,
@@ -42,23 +59,7 @@ fn parse_diagnostic(
         .and_then(|loc| loc.get("file"))
         .and_then(|f| f.as_str())?;
 
-    let source_path = Path::new(source_file);
-
-    // source_file can be absolute or relative to the project root.
-    // path is the absolute path from the LSP client.
-    let matches = if source_path.is_absolute() {
-        source_path == path
-    } else if let Some(root) = project_root {
-        // Make path relative to the project root and compare with forge's relative path
-        path.strip_prefix(root)
-            .map(|rel| rel == source_path)
-            .unwrap_or(false)
-    } else {
-        // Fallback: compare filenames only
-        source_path.file_name() == path.file_name()
-    };
-
-    if !matches {
+    if !source_location_matches(source_file, path, project_root) {
         return None;
     }
 
