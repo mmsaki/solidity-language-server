@@ -5,6 +5,55 @@ use serde_json::Value;
 use std::collections::HashMap;
 use tower_lsp::lsp_types::{Position, Range, TextEdit, Url, WorkspaceEdit};
 
+/// Search a specific line for an identifier and return its exact range.
+/// Used to correct stale AST ranges when the buffer has been edited but
+/// not saved (e.g. after a previous rename).
+fn find_identifier_on_line(source_bytes: &[u8], line: u32, identifier: &str) -> Option<Range> {
+    let text = String::from_utf8_lossy(source_bytes);
+    let target_line = text.lines().nth(line as usize)?;
+    // Find all occurrences of the identifier on this line, bounded by
+    // non-identifier characters so we don't match substrings.
+    let ident_bytes = identifier.as_bytes();
+    let mut search_start = 0;
+    while let Some(offset) = target_line[search_start..].find(identifier) {
+        let col = search_start + offset;
+        let before_ok = col == 0 || {
+            let b = target_line.as_bytes()[col - 1];
+            !b.is_ascii_alphanumeric() && b != b'_'
+        };
+        let after_ok = col + ident_bytes.len() >= target_line.len() || {
+            let b = target_line.as_bytes()[col + ident_bytes.len()];
+            !b.is_ascii_alphanumeric() && b != b'_'
+        };
+        if before_ok && after_ok {
+            // Compute encoding-aware column positions
+            let line_start_byte: usize = text
+                .lines()
+                .take(line as usize)
+                .map(|l| l.len() + 1) // +1 for newline
+                .sum();
+            let (_, start_col) =
+                crate::utils::byte_offset_to_position(&text, line_start_byte + col);
+            let (_, end_col) = crate::utils::byte_offset_to_position(
+                &text,
+                line_start_byte + col + ident_bytes.len(),
+            );
+            return Some(Range {
+                start: Position {
+                    line,
+                    character: start_col,
+                },
+                end: Position {
+                    line,
+                    character: end_col,
+                },
+            });
+        }
+        search_start = col + 1;
+    }
+    None
+}
+
 fn get_text_at_range(source_bytes: &[u8], range: &Range) -> Option<String> {
     let start_byte = goto::pos_to_bytes(source_bytes, range.start);
     let end_byte = goto::pos_to_bytes(source_bytes, range.end);
@@ -159,6 +208,7 @@ pub fn rename_symbol(
     source_bytes: &[u8],
     new_name: String,
     other_builds: &[&CachedBuild],
+    text_buffers: &HashMap<String, Vec<u8>>,
 ) -> Option<WorkspaceEdit> {
     let original_identifier = get_identifier_at_position(source_bytes, position)?;
     let name_location_index = get_name_location_index(&build.ast, file_uri, position, source_bytes);
@@ -204,35 +254,50 @@ pub fn rename_symbol(
     }
     let mut changes: Type = HashMap::new();
     for location in locations {
-        // Read the file to check the text at the range
-        let absolute_path = match location.uri.to_file_path() {
-            Ok(p) => p,
-            Err(_) => continue,
-        };
-        let file_source_bytes = match std::fs::read(&absolute_path) {
-            Ok(b) => b,
-            Err(_) => continue,
-        };
-        let text_at_range = match get_text_at_range(&file_source_bytes, &location.range) {
-            Some(t) => t,
-            None => continue,
-        };
-        if text_at_range == original_identifier {
-            let text_edit = TextEdit {
-                range: location.range,
-                new_text: new_name.clone(),
+        // Read the file content, preferring in-memory text buffers (which
+        // reflect unsaved editor changes) over reading from disk.
+        let file_source_bytes = if let Some(buf) = text_buffers.get(location.uri.as_str()) {
+            buf.clone()
+        } else {
+            let absolute_path = match location.uri.to_file_path() {
+                Ok(p) => p,
+                Err(_) => continue,
             };
-            let key = (
+            match std::fs::read(&absolute_path) {
+                Ok(b) => b,
+                Err(_) => continue,
+            }
+        };
+        let text_at_range = get_text_at_range(&file_source_bytes, &location.range);
+        let actual_range = if text_at_range.as_deref() == Some(&original_identifier) {
+            // AST range matches the buffer — use it directly
+            location.range
+        } else {
+            // AST range is stale (e.g. buffer was edited but not saved).
+            // Search the same line for the identifier and correct the range.
+            match find_identifier_on_line(
+                &file_source_bytes,
                 location.range.start.line,
-                location.range.start.character,
-                location.range.end.line,
-                location.range.end.character,
-            );
-            changes
-                .entry(location.uri)
-                .or_default()
-                .insert(key, text_edit);
-        }
+                &original_identifier,
+            ) {
+                Some(corrected) => corrected,
+                None => continue,
+            }
+        };
+        let text_edit = TextEdit {
+            range: actual_range,
+            new_text: new_name.clone(),
+        };
+        let key = (
+            actual_range.start.line,
+            actual_range.start.character,
+            actual_range.end.line,
+            actual_range.end.character,
+        );
+        changes
+            .entry(location.uri)
+            .or_default()
+            .insert(key, text_edit);
     }
     let changes_vec: HashMap<Url, Vec<TextEdit>> = changes
         .into_iter()

@@ -175,25 +175,36 @@ impl ForgeLsp {
     /// Get a CachedBuild from the cache, or fetch and build one on demand.
     /// If `insert_on_miss` is true, the freshly-built entry is inserted into the cache
     /// (used by references handler so cross-file lookups can find it later).
+    ///
+    /// When the entry is in the cache but marked stale (text_cache changed
+    /// since the last build), the text_cache content is flushed to disk and
+    /// the AST is rebuilt so that rename / references work correctly on
+    /// unsaved buffers.
     async fn get_or_fetch_build(
         &self,
         uri: &Url,
         file_path: &std::path::Path,
         insert_on_miss: bool,
     ) -> Option<Arc<goto::CachedBuild>> {
+        let uri_str = uri.to_string();
+
+        // Return cached entry if it exists (stale or not — stale entries are
+        // still usable, positions may be slightly off like goto-definition).
         {
             let cache = self.ast_cache.read().await;
-            if let Some(cached) = cache.get(&uri.to_string()) {
+            if let Some(cached) = cache.get(&uri_str) {
                 return Some(cached.clone());
             }
         }
+
+        // Cache miss — build the AST from disk.
         let path_str = file_path.to_str()?;
         match self.compiler.ast(path_str).await {
             Ok(data) => {
                 let build = Arc::new(goto::CachedBuild::new(data));
                 if insert_on_miss {
                     let mut cache = self.ast_cache.write().await;
-                    cache.insert(uri.to_string(), build.clone());
+                    cache.insert(uri_str.clone(), build.clone());
                 }
                 Some(build)
             }
@@ -314,12 +325,6 @@ impl LanguageServer for ForgeLsp {
         self.client
             .log_message(MessageType::INFO, "file changed")
             .await;
-
-        // Note: We no longer invalidate the AST cache here.
-        // This allows go-to definition to continue working with cached (potentially stale)
-        // AST data even when the file has compilation errors.
-        // The cache is updated when on_change succeeds with a fresh build.
-        // Trade-off: Cached positions may be slightly off if file was edited.
 
         // update text cache
         if let Some(change) = params.content_changes.into_iter().next() {
@@ -870,6 +875,17 @@ impl LanguageServer for ForgeLsp {
         };
         let other_refs: Vec<&goto::CachedBuild> = other_builds.iter().map(|v| v.as_ref()).collect();
 
+        // Build a map of URI → file content from the text_cache so rename
+        // verification reads from in-memory buffers (unsaved edits) instead
+        // of from disk.
+        let text_buffers: HashMap<String, Vec<u8>> = {
+            let text_cache = self.text_cache.read().await;
+            text_cache
+                .iter()
+                .map(|(uri, (_, content))| (uri.clone(), content.as_bytes().to_vec()))
+                .collect()
+        };
+
         match rename::rename_symbol(
             &cached_build,
             &uri,
@@ -877,6 +893,7 @@ impl LanguageServer for ForgeLsp {
             &source_bytes,
             new_name,
             &other_refs,
+            &text_buffers,
         ) {
             Some(workspace_edit) => {
                 self.client
