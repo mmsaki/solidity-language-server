@@ -2,6 +2,7 @@
 out
 cache
 bench/target
-benchmarks/
+benchmarks/*
+!benchmarks/*.yaml
 DELTA.md
 v4-core
