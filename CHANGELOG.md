@@ -1,5 +1,52 @@
 # Changelog
 
+## v0.1.15
+
+### Fixes
+
+- AST cache now updates when build has warnings but no errors (#41)
+  - The `build_succeeded` check used `diagnostics.is_empty()` which blocked cache updates for files with unused variables or other warnings
+  - Changed to only block on `DiagnosticSeverity::ERROR`, so warnings pass through
+- Cross-file rename reads from in-memory editor buffers instead of disk (#50)
+  - `rename_symbol` accepts `text_buffers` parameter reflecting unsaved editor state
+  - No more disk writes behind the editor's back
+- Full `WorkspaceEdit` returned to client for all files (#50)
+  - Previously split edits between client (current file) and server-side `fs::write` (other files)
+  - Now the complete edit set is returned to the client
+- `nameLocations` index fallback in references (#50)
+  - Nodes without `nameLocations` array now correctly fall through to `nameLocation` or `src`
+- Stale AST range correction during rename (#50)
+  - `find_identifier_on_line` scans the current line to correct shifted column positions after unsaved edits
+- All LSP handlers read source from `text_cache` instead of `std::fs::read` (#50)
+- Respect `includeDeclaration` in `textDocument/references` (#49)
+- Use cached AST for `workspace/symbol` instead of rebuilding (#46)
+- Clear caches on `did_close` to free memory (#45)
+- Encoding-aware UTF-16 position conversion (#39)
+- Remove document version when publishing diagnostics (#40)
+- Pass `--ignore-eip-3860` and `--ignored-error-codes 5574` to forge build (#11)
+
+### Features
+
+- Announce full version string in LSP `initialize` response (#51)
+  - e.g. `0.1.15+commit.abc1234.macos.aarch64`
+
+### Tests
+
+- 10 new regression tests for bugs fixed in #41 and #50
+  - `tests/build.rs`: warning-only builds succeed, error builds fail, empty diagnostics succeed
+  - `tests/rename.rs`: nameLocations fallback, text_buffers usage, cross-file WorkspaceEdit, stale AST correction, identifier extraction
+- Solidity fixture files in `example/` for rename tests (A.sol, B.sol, C.sol, Counter.sol)
+- 186 total tests, 0 warnings
+
+### New Contributors
+
+- [@beeb](https://github.com/beeb) — fix: remove document version when publishing diagnostics (#40), filed issues #32, #33, #34, #35, #36, #37, #38, #41
+
+### Other
+
+- `rustfmt.toml` and `cargo fmt` across codebase (#42)
+- Benchmark config updated with all implemented LSP methods
+
 ## v0.1.14
 
 ### Fixes

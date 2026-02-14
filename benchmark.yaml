@@ -19,7 +19,13 @@ benchmarks:
   - textDocument/declaration
   - textDocument/hover
   - textDocument/references
+  - textDocument/completion
+  - textDocument/rename
+  - textDocument/prepareRename
   - textDocument/documentSymbol
+  - textDocument/documentLink
+  - textDocument/formatting
+  - workspace/symbol
 
 servers:
   - label: baseline
