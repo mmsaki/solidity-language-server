@@ -243,7 +243,7 @@ impl LanguageServer for ForgeLsp {
         Ok(InitializeResult {
             server_info: Some(ServerInfo {
                 name: "Solidity Language Server".to_string(),
-                version: Some(env!("CARGO_PKG_VERSION").to_string()),
+                version: Some(env!("LONG_VERSION").to_string()),
             }),
             capabilities: ServerCapabilities {
                 position_encoding: Some(encoding.to_encoding_kind()),
