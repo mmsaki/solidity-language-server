@@ -2,13 +2,11 @@ use clap::Parser;
 use eyre::Result;
 use solidity_language_server::lsp::ForgeLsp;
 use tower_lsp::{LspService, Server};
-use tracing::info;
+use tracing::{info, warn};
 
 #[derive(Clone, Debug, clap::ValueEnum)]
 pub enum CompletionMode {
-    /// Scope-aware completions with inheritance resolution (default)
     Full,
-    /// Flat type resolution for dot completions (no scope awareness)
     Fast,
 }
 
@@ -22,8 +20,10 @@ pub struct LspArgs {
     pub stdio: bool,
     #[arg(long)]
     pub use_solar: bool,
-    #[arg(long, value_enum, default_value_t = CompletionMode::Full)]
-    pub completion_mode: CompletionMode,
+    /// Deprecated: scope-aware completions are now always enabled.
+    /// This flag is a no-op and will be removed in a future release.
+    #[arg(long, value_enum, hide = true)]
+    pub completion_mode: Option<CompletionMode>,
 }
 
 impl LspArgs {
@@ -38,11 +38,15 @@ impl LspArgs {
         tracing::subscriber::set_global_default(sub).unwrap();
         info!("Starting lsp server...");
 
+        if self.completion_mode.is_some() {
+            warn!(
+                "--completion-mode is deprecated and has no effect. Scope-aware completions are now always enabled."
+            );
+        }
+
         let stdin = tokio::io::stdin();
         let stdout = tokio::io::stdout();
-        let fast_completions = matches!(self.completion_mode, CompletionMode::Fast);
-        let (service, socket) =
-            LspService::new(|client| ForgeLsp::new(client, self.use_solar, fast_completions));
+        let (service, socket) = LspService::new(|client| ForgeLsp::new(client, self.use_solar));
         Server::new(stdin, stdout, socket).serve(service).await;
 
         info!("Solidity LSP Server stopped.");

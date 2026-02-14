@@ -21,11 +21,10 @@ pub struct ForgeLsp {
     /// The key is the file's URI converted to string, and the value is a tuple of (version, content).
     text_cache: Arc<RwLock<HashMap<String, (i32, String)>>>,
     completion_cache: Arc<RwLock<HashMap<String, Arc<completion::CompletionCache>>>>,
-    fast_completions: bool,
 }
 
 impl ForgeLsp {
-    pub fn new(client: Client, use_solar: bool, fast_completions: bool) -> Self {
+    pub fn new(client: Client, use_solar: bool) -> Self {
         let compiler: Arc<dyn Runner> = if use_solar {
             Arc::new(crate::solar_runner::SolarRunner)
         } else {
@@ -40,7 +39,6 @@ impl ForgeLsp {
             ast_cache,
             text_cache,
             completion_cache,
-            fast_completions,
         }
     }
 
@@ -563,8 +561,8 @@ impl LanguageServer for ForgeLsp {
 
         let cache_ref = cached.as_deref();
 
-        // Look up the AST file_id for scope-aware resolution in full mode
-        let file_id = if !self.fast_completions {
+        // Look up the AST file_id for scope-aware resolution
+        let file_id = {
             let uri_path = uri.to_file_path().ok();
             cache_ref.and_then(|c| {
                 uri_path.as_ref().and_then(|p| {
@@ -572,18 +570,10 @@ impl LanguageServer for ForgeLsp {
                     c.path_to_file_id.get(path_str).copied()
                 })
             })
-        } else {
-            None
         };
 
-        let result = completion::handle_completion(
-            cache_ref,
-            &source_text,
-            position,
-            trigger_char,
-            self.fast_completions,
-            file_id,
-        );
+        let result =
+            completion::handle_completion(cache_ref, &source_text, position, trigger_char, file_id);
         Ok(result)
     }
 

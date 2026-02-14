@@ -1548,18 +1548,13 @@ pub fn get_general_completions(cache: &CompletionCache) -> Vec<CompletionItem> {
 /// and magic dot completions (msg., block., tx., abi., type().) are returned
 /// immediately — no blocking.
 ///
-/// When `fast` is true, scope-aware type resolution is skipped for dot
-/// completions (uses flat first-wins lookup instead). When false, dot
-/// completions use scope-aware resolution with inheritance walking.
-///
-/// `file_id` is the AST source file id, needed for scope-aware resolution
-/// in full mode. When `None`, scope resolution is skipped.
+/// `file_id` is the AST source file id, needed for scope-aware resolution.
+/// When `None`, scope resolution is skipped and flat lookup is used.
 pub fn handle_completion(
     cache: Option<&CompletionCache>,
     source_text: &str,
     position: Position,
     trigger_char: Option<&str>,
-    fast: bool,
     file_id: Option<u64>,
 ) -> Option<CompletionResponse> {
     let lines: Vec<&str> = source_text.lines().collect();
@@ -1574,15 +1569,11 @@ pub fn handle_completion(
         .unwrap_or(0);
     let col_byte = (abs_byte - line_start_byte) as u32;
 
-    // Build scope context for full mode (scope-aware type resolution)
-    let scope_ctx = if !fast {
-        file_id.map(|fid| ScopeContext {
-            byte_pos: abs_byte,
-            file_id: fid,
-        })
-    } else {
-        None
-    };
+    // Build scope context for scope-aware type resolution
+    let scope_ctx = file_id.map(|fid| ScopeContext {
+        byte_pos: abs_byte,
+        file_id: fid,
+    });
 
     let items = if trigger_char == Some(".") {
         let chain = parse_dot_chain(line, col_byte);

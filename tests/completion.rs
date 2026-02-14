@@ -1763,7 +1763,7 @@ fn test_scope_chain_completions_with_context() {
 #[test]
 fn test_scope_chain_completions_without_context_uses_flat() {
     let cache = load_cache();
-    // Without scope context (fast mode), self. resolves via flat first-wins lookup
+    // Without scope context (no file_id), self. resolves via flat first-wins lookup
     let chain = vec![DotSegment {
         name: "self".to_string(),
         kind: AccessKind::Plain,
