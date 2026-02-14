@@ -48,6 +48,21 @@ You can add the following to VSCode (or cursor) using a lsp-proxy extension see 
 ]
 ```
 
+### Zed
+Add the following to your Zed settings (`settings.json`):
+```json
+{
+  "lsp": {
+    "solidity": {
+      "binary": {
+        "path": "solidity-language-server", // or path to the binary
+        "arguments": []
+      }
+    }
+  }
+}
+```
+
 ## Debugging
 
 ### Neovim
