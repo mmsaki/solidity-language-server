@@ -461,9 +461,13 @@ impl LanguageServer for ForgeLsp {
         }
     }
 
-    async fn did_close(&self, _: DidCloseTextDocumentParams) {
+    async fn did_close(&self, params: DidCloseTextDocumentParams) {
+        let uri = params.text_document.uri.to_string();
+        self.ast_cache.write().await.remove(&uri);
+        self.text_cache.write().await.remove(&uri);
+        self.completion_cache.write().await.remove(&uri);
         self.client
-            .log_message(MessageType::INFO, "file closed.")
+            .log_message(MessageType::INFO, "file closed, caches cleared.")
             .await;
     }
 
