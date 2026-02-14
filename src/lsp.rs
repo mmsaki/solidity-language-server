@@ -689,6 +689,7 @@ impl LanguageServer for ForgeLsp {
                 return Ok(None);
             }
         };
+        let include_declaration = params.context.include_declaration;
         let source_bytes = match std::fs::read(&file_path) {
             Ok(bytes) => bytes,
             Err(e) => {
@@ -705,8 +706,13 @@ impl LanguageServer for ForgeLsp {
         };
 
         // Get references from the current file's AST
-        let mut locations =
-            references::goto_references(&cached_build.ast, &uri, position, &source_bytes);
+        let mut locations = references::goto_references(
+            &cached_build.ast,
+            &uri,
+            position,
+            &source_bytes,
+            include_declaration,
+        );
 
         // Cross-file: resolve target definition location, then scan other cached ASTs
         if let Some((def_abs_path, def_byte_offset)) =
@@ -722,6 +728,7 @@ impl LanguageServer for ForgeLsp {
                     &def_abs_path,
                     def_byte_offset,
                     None,
+                    include_declaration,
                 );
                 locations.extend(other_locations);
             }

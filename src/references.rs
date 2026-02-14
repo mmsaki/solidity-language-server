@@ -156,8 +156,16 @@ pub fn goto_references(
     file_uri: &Url,
     position: Position,
     source_bytes: &[u8],
+    include_declaration: bool,
 ) -> Vec<Location> {
-    goto_references_with_index(ast_data, file_uri, position, source_bytes, None)
+    goto_references_with_index(
+        ast_data,
+        file_uri,
+        position,
+        source_bytes,
+        None,
+        include_declaration,
+    )
 }
 
 /// Resolve cursor position to the target definition's location (abs_path + byte offset).
@@ -212,6 +220,7 @@ pub fn goto_references_with_index(
     position: Position,
     source_bytes: &[u8],
     name_location_index: Option<usize>,
+    include_declaration: bool,
 ) -> Vec<Location> {
     let sources = match ast_data.get("sources") {
         Some(s) => s,
@@ -275,7 +284,9 @@ pub fn goto_references_with_index(
     };
 
     let mut results = HashSet::new();
-    results.insert(target_node_id);
+    if include_declaration {
+        results.insert(target_node_id);
+    }
     if let Some(refs) = all_refs.get(&target_node_id) {
         results.extend(refs.iter().copied());
     }
@@ -323,6 +334,7 @@ pub fn goto_references_for_target(
     def_abs_path: &str,
     def_byte_offset: usize,
     name_location_index: Option<usize>,
+    include_declaration: bool,
 ) -> Vec<Location> {
     // Find this build's node ID for the definition using byte offset
     let target_node_id = match byte_to_id(&build.nodes, def_abs_path, def_byte_offset) {
@@ -343,7 +355,9 @@ pub fn goto_references_for_target(
 
     // Collect the definition node + all nodes whose referenced_declaration matches
     let mut results = HashSet::new();
-    results.insert(target_node_id);
+    if include_declaration {
+        results.insert(target_node_id);
+    }
     for file_nodes in build.nodes.values() {
         for (id, node_info) in file_nodes {
             if node_info.referenced_declaration == Some(target_node_id) {

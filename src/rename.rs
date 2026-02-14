@@ -168,6 +168,7 @@ pub fn rename_symbol(
         position,
         source_bytes,
         name_location_index,
+        true, // rename always includes the declaration
     );
 
     // Cross-file: scan other cached ASTs for the same target definition
@@ -180,6 +181,7 @@ pub fn rename_symbol(
                 &def_abs_path,
                 def_byte_offset,
                 name_location_index,
+                true, // rename always includes the declaration
             );
             locations.extend(other_locations);
         }
