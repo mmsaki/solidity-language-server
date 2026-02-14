@@ -965,23 +965,37 @@ impl LanguageServer for ForgeLsp {
             .log_message(MessageType::INFO, "got workspace/symbol request")
             .await;
 
-        let current_dir = std::env::current_dir().ok();
-        let ast_data = if let Some(dir) = current_dir {
-            let path_str = dir.to_str().unwrap_or(".");
-            match self.compiler.ast(path_str).await {
-                Ok(data) => data,
-                Err(e) => {
+        // Use a cached AST if available (any entry has the full workspace build).
+        // Fall back to a fresh build only on cache miss.
+        let ast_data = {
+            let cache = self.ast_cache.read().await;
+            cache.values().next().map(|cb| cb.ast.clone())
+        };
+        let ast_data = match ast_data {
+            Some(data) => data,
+            None => {
+                let current_dir = std::env::current_dir().ok();
+                if let Some(dir) = current_dir {
+                    let path_str = dir.to_str().unwrap_or(".");
+                    match self.compiler.ast(path_str).await {
+                        Ok(data) => data,
+                        Err(e) => {
+                            self.client
+                                .log_message(
+                                    MessageType::WARNING,
+                                    format!("failed to get ast data: {e}"),
+                                )
+                                .await;
+                            return Ok(None);
+                        }
+                    }
+                } else {
                     self.client
-                        .log_message(MessageType::WARNING, format!("failed to get ast data: {e}"))
+                        .log_message(MessageType::ERROR, "could not get current directory")
                         .await;
                     return Ok(None);
                 }
             }
-        } else {
-            self.client
-                .log_message(MessageType::ERROR, "could not get current directory")
-                .await;
-            return Ok(None);
         };
 
         let mut all_symbols = symbols::extract_symbols(&ast_data);
