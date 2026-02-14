@@ -1267,8 +1267,17 @@ pub fn handle_completion(
     let lines: Vec<&str> = source_text.lines().collect();
     let line = lines.get(position.line as usize)?;
 
+    // Convert encoding-aware column to a byte offset within this line.
+    let abs_byte =
+        crate::utils::position_to_byte_offset(source_text, position.line, position.character);
+    let line_start_byte: usize = source_text[..abs_byte]
+        .rfind('\n')
+        .map(|i| i + 1)
+        .unwrap_or(0);
+    let col_byte = (abs_byte - line_start_byte) as u32;
+
     let items = if trigger_char == Some(".") {
-        let chain = parse_dot_chain(line, position.character);
+        let chain = parse_dot_chain(line, col_byte);
         if chain.is_empty() {
             return None;
         }

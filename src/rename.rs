@@ -49,16 +49,26 @@ fn get_name_location_index(
 
 pub fn get_identifier_at_position(source_bytes: &[u8], position: Position) -> Option<String> {
     let text = String::from_utf8_lossy(source_bytes);
+    let abs_offset =
+        crate::utils::position_to_byte_offset(&text, position.line, position.character);
     let lines: Vec<&str> = text.lines().collect();
-    if position.line as usize >= lines.len() {
+    let line = lines.get(position.line as usize)?;
+    // Compute byte offset within this line
+    let line_start = text
+        .as_bytes()
+        .iter()
+        .take(abs_offset)
+        .enumerate()
+        .rev()
+        .find(|&(_, &b)| b == b'\n')
+        .map(|(i, _)| i + 1)
+        .unwrap_or(0);
+    let col_byte = abs_offset - line_start;
+    if col_byte > line.len() {
         return None;
     }
-    let line = lines[position.line as usize];
-    if position.character as usize > line.len() {
-        return None;
-    }
-    let mut start = position.character as usize;
-    let mut end = position.character as usize;
+    let mut start = col_byte;
+    let mut end = col_byte;
 
     while start > 0
         && (line.as_bytes()[start - 1].is_ascii_alphanumeric()
@@ -84,16 +94,26 @@ pub fn get_identifier_at_position(source_bytes: &[u8], position: Position) -> Op
 
 pub fn get_identifier_range(source_bytes: &[u8], position: Position) -> Option<Range> {
     let text = String::from_utf8_lossy(source_bytes);
+    let abs_offset =
+        crate::utils::position_to_byte_offset(&text, position.line, position.character);
     let lines: Vec<&str> = text.lines().collect();
-    if position.line as usize >= lines.len() {
+    let line = lines.get(position.line as usize)?;
+    // Compute byte offset of line start and cursor column within line
+    let line_start = text
+        .as_bytes()
+        .iter()
+        .take(abs_offset)
+        .enumerate()
+        .rev()
+        .find(|&(_, &b)| b == b'\n')
+        .map(|(i, _)| i + 1)
+        .unwrap_or(0);
+    let col_byte = abs_offset - line_start;
+    if col_byte > line.len() {
         return None;
     }
-    let line = lines[position.line as usize];
-    if position.character as usize > line.len() {
-        return None;
-    }
-    let mut start = position.character as usize;
-    let mut end = position.character as usize;
+    let mut start = col_byte;
+    let mut end = col_byte;
 
     while start > 0
         && (line.as_bytes()[start - 1].is_ascii_alphanumeric()
@@ -114,14 +134,18 @@ pub fn get_identifier_range(source_bytes: &[u8], position: Position) -> Option<R
         return None;
     }
 
+    // Convert byte offsets back to encoding-aware positions
+    let (_, start_col) = crate::utils::byte_offset_to_position(&text, line_start + start);
+    let (_, end_col) = crate::utils::byte_offset_to_position(&text, line_start + end);
+
     Some(Range {
         start: Position {
             line: position.line,
-            character: start as u32,
+            character: start_col,
         },
         end: Position {
             line: position.line,
-            character: end as u32,
+            character: end_col,
         },
     })
 }
