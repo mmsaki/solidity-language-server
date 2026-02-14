@@ -8,6 +8,7 @@ readme = "README.md"
 homepage = "https://github.com/mmsaki/solidity-language-server"
 repository = "https://github.com/mmsaki/solidity-language-server"
 keywords = ["language-server", "solidity", "lsp"]
+exclude = ["pool-manager-ast.json"]
 
 [dependencies]
 clap = { version = "4.5.53", features = ["derive"] }
