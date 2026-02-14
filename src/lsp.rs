@@ -175,25 +175,36 @@ impl ForgeLsp {
     /// Get a CachedBuild from the cache, or fetch and build one on demand.
     /// If `insert_on_miss` is true, the freshly-built entry is inserted into the cache
     /// (used by references handler so cross-file lookups can find it later).
+    ///
+    /// When the entry is in the cache but marked stale (text_cache changed
+    /// since the last build), the text_cache content is flushed to disk and
+    /// the AST is rebuilt so that rename / references work correctly on
+    /// unsaved buffers.
     async fn get_or_fetch_build(
         &self,
         uri: &Url,
         file_path: &std::path::Path,
         insert_on_miss: bool,
     ) -> Option<Arc<goto::CachedBuild>> {
+        let uri_str = uri.to_string();
+
+        // Return cached entry if it exists (stale or not — stale entries are
+        // still usable, positions may be slightly off like goto-definition).
         {
             let cache = self.ast_cache.read().await;
-            if let Some(cached) = cache.get(&uri.to_string()) {
+            if let Some(cached) = cache.get(&uri_str) {
                 return Some(cached.clone());
             }
         }
+
+        // Cache miss — build the AST from disk.
         let path_str = file_path.to_str()?;
         match self.compiler.ast(path_str).await {
             Ok(data) => {
                 let build = Arc::new(goto::CachedBuild::new(data));
                 if insert_on_miss {
                     let mut cache = self.ast_cache.write().await;
-                    cache.insert(uri.to_string(), build.clone());
+                    cache.insert(uri_str.clone(), build.clone());
                 }
                 Some(build)
             }
@@ -206,22 +217,24 @@ impl ForgeLsp {
         }
     }
 
-    async fn apply_workspace_edit(&self, workspace_edit: &WorkspaceEdit) -> Result<(), String> {
-        if let Some(changes) = &workspace_edit.changes {
-            for (uri, edits) in changes {
-                let path = uri.to_file_path().map_err(|_| "Invalid uri".to_string())?;
-                let mut content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-                let mut sorted_edits = edits.clone();
-                sorted_edits.sort_by(|a, b| b.range.start.cmp(&a.range.start));
-                for edit in sorted_edits {
-                    let start_byte = byte_offset(&content, edit.range.start)?;
-                    let end_byte = byte_offset(&content, edit.range.end)?;
-                    content.replace_range(start_byte..end_byte, &edit.new_text);
-                }
-                std::fs::write(&path, &content).map_err(|e| e.to_string())?;
+    /// Get the source bytes for a file, preferring the in-memory text cache
+    /// (which reflects unsaved editor changes) over reading from disk.
+    async fn get_source_bytes(&self, uri: &Url, file_path: &std::path::Path) -> Option<Vec<u8>> {
+        {
+            let text_cache = self.text_cache.read().await;
+            if let Some((_, content)) = text_cache.get(&uri.to_string()) {
+                return Some(content.as_bytes().to_vec());
             }
         }
-        Ok(())
+        match std::fs::read(file_path) {
+            Ok(bytes) => Some(bytes),
+            Err(e) => {
+                self.client
+                    .log_message(MessageType::ERROR, format!("failed to read file: {e}"))
+                    .await;
+                None
+            }
+        }
     }
 }
 
@@ -313,12 +326,6 @@ impl LanguageServer for ForgeLsp {
             .log_message(MessageType::INFO, "file changed")
             .await;
 
-        // Note: We no longer invalidate the AST cache here.
-        // This allows go-to definition to continue working with cached (potentially stale)
-        // AST data even when the file has compilation errors.
-        // The cache is updated when on_change succeeds with a fresh build.
-        // Trade-off: Cached positions may be slightly off if file was edited.
-
         // update text cache
         if let Some(change) = params.content_changes.into_iter().next() {
             let mut text_cache = self.text_cache.write().await;
@@ -337,16 +344,27 @@ impl LanguageServer for ForgeLsp {
         let text_content = if let Some(text) = params.text {
             text
         } else {
-            match std::fs::read_to_string(params.text_document.uri.path()) {
-                Ok(content) => content,
-                Err(e) => {
-                    self.client
-                        .log_message(
-                            MessageType::ERROR,
-                            format!("Failed to read file on save: {e}"),
-                        )
-                        .await;
-                    return;
+            // Prefer text_cache (reflects unsaved changes), fall back to disk
+            let cached = {
+                let text_cache = self.text_cache.read().await;
+                text_cache
+                    .get(params.text_document.uri.as_str())
+                    .map(|(_, content)| content.clone())
+            };
+            if let Some(content) = cached {
+                content
+            } else {
+                match std::fs::read_to_string(params.text_document.uri.path()) {
+                    Ok(content) => content,
+                    Err(e) => {
+                        self.client
+                            .log_message(
+                                MessageType::ERROR,
+                                format!("Failed to read file on save: {e}"),
+                            )
+                            .await;
+                        return;
+                    }
                 }
             }
         };
@@ -575,14 +593,9 @@ impl LanguageServer for ForgeLsp {
             }
         };
 
-        let source_bytes = match std::fs::read(&file_path) {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                self.client
-                    .log_message(MessageType::ERROR, format!("failed to read file: {e}"))
-                    .await;
-                return Ok(None);
-            }
+        let source_bytes = match self.get_source_bytes(&uri, &file_path).await {
+            Some(bytes) => bytes,
+            None => return Ok(None),
         };
 
         let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
@@ -633,14 +646,9 @@ impl LanguageServer for ForgeLsp {
             }
         };
 
-        let source_bytes = match std::fs::read(&file_path) {
-            Ok(bytes) => bytes,
-            Err(_) => {
-                self.client
-                    .log_message(MessageType::ERROR, "failed to read file bytes")
-                    .await;
-                return Ok(None);
-            }
+        let source_bytes = match self.get_source_bytes(&uri, &file_path).await {
+            Some(bytes) => bytes,
+            None => return Ok(None),
         };
 
         let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
@@ -689,14 +697,9 @@ impl LanguageServer for ForgeLsp {
                 return Ok(None);
             }
         };
-        let source_bytes = match std::fs::read(&file_path) {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                self.client
-                    .log_message(MessageType::ERROR, format!("Failed to read file: {e}"))
-                    .await;
-                return Ok(None);
-            }
+        let source_bytes = match self.get_source_bytes(&uri, &file_path).await {
+            Some(bytes) => bytes,
+            None => return Ok(None),
         };
         let cached_build = self.get_or_fetch_build(&uri, &file_path, true).await;
         let cached_build = match cached_build {
@@ -782,14 +785,9 @@ impl LanguageServer for ForgeLsp {
             }
         };
 
-        let source_bytes = match std::fs::read(&file_path) {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                self.client
-                    .log_message(MessageType::ERROR, format!("failed to read file: {e}"))
-                    .await;
-                return Ok(None);
-            }
+        let source_bytes = match self.get_source_bytes(&uri, &file_path).await {
+            Some(bytes) => bytes,
+            None => return Ok(None),
         };
 
         if let Some(range) = rename::get_identifier_range(&source_bytes, position) {
@@ -831,14 +829,9 @@ impl LanguageServer for ForgeLsp {
                 return Ok(None);
             }
         };
-        let source_bytes = match std::fs::read(&file_path) {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                self.client
-                    .log_message(MessageType::ERROR, format!("failed to read file: {e}"))
-                    .await;
-                return Ok(None);
-            }
+        let source_bytes = match self.get_source_bytes(&uri, &file_path).await {
+            Some(bytes) => bytes,
+            None => return Ok(None),
         };
 
         let current_identifier = match rename::get_identifier_at_position(&source_bytes, position) {
@@ -882,6 +875,17 @@ impl LanguageServer for ForgeLsp {
         };
         let other_refs: Vec<&goto::CachedBuild> = other_builds.iter().map(|v| v.as_ref()).collect();
 
+        // Build a map of URI → file content from the text_cache so rename
+        // verification reads from in-memory buffers (unsaved edits) instead
+        // of from disk.
+        let text_buffers: HashMap<String, Vec<u8>> = {
+            let text_cache = self.text_cache.read().await;
+            text_cache
+                .iter()
+                .map(|(uri, (_, content))| (uri.clone(), content.as_bytes().to_vec()))
+                .collect()
+        };
+
         match rename::rename_symbol(
             &cached_build,
             &uri,
@@ -889,13 +893,19 @@ impl LanguageServer for ForgeLsp {
             &source_bytes,
             new_name,
             &other_refs,
+            &text_buffers,
         ) {
             Some(workspace_edit) => {
                 self.client
                     .log_message(
                         MessageType::INFO,
                         format!(
-                            "created rename edit with {} changes",
+                            "created rename edit with {} file(s), {} total change(s)",
+                            workspace_edit
+                                .changes
+                                .as_ref()
+                                .map(|c| c.len())
+                                .unwrap_or(0),
                             workspace_edit
                                 .changes
                                 .as_ref()
@@ -905,53 +915,11 @@ impl LanguageServer for ForgeLsp {
                     )
                     .await;
 
-                let mut server_changes = HashMap::new();
-                let mut client_changes = HashMap::new();
-                if let Some(changes) = &workspace_edit.changes {
-                    for (file_uri, edits) in changes {
-                        if file_uri == &uri {
-                            client_changes.insert(file_uri.clone(), edits.clone());
-                        } else {
-                            server_changes.insert(file_uri.clone(), edits.clone());
-                        }
-                    }
-                }
-
-                if !server_changes.is_empty() {
-                    let server_edit = WorkspaceEdit {
-                        changes: Some(server_changes.clone()),
-                        ..Default::default()
-                    };
-                    if let Err(e) = self.apply_workspace_edit(&server_edit).await {
-                        self.client
-                            .log_message(
-                                MessageType::ERROR,
-                                format!("failed to apply server-side rename edit: {e}"),
-                            )
-                            .await;
-                        return Ok(None);
-                    }
-                    self.client
-                        .log_message(
-                            MessageType::INFO,
-                            "applied server-side rename edits and saved other files",
-                        )
-                        .await;
-                    let mut cache = self.ast_cache.write().await;
-                    for uri in server_changes.keys() {
-                        cache.remove(uri.as_str());
-                    }
-                }
-
-                if client_changes.is_empty() {
-                    Ok(None)
-                } else {
-                    let client_edit = WorkspaceEdit {
-                        changes: Some(client_changes),
-                        ..Default::default()
-                    };
-                    Ok(Some(client_edit))
-                }
+                // Return the full WorkspaceEdit to the client so the editor
+                // applies all changes (including cross-file renames) via the
+                // LSP protocol. This keeps undo working and avoids writing
+                // files behind the editor's back.
+                Ok(Some(workspace_edit))
             }
 
             None => {
@@ -1093,14 +1061,9 @@ impl LanguageServer for ForgeLsp {
             }
         };
 
-        let source_bytes = match std::fs::read(&file_path) {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                self.client
-                    .log_message(MessageType::ERROR, format!("failed to read file: {e}"))
-                    .await;
-                return Ok(None);
-            }
+        let source_bytes = match self.get_source_bytes(&uri, &file_path).await {
+            Some(bytes) => bytes,
+            None => return Ok(None),
         };
 
         let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
@@ -1143,14 +1106,9 @@ impl LanguageServer for ForgeLsp {
             }
         };
 
-        let source_bytes = match std::fs::read(&file_path) {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                self.client
-                    .log_message(MessageType::ERROR, format!("failed to read file: {e}"))
-                    .await;
-                return Ok(None);
-            }
+        let source_bytes = match self.get_source_bytes(&uri, &file_path).await {
+            Some(bytes) => bytes,
+            None => return Ok(None),
         };
 
         let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
@@ -1176,12 +1134,4 @@ impl LanguageServer for ForgeLsp {
             Ok(Some(result))
         }
     }
-}
-
-fn byte_offset(content: &str, position: Position) -> Result<usize, String> {
-    let offset = utils::position_to_byte_offset(content, position.line, position.character);
-    if offset > content.len() {
-        return Err("Character out of range".to_string());
-    }
-    Ok(offset)
 }
