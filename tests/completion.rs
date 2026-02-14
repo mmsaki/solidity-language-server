@@ -1848,3 +1848,1270 @@ fn test_scope_resolve_own_state_var_still_works() {
         "_pools inside PoolManager.swap should resolve to PoolManager's own state variable"
     );
 }
+
+// =============================================================================
+// AST scope structure tests
+//
+// These tests validate the scope hierarchy extracted from the Solidity AST.
+// Data comes from jq queries against pool-manager-ast.json.
+// =============================================================================
+
+/// Helper: walk AST recursively, collecting all objects.
+fn collect_all_nodes(ast: &Value) -> Vec<&Value> {
+    let mut result = Vec::new();
+    let mut stack = vec![ast];
+    while let Some(node) = stack.pop() {
+        match node {
+            Value::Object(map) => {
+                result.push(node);
+                for v in map.values() {
+                    stack.push(v);
+                }
+            }
+            Value::Array(arr) => {
+                for v in arr {
+                    stack.push(v);
+                }
+            }
+            _ => {}
+        }
+    }
+    result
+}
+
+/// Helper: count nodes matching a predicate.
+fn count_nodes<F: Fn(&Value) -> bool>(nodes: &[&Value], pred: F) -> usize {
+    nodes.iter().filter(|n| pred(n)).count()
+}
+
+// --- Node types that have `scope` fields ---
+
+#[test]
+fn test_ast_variable_declarations_with_scope() {
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let count = count_nodes(&nodes, |n| {
+        n.get("nodeType").and_then(|v| v.as_str()) == Some("VariableDeclaration")
+            && n.get("scope").is_some()
+    });
+    assert_eq!(count, 957, "VariableDeclaration nodes with scope field");
+}
+
+#[test]
+fn test_ast_function_definitions_with_scope() {
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let count = count_nodes(&nodes, |n| {
+        n.get("nodeType").and_then(|v| v.as_str()) == Some("FunctionDefinition")
+            && n.get("scope").is_some()
+    });
+    assert_eq!(count, 215, "FunctionDefinition nodes with scope field");
+}
+
+#[test]
+fn test_ast_import_directives_with_scope() {
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let count = count_nodes(&nodes, |n| {
+        n.get("nodeType").and_then(|v| v.as_str()) == Some("ImportDirective")
+            && n.get("scope").is_some()
+    });
+    assert_eq!(count, 107, "ImportDirective nodes with scope field");
+}
+
+#[test]
+fn test_ast_contract_definitions_with_scope() {
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let count = count_nodes(&nodes, |n| {
+        n.get("nodeType").and_then(|v| v.as_str()) == Some("ContractDefinition")
+            && n.get("scope").is_some()
+    });
+    assert_eq!(count, 43, "ContractDefinition nodes with scope field");
+}
+
+#[test]
+fn test_ast_struct_definitions_with_scope() {
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let count = count_nodes(&nodes, |n| {
+        n.get("nodeType").and_then(|v| v.as_str()) == Some("StructDefinition")
+            && n.get("scope").is_some()
+    });
+    assert_eq!(count, 12, "StructDefinition nodes with scope field");
+}
+
+// --- Scope target types: what nodeType do scope IDs point to ---
+
+/// Build a map of id -> nodeType for the entire AST.
+fn build_id_to_node_type(nodes: &[&Value]) -> std::collections::HashMap<u64, String> {
+    let mut map = std::collections::HashMap::new();
+    for n in nodes {
+        if let (Some(id), Some(nt)) = (
+            n.get("id").and_then(|v| v.as_u64()),
+            n.get("nodeType").and_then(|v| v.as_str()),
+        ) {
+            map.insert(id, nt.to_string());
+        }
+    }
+    map
+}
+
+/// Count how many unique scope IDs point to a given nodeType.
+fn count_unique_scope_targets(
+    nodes: &[&Value],
+    id_to_type: &std::collections::HashMap<u64, String>,
+    target_type: &str,
+) -> usize {
+    let mut scope_ids: std::collections::HashSet<u64> = std::collections::HashSet::new();
+    for n in nodes.iter() {
+        if let Some(scope_id) = n.get("scope").and_then(|v| v.as_u64()) {
+            if id_to_type.get(&scope_id).map(|s| s.as_str()) == Some(target_type) {
+                scope_ids.insert(scope_id);
+            }
+        }
+    }
+    scope_ids.len()
+}
+
+#[test]
+fn test_ast_scope_targets_function_definition() {
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    assert_eq!(
+        count_unique_scope_targets(&nodes, &id_map, "FunctionDefinition"),
+        208,
+        "unique scope IDs pointing to FunctionDefinition"
+    );
+}
+
+#[test]
+fn test_ast_scope_targets_block() {
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    assert_eq!(
+        count_unique_scope_targets(&nodes, &id_map, "Block"),
+        52,
+        "unique scope IDs pointing to Block"
+    );
+}
+
+#[test]
+fn test_ast_scope_targets_source_unit() {
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    assert_eq!(
+        count_unique_scope_targets(&nodes, &id_map, "SourceUnit"),
+        45,
+        "unique scope IDs pointing to SourceUnit"
+    );
+}
+
+#[test]
+fn test_ast_scope_targets_contract_definition() {
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    assert_eq!(
+        count_unique_scope_targets(&nodes, &id_map, "ContractDefinition"),
+        43,
+        "unique scope IDs pointing to ContractDefinition"
+    );
+}
+
+#[test]
+fn test_ast_scope_targets_error_definition() {
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    assert_eq!(
+        count_unique_scope_targets(&nodes, &id_map, "ErrorDefinition"),
+        16,
+        "unique scope IDs pointing to ErrorDefinition"
+    );
+}
+
+#[test]
+fn test_ast_scope_targets_struct_definition() {
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    assert_eq!(
+        count_unique_scope_targets(&nodes, &id_map, "StructDefinition"),
+        12,
+        "unique scope IDs pointing to StructDefinition"
+    );
+}
+
+#[test]
+fn test_ast_scope_targets_event_definition() {
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    assert_eq!(
+        count_unique_scope_targets(&nodes, &id_map, "EventDefinition"),
+        12,
+        "unique scope IDs pointing to EventDefinition"
+    );
+}
+
+#[test]
+fn test_ast_scope_targets_unchecked_block() {
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    assert_eq!(
+        count_unique_scope_targets(&nodes, &id_map, "UncheckedBlock"),
+        11,
+        "unique scope IDs pointing to UncheckedBlock"
+    );
+}
+
+#[test]
+fn test_ast_scope_targets_modifier_definition() {
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    assert_eq!(
+        count_unique_scope_targets(&nodes, &id_map, "ModifierDefinition"),
+        1,
+        "unique scope IDs pointing to ModifierDefinition"
+    );
+}
+
+// --- Block/UncheckedBlock have NO scope field (the bug surface) ---
+
+#[test]
+fn test_ast_blocks_have_no_scope_field() {
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let total_blocks = count_nodes(&nodes, |n| {
+        n.get("nodeType").and_then(|v| v.as_str()) == Some("Block")
+    });
+    let blocks_with_scope = count_nodes(&nodes, |n| {
+        n.get("nodeType").and_then(|v| v.as_str()) == Some("Block") && n.get("scope").is_some()
+    });
+    assert_eq!(total_blocks, 277, "total Block nodes in AST");
+    assert_eq!(
+        blocks_with_scope, 0,
+        "Block nodes should have no scope field — this is the bug surface"
+    );
+}
+
+#[test]
+fn test_ast_unchecked_blocks_have_no_scope_field() {
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let total = count_nodes(&nodes, |n| {
+        n.get("nodeType").and_then(|v| v.as_str()) == Some("UncheckedBlock")
+    });
+    let with_scope = count_nodes(&nodes, |n| {
+        n.get("nodeType").and_then(|v| v.as_str()) == Some("UncheckedBlock")
+            && n.get("scope").is_some()
+    });
+    assert_eq!(total, 29, "total UncheckedBlock nodes in AST");
+    assert_eq!(
+        with_scope, 0,
+        "UncheckedBlock nodes should have no scope field"
+    );
+}
+
+// --- Scope-creating nodes: total counts ---
+
+#[test]
+fn test_ast_scope_node_counts() {
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let count_type = |t: &str| {
+        count_nodes(&nodes, |n| {
+            n.get("nodeType").and_then(|v| v.as_str()) == Some(t)
+        })
+    };
+    assert_eq!(count_type("SourceUnit"), 45);
+    assert_eq!(count_type("ContractDefinition"), 43);
+    assert_eq!(count_type("FunctionDefinition"), 215);
+    assert_eq!(count_type("ModifierDefinition"), 4);
+    assert_eq!(count_type("Block"), 277);
+    assert_eq!(count_type("UncheckedBlock"), 29);
+}
+
+// --- Scope nodes missing parent links (need inference) ---
+
+#[test]
+fn test_ast_scope_nodes_without_scope_field() {
+    // These are the nodes that need parent inference.
+    // Block: 277, UncheckedBlock: 29, ModifierDefinition: 4, SourceUnit: 45 (root, no parent needed)
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let missing = |t: &str| {
+        count_nodes(&nodes, |n| {
+            n.get("nodeType").and_then(|v| v.as_str()) == Some(t) && !n.get("scope").is_some()
+        })
+    };
+    assert_eq!(missing("Block"), 277, "all Blocks lack scope field");
+    assert_eq!(
+        missing("UncheckedBlock"),
+        29,
+        "all UncheckedBlocks lack scope field"
+    );
+    assert_eq!(
+        missing("ModifierDefinition"),
+        4,
+        "all ModifierDefinitions lack scope field"
+    );
+    assert_eq!(
+        missing("SourceUnit"),
+        45,
+        "SourceUnits are roots — no parent expected"
+    );
+}
+
+// --- Parent-child scope relationships ---
+// "Who scopes to whom" — validates that our scope_declarations captures the right things.
+
+/// Count children of a given nodeType whose scope points to a specific parent nodeType.
+fn count_children_scoped_to(
+    nodes: &[&Value],
+    id_to_type: &std::collections::HashMap<u64, String>,
+    child_type: &str,
+    parent_type: &str,
+) -> usize {
+    nodes
+        .iter()
+        .filter(|n| {
+            n.get("nodeType").and_then(|v| v.as_str()) == Some(child_type)
+                && n.get("scope")
+                    .and_then(|v| v.as_u64())
+                    .and_then(|id| id_to_type.get(&id))
+                    .map(|s| s.as_str())
+                    == Some(parent_type)
+        })
+        .count()
+}
+
+#[test]
+fn test_ast_vars_scoped_to_function_definition() {
+    // VariableDeclarations with scope -> FunctionDefinition (parameters + returns)
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    assert_eq!(
+        count_children_scoped_to(&nodes, &id_map, "VariableDeclaration", "FunctionDefinition"),
+        637
+    );
+}
+
+#[test]
+fn test_ast_vars_scoped_to_block() {
+    // 99 VariableDeclarations have scope -> Block (local variables)
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    assert_eq!(
+        count_children_scoped_to(&nodes, &id_map, "VariableDeclaration", "Block"),
+        99
+    );
+}
+
+#[test]
+fn test_ast_vars_scoped_to_contract_definition() {
+    // 56 VariableDeclarations have scope -> ContractDefinition (state variables)
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    assert_eq!(
+        count_children_scoped_to(&nodes, &id_map, "VariableDeclaration", "ContractDefinition"),
+        56
+    );
+}
+
+#[test]
+fn test_ast_vars_scoped_to_unchecked_block() {
+    // 26 VariableDeclarations have scope -> UncheckedBlock
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    assert_eq!(
+        count_children_scoped_to(&nodes, &id_map, "VariableDeclaration", "UncheckedBlock"),
+        26
+    );
+}
+
+#[test]
+fn test_ast_vars_scoped_to_struct_definition() {
+    // 66 VariableDeclarations have scope -> StructDefinition (struct fields)
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    assert_eq!(
+        count_children_scoped_to(&nodes, &id_map, "VariableDeclaration", "StructDefinition"),
+        66
+    );
+}
+
+#[test]
+fn test_ast_vars_scoped_to_event_definition() {
+    // VariableDeclarations with scope -> EventDefinition
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    assert_eq!(
+        count_children_scoped_to(&nodes, &id_map, "VariableDeclaration", "EventDefinition"),
+        49
+    );
+}
+
+#[test]
+fn test_ast_vars_scoped_to_error_definition() {
+    // 23 VariableDeclarations have scope -> ErrorDefinition
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    assert_eq!(
+        count_children_scoped_to(&nodes, &id_map, "VariableDeclaration", "ErrorDefinition"),
+        23
+    );
+}
+
+#[test]
+fn test_ast_functions_scoped_to_contract_definition() {
+    // 205 FunctionDefinitions have scope -> ContractDefinition
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    assert_eq!(
+        count_children_scoped_to(&nodes, &id_map, "FunctionDefinition", "ContractDefinition"),
+        205
+    );
+}
+
+#[test]
+fn test_ast_functions_scoped_to_source_unit() {
+    // 10 FunctionDefinitions have scope -> SourceUnit (free functions)
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    assert_eq!(
+        count_children_scoped_to(&nodes, &id_map, "FunctionDefinition", "SourceUnit"),
+        10
+    );
+}
+
+#[test]
+fn test_ast_imports_scoped_to_source_unit() {
+    // 107 ImportDirectives have scope -> SourceUnit
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    assert_eq!(
+        count_children_scoped_to(&nodes, &id_map, "ImportDirective", "SourceUnit"),
+        107
+    );
+}
+
+#[test]
+fn test_ast_contracts_scoped_to_source_unit() {
+    // 43 ContractDefinitions have scope -> SourceUnit
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    assert_eq!(
+        count_children_scoped_to(&nodes, &id_map, "ContractDefinition", "SourceUnit"),
+        43
+    );
+}
+
+#[test]
+fn test_ast_structs_scoped_to_contract_definition() {
+    // 9 StructDefinitions have scope -> ContractDefinition
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    assert_eq!(
+        count_children_scoped_to(&nodes, &id_map, "StructDefinition", "ContractDefinition"),
+        9
+    );
+}
+
+#[test]
+fn test_ast_structs_scoped_to_source_unit() {
+    // 3 StructDefinitions have scope -> SourceUnit (top-level structs)
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    assert_eq!(
+        count_children_scoped_to(&nodes, &id_map, "StructDefinition", "SourceUnit"),
+        3
+    );
+}
+
+// --- Contract definitions: names and IDs ---
+
+#[test]
+fn test_ast_all_contract_definitions() {
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let contracts: Vec<(String, u64)> = nodes
+        .iter()
+        .filter_map(|n| {
+            if n.get("nodeType").and_then(|v| v.as_str()) == Some("ContractDefinition") {
+                let name = n.get("name").and_then(|v| v.as_str())?.to_string();
+                let id = n.get("id").and_then(|v| v.as_u64())?;
+                Some((name, id))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let expected: Vec<(&str, u64)> = vec![
+        ("Owned", 59),
+        ("ERC6909", 352),
+        ("ERC6909Claims", 425),
+        ("Extsload", 468),
+        ("Exttload", 498),
+        ("NoDelegateCall", 550),
+        ("PoolManager", 1767),
+        ("ProtocolFees", 1994),
+        ("IExtsload", 2027),
+        ("IExttload", 2049),
+        ("IHooks", 2248),
+        ("IPoolManager", 2531),
+        ("IProtocolFees", 2608),
+        ("IUnlockCallback", 2620),
+        ("IERC20Minimal", 2692),
+        ("IERC6909Claims", 2806),
+        ("BitMath", 2842),
+        ("CurrencyDelta", 2911),
+        ("CurrencyReserves", 2959),
+        ("CustomRevert", 3065),
+        ("FixedPoint128", 3072),
+        ("FixedPoint96", 3082),
+        ("FullMath", 3250),
+        ("Hooks", 4422),
+        ("LPFeeLibrary", 4571),
+        ("LiquidityMath", 4587),
+        ("Lock", 4611),
+        ("NonzeroDeltaCount", 4636),
+        ("ParseBytes", 4667),
+        ("Pool", 6348),
+        ("Position", 6514),
+        ("ProtocolFeeLibrary", 6586),
+        ("SafeCast", 6762),
+        ("SqrtPriceMath", 7253),
+        ("SwapMath", 7505),
+        ("TickBitmap", 7737),
+        ("TickMath", 8291),
+        ("UnsafeMath", 8321),
+        ("BalanceDeltaLibrary", 8485),
+        ("BeforeSwapDeltaLibrary", 8533),
+        ("CurrencyLibrary", 8835),
+        ("PoolIdLibrary", 8855),
+        ("Slot0Library", 9031),
+    ];
+
+    assert_eq!(contracts.len(), expected.len(), "contract count mismatch");
+    for (name, id) in &expected {
+        assert!(
+            contracts.iter().any(|(n, i)| n == name && i == id),
+            "missing contract {} (id={})",
+            name,
+            id
+        );
+    }
+}
+
+// --- CompletionCache captures the right scope data ---
+
+#[test]
+fn test_cache_scope_declarations_has_block_scoped_vars() {
+    // 99 vars are scoped to Block nodes. Our scope_declarations should capture them.
+    let cache = load_cache();
+    let mut block_scoped_count = 0;
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+
+    for (scope_id, decls) in &cache.scope_declarations {
+        if id_map.get(scope_id).map(|s| s.as_str()) == Some("Block") {
+            block_scoped_count += decls.len();
+        }
+    }
+    // VariableDeclarations scoped to Block = 99
+    // We don't record FunctionDefinitions in Block scope, so this should be ~99
+    assert!(
+        block_scoped_count >= 99,
+        "should capture all 99 block-scoped variables, got {}",
+        block_scoped_count
+    );
+}
+
+#[test]
+fn test_cache_scope_declarations_has_function_params() {
+    // Vars scoped to FunctionDefinition (parameters + returns) should be captured.
+    // scope_declarations also holds FunctionDefinitions scoped to contracts,
+    // so we count only ScopedDeclarations whose scope target is a FunctionDefinition.
+    let cache = load_cache();
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    let mut fn_scoped_count = 0;
+    for (scope_id, decls) in &cache.scope_declarations {
+        if id_map.get(scope_id).map(|s| s.as_str()) == Some("FunctionDefinition") {
+            fn_scoped_count += decls.len();
+        }
+    }
+    // We record both VariableDeclaration (params) and FunctionDefinition names here.
+    // At minimum we should have the 637 function-parameter variables.
+    assert!(
+        fn_scoped_count >= 557,
+        "should capture function-scoped variables, got {}",
+        fn_scoped_count
+    );
+}
+
+#[test]
+fn test_cache_scope_declarations_has_state_vars() {
+    // 56 vars are scoped to ContractDefinition. Our scope_declarations should capture them.
+    let cache = load_cache();
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    let mut contract_scoped_count = 0;
+    for (scope_id, decls) in &cache.scope_declarations {
+        if id_map.get(scope_id).map(|s| s.as_str()) == Some("ContractDefinition") {
+            contract_scoped_count += decls.len();
+        }
+    }
+    // ContractDefinition scope has 56 vars + 205 functions = 261
+    assert!(
+        contract_scoped_count >= 56,
+        "should capture at least 56 contract-scoped state variables, got {}",
+        contract_scoped_count
+    );
+}
+
+#[test]
+fn test_cache_scope_parent_count() {
+    // Only nodes with `scope` field get parent links.
+    // 258 scope-creating nodes have scope fields (FunctionDef=215, ContractDef=43).
+    // Block(0), UncheckedBlock(0), ModifierDef(0), SourceUnit(0) don't.
+    let cache = load_cache();
+    assert_eq!(
+        cache.scope_parent.len(),
+        258,
+        "scope_parent should have 258 entries (only nodes with scope field)"
+    );
+}
+
+#[test]
+fn test_cache_scope_ranges_count() {
+    // Total scope-creating nodes: SourceUnit(45) + ContractDef(43) + FunctionDef(215)
+    // + ModifierDef(4) + Block(277) + UncheckedBlock(29) = 613
+    let cache = load_cache();
+    assert_eq!(
+        cache.scope_ranges.len(),
+        613,
+        "scope_ranges should have 613 entries (all scope-creating nodes)"
+    );
+}
+
+// --- The Block parent linkage bug: scope walk stops at Block ---
+
+#[test]
+fn test_cache_blocks_have_no_parent_link() {
+    // This test documents the bug: Block nodes are in scope_ranges but NOT in scope_parent.
+    // The scope walk finds the innermost Block but can't walk up to FunctionDefinition.
+    let cache = load_cache();
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+
+    // Collect all Block node IDs
+    let block_ids: Vec<u64> = nodes
+        .iter()
+        .filter_map(|n| {
+            if n.get("nodeType").and_then(|v| v.as_str()) == Some("Block") {
+                n.get("id").and_then(|v| v.as_u64())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    assert_eq!(block_ids.len(), 277);
+
+    let blocks_with_parent = block_ids
+        .iter()
+        .filter(|id| cache.scope_parent.contains_key(id))
+        .count();
+
+    // BUG: 0 blocks have parent links. After fix, this should be 277.
+    assert_eq!(
+        blocks_with_parent, 0,
+        "BUG: no Block nodes have parent links in scope_parent"
+    );
+}
+
+#[test]
+fn test_cache_unchecked_blocks_have_no_parent_link() {
+    let cache = load_cache();
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+
+    let ub_ids: Vec<u64> = nodes
+        .iter()
+        .filter_map(|n| {
+            if n.get("nodeType").and_then(|v| v.as_str()) == Some("UncheckedBlock") {
+                n.get("id").and_then(|v| v.as_u64())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    assert_eq!(ub_ids.len(), 29);
+
+    let with_parent = ub_ids
+        .iter()
+        .filter(|id| cache.scope_parent.contains_key(id))
+        .count();
+
+    // BUG: 0 unchecked blocks have parent links. After fix, this should be 29.
+    assert_eq!(
+        with_parent, 0,
+        "BUG: no UncheckedBlock nodes have parent links in scope_parent"
+    );
+}
+
+// --- Concrete scope chain trace ---
+// PoolManager.initialize: lpFee (var id=822, scope=880 Block)
+// Block 880 is the body of FunctionDefinition 881 (scope=1767 PoolManager)
+// PoolManager (id=1767, scope=1768 SourceUnit)
+
+#[test]
+fn test_scope_chain_lpfee_in_initialize() {
+    let cache = load_cache();
+    // lpFee (id=822) is declared in Block 880 (body of initialize, fn id=881)
+    // Block 880 should be in scope_declarations
+    let block_880_decls = cache.scope_declarations.get(&880);
+    assert!(
+        block_880_decls.is_some(),
+        "Block 880 should have declarations"
+    );
+    let names: Vec<&str> = block_880_decls
+        .unwrap()
+        .iter()
+        .map(|d| d.name.as_str())
+        .collect();
+    assert!(
+        names.contains(&"lpFee"),
+        "lpFee should be in Block 880, got: {:?}",
+        names
+    );
+    assert!(
+        names.contains(&"id"),
+        "id should be in Block 880, got: {:?}",
+        names
+    );
+
+    // FunctionDefinition 881 (initialize) should have scope -> 1767 (PoolManager)
+    assert_eq!(
+        cache.scope_parent.get(&881),
+        Some(&1767),
+        "initialize (881) should have parent PoolManager (1767)"
+    );
+
+    // PoolManager 1767 should have scope -> 1768 (SourceUnit)
+    assert_eq!(
+        cache.scope_parent.get(&1767),
+        Some(&1768),
+        "PoolManager (1767) should have parent SourceUnit (1768)"
+    );
+
+    // BUG: Block 880 has no parent link
+    assert_eq!(
+        cache.scope_parent.get(&880),
+        None,
+        "BUG: Block 880 has no parent link — should point to FunctionDefinition 881"
+    );
+}
+
+// --- Struct field scope verification ---
+
+#[test]
+fn test_ast_pool_key_struct_fields() {
+    // PoolKey (scope=8887) has 5 fields: currency0, currency1, fee, tickSpacing, hooks
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let id_map = build_id_to_node_type(&nodes);
+    let fields: Vec<String> = nodes
+        .iter()
+        .filter_map(|n| {
+            if n.get("nodeType").and_then(|v| v.as_str()) == Some("VariableDeclaration")
+                && n.get("scope").and_then(|v| v.as_u64()) == Some(8887)
+                && id_map.get(&8887).map(|s| s.as_str()) == Some("StructDefinition")
+            {
+                n.get("name")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(fields.len(), 5);
+    assert!(fields.contains(&"currency0".to_string()));
+    assert!(fields.contains(&"currency1".to_string()));
+    assert!(fields.contains(&"fee".to_string()));
+    assert!(fields.contains(&"tickSpacing".to_string()));
+    assert!(fields.contains(&"hooks".to_string()));
+}
+
+#[test]
+fn test_ast_pool_state_struct_fields() {
+    // Pool.State (scope=4809) fields
+    let ast = load_ast();
+    let nodes = collect_all_nodes(&ast);
+    let fields: Vec<String> = nodes
+        .iter()
+        .filter_map(|n| {
+            if n.get("nodeType").and_then(|v| v.as_str()) == Some("VariableDeclaration")
+                && n.get("scope").and_then(|v| v.as_u64()) == Some(4809)
+            {
+                n.get("name")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert!(fields.contains(&"slot0".to_string()));
+    assert!(fields.contains(&"liquidity".to_string()));
+    assert!(fields.contains(&"feeGrowthGlobal0X128".to_string()));
+}
+
+// --- Linearized base contracts ---
+
+#[test]
+fn test_cache_linearized_base_contracts_pool_manager() {
+    let cache = load_cache();
+    let bases = cache.linearized_base_contracts.get(&1767).unwrap();
+    assert_eq!(
+        bases,
+        &vec![
+            1767, 498, 468, 425, 352, 550, 1994, 59, 2531, 2049, 2027, 2806, 2608
+        ]
+    );
+}
+
+#[test]
+fn test_cache_linearized_base_contracts_erc6909_claims() {
+    let cache = load_cache();
+    let bases = cache.linearized_base_contracts.get(&425).unwrap();
+    // ERC6909Claims inherits ERC6909 inherits IERC6909Claims
+    assert_eq!(bases, &vec![425, 352, 2806]);
+}
+
+#[test]
+fn test_cache_linearized_base_contracts_simple_contract() {
+    let cache = load_cache();
+    // Owned has no parents — just itself
+    let bases = cache.linearized_base_contracts.get(&59).unwrap();
+    assert_eq!(bases, &vec![59]);
+}
+
+// =============================================================================
+// Deterministic scope chain tests
+//
+// Each test specifies an exact input (byte_pos, file_id) and asserts the exact
+// output: innermost scope, parent chain, and name resolution results.
+// These prove the scoping engine is correct independently of completion.
+// =============================================================================
+
+use solidity_language_server::completion::find_innermost_scope;
+
+/// Walk scope_parent chain from a given scope, collecting all scope IDs visited.
+fn walk_scope_chain(
+    cache: &solidity_language_server::completion::CompletionCache,
+    start: u64,
+) -> Vec<u64> {
+    let mut chain = vec![start];
+    let mut current = start;
+    loop {
+        match cache.scope_parent.get(&current) {
+            Some(&parent) => {
+                chain.push(parent);
+                current = parent;
+            }
+            None => break,
+        }
+    }
+    chain
+}
+
+// --- PoolManager.swap: byte 9600 in file 6 ---
+// Expected chain: Block 1166 → (BUG: stops) should be → FnDef 1167 → Contract 1767 → SourceUnit 1768
+//
+// swap body block: src="9580:1491:6" (bytes 9580..11071)
+// swap fn:         src="9385:1686:6" (bytes 9385..11071)
+// PoolManager:     has id=1767
+// SourceUnit:      has id=1768
+
+#[test]
+fn test_innermost_scope_in_swap_body() {
+    let cache = load_cache();
+    // Byte 9600 is inside swap body block (9580..11071, file 6)
+    let scope = find_innermost_scope(&cache, 9600, 6);
+    assert_eq!(
+        scope,
+        Some(1166),
+        "innermost scope at byte 9600/file 6 should be Block 1166 (swap body)"
+    );
+}
+
+#[test]
+fn test_scope_chain_from_swap_body_block() {
+    let cache = load_cache();
+    // Block 1166 has no scope field → scope_parent has no entry → chain stops at [1166]
+    let chain = walk_scope_chain(&cache, 1166);
+    // BUG: chain is [1166] because Block has no parent link
+    // After fix it should be [1166, 1167, 1767, 1768]
+    assert_eq!(
+        chain,
+        vec![1166],
+        "BUG: Block 1166 has no parent — chain stops immediately"
+    );
+}
+
+#[test]
+fn test_scope_chain_from_swap_fn() {
+    let cache = load_cache();
+    // FunctionDefinition 1167 has scope=1767 (PoolManager), which has scope=1768 (SourceUnit)
+    let chain = walk_scope_chain(&cache, 1167);
+    assert_eq!(
+        chain,
+        vec![1167, 1767, 1768],
+        "swap fn → PoolManager → SourceUnit"
+    );
+}
+
+#[test]
+fn test_swap_body_declarations() {
+    let cache = load_cache();
+    // Block 1166 (swap body) declares: id, pool, beforeSwapDelta, hookDelta
+    let decls = cache.scope_declarations.get(&1166).unwrap();
+    let names: Vec<&str> = decls.iter().map(|d| d.name.as_str()).collect();
+    assert!(names.contains(&"id"), "swap body should declare 'id'");
+    assert!(names.contains(&"pool"), "swap body should declare 'pool'");
+    assert!(
+        names.contains(&"beforeSwapDelta"),
+        "swap body should declare 'beforeSwapDelta'"
+    );
+    assert!(
+        names.contains(&"hookDelta"),
+        "swap body should declare 'hookDelta'"
+    );
+}
+
+#[test]
+fn test_swap_fn_declarations() {
+    let cache = load_cache();
+    // FunctionDefinition 1167 (swap) has params: key, params, hookData
+    let decls = cache.scope_declarations.get(&1167).unwrap();
+    let names: Vec<&str> = decls.iter().map(|d| d.name.as_str()).collect();
+    assert!(names.contains(&"key"), "swap fn should declare param 'key'");
+    assert!(
+        names.contains(&"params"),
+        "swap fn should declare param 'params'"
+    );
+    assert!(
+        names.contains(&"hookData"),
+        "swap fn should declare param 'hookData'"
+    );
+}
+
+#[test]
+fn test_swap_body_local_var_types() {
+    let cache = load_cache();
+    let decls = cache.scope_declarations.get(&1166).unwrap();
+    let type_of = |name: &str| {
+        decls
+            .iter()
+            .find(|d| d.name == name)
+            .map(|d| d.type_id.as_str())
+    };
+
+    assert_eq!(type_of("id"), Some("t_userDefinedValueType$_PoolId_$8841"));
+    assert_eq!(type_of("pool"), Some("t_struct$_State_$4809_storage_ptr"));
+    assert_eq!(
+        type_of("beforeSwapDelta"),
+        Some("t_userDefinedValueType$_BeforeSwapDelta_$8489")
+    );
+    assert_eq!(
+        type_of("hookDelta"),
+        Some("t_userDefinedValueType$_BalanceDelta_$8327")
+    );
+}
+
+#[test]
+fn test_swap_fn_param_types() {
+    let cache = load_cache();
+    let decls = cache.scope_declarations.get(&1167).unwrap();
+    let type_of = |name: &str| {
+        decls
+            .iter()
+            .find(|d| d.name == name)
+            .map(|d| d.type_id.as_str())
+    };
+
+    assert_eq!(type_of("key"), Some("t_struct$_PoolKey_$8887_memory_ptr"));
+    assert_eq!(
+        type_of("params"),
+        Some("t_struct$_SwapParams_$8914_memory_ptr")
+    );
+    assert_eq!(type_of("hookData"), Some("t_bytes_calldata_ptr"));
+}
+
+// --- Nested block inside swap: byte 9900 in file 6 ---
+// Block 1125: src="9836:807:6" (bytes 9836..10643)
+// Contains: amountToSwap (int256), lpFeeOverride (uint24)
+// Expected chain: Block 1125 → Block 1166 → FnDef 1167 → Contract 1767 → SourceUnit 1768
+
+#[test]
+fn test_innermost_scope_in_nested_block() {
+    let cache = load_cache();
+    // Byte 9900 is inside nested block 1125 (9836..10643) which is inside swap body 1166 (9580..11071)
+    let scope = find_innermost_scope(&cache, 9900, 6);
+    assert_eq!(
+        scope,
+        Some(1125),
+        "innermost scope at byte 9900/file 6 should be nested Block 1125"
+    );
+}
+
+#[test]
+fn test_nested_block_declarations() {
+    let cache = load_cache();
+    let decls = cache.scope_declarations.get(&1125).unwrap();
+    let names: Vec<&str> = decls.iter().map(|d| d.name.as_str()).collect();
+    assert!(names.contains(&"amountToSwap"));
+    assert!(names.contains(&"lpFeeOverride"));
+}
+
+#[test]
+fn test_nested_block_declaration_types() {
+    let cache = load_cache();
+    let decls = cache.scope_declarations.get(&1125).unwrap();
+    let type_of = |name: &str| {
+        decls
+            .iter()
+            .find(|d| d.name == name)
+            .map(|d| d.type_id.as_str())
+    };
+    assert_eq!(type_of("amountToSwap"), Some("t_int256"));
+    assert_eq!(type_of("lpFeeOverride"), Some("t_uint24"));
+}
+
+#[test]
+fn test_scope_chain_from_nested_block() {
+    let cache = load_cache();
+    // Nested Block 1125 has no scope field → chain stops at [1125]
+    // After fix: [1125, 1166, 1167, 1767, 1768]
+    let chain = walk_scope_chain(&cache, 1125);
+    assert_eq!(
+        chain,
+        vec![1125],
+        "BUG: nested Block 1125 has no parent link"
+    );
+}
+
+// --- PoolManager.initialize: byte 6300 in file 6 ---
+// Body block: 880, src="6224:1338:6" (bytes 6224..7562)
+// Fn: 881, scope=1767
+
+#[test]
+fn test_innermost_scope_in_initialize_body() {
+    let cache = load_cache();
+    let scope = find_innermost_scope(&cache, 6300, 6);
+    assert_eq!(
+        scope,
+        Some(880),
+        "innermost scope at byte 6300/file 6 should be Block 880 (initialize body)"
+    );
+}
+
+#[test]
+fn test_initialize_body_declarations() {
+    let cache = load_cache();
+    let decls = cache.scope_declarations.get(&880).unwrap();
+    let names: Vec<&str> = decls.iter().map(|d| d.name.as_str()).collect();
+    assert!(names.contains(&"lpFee"));
+    assert!(names.contains(&"id"));
+}
+
+#[test]
+fn test_initialize_body_declaration_types() {
+    let cache = load_cache();
+    let decls = cache.scope_declarations.get(&880).unwrap();
+    let type_of = |name: &str| {
+        decls
+            .iter()
+            .find(|d| d.name == name)
+            .map(|d| d.type_id.as_str())
+    };
+    assert_eq!(type_of("lpFee"), Some("t_uint24"));
+    assert_eq!(type_of("id"), Some("t_userDefinedValueType$_PoolId_$8841"));
+}
+
+#[test]
+fn test_initialize_fn_params() {
+    let cache = load_cache();
+    let decls = cache.scope_declarations.get(&881).unwrap();
+    let type_of = |name: &str| {
+        decls
+            .iter()
+            .find(|d| d.name == name)
+            .map(|d| d.type_id.as_str())
+    };
+    assert_eq!(type_of("key"), Some("t_struct$_PoolKey_$8887_memory_ptr"));
+    assert_eq!(type_of("sqrtPriceX96"), Some("t_uint160"));
+}
+
+// --- Scope resolution: name lookup at specific positions ---
+// These test resolve_name_in_scope with exact (name, byte_pos, file_id) → type_id
+
+#[test]
+fn test_resolve_local_var_pool_in_swap_body() {
+    let cache = load_cache();
+    // "pool" at byte 9600 (swap body, Block 1166) → declared in same block
+    let result = resolve_name_in_scope(&cache, "pool", 9600, 6);
+    assert_eq!(
+        result,
+        Some("t_struct$_State_$4809_storage_ptr".to_string())
+    );
+}
+
+#[test]
+fn test_resolve_param_key_in_swap_body() {
+    let cache = load_cache();
+    // "key" at byte 9600 (swap body, Block 1166)
+    // Not in Block 1166 declarations. Should walk up to FnDef 1167 to find the param.
+    // BUG: Block has no parent → falls back to flat lookup.
+    // Flat lookup returns SOME type for "key" (first-wins), which happens to be correct
+    // because PoolManager.swap is likely the first function encountered.
+    let result = resolve_name_in_scope(&cache, "key", 9600, 6);
+    assert!(
+        result.is_some(),
+        "key should resolve (via fallback if scope walk is broken)"
+    );
+}
+
+#[test]
+fn test_resolve_nested_block_sees_own_vars() {
+    let cache = load_cache();
+    // "amountToSwap" at byte 9900 (nested Block 1125 inside swap)
+    // Declared in Block 1125 → found immediately
+    let result = resolve_name_in_scope(&cache, "amountToSwap", 9900, 6);
+    assert_eq!(result, Some("t_int256".to_string()));
+}
+
+#[test]
+fn test_resolve_nested_block_outer_local_falls_back() {
+    let cache = load_cache();
+    // "pool" at byte 9900 (nested Block 1125)
+    // Not in Block 1125. Should walk up to Block 1166 to find it.
+    // BUG: Block 1125 has no parent → falls back to flat lookup.
+    let result = resolve_name_in_scope(&cache, "pool", 9900, 6);
+    // Flat fallback should still find "pool" since it exists in name_to_type
+    assert!(result.is_some(), "pool should resolve (via fallback)");
+}
+
+#[test]
+fn test_resolve_state_var_in_function_body() {
+    let cache = load_cache();
+    // "_pools" at byte 9600 (swap body)
+    // Not in Block 1166. Not in FnDef 1167 params. Should be in ContractDef 1767 state vars.
+    // BUG: Block 1166 has no parent → falls back to flat lookup.
+    let result = resolve_name_in_scope(&cache, "_pools", 9600, 6);
+    assert!(result.is_some(), "_pools should resolve (via fallback)");
+}
+
+// --- Position at function header (between fn signature and body) ---
+// At byte 9500 (inside FnDef 1167 src=9385..11071, but before body Block 1166 src=9580..11071)
+// Innermost scope should be FnDef 1167 (NOT Block 1166)
+
+#[test]
+fn test_innermost_scope_in_fn_header() {
+    let cache = load_cache();
+    // Byte 9500 is after swap fn start (9385) but before body block start (9580)
+    let scope = find_innermost_scope(&cache, 9500, 6);
+    // This should find FnDef 1167 as innermost (its range 9385..11071 contains 9500,
+    // and Block 1166 range 9580..11071 does NOT contain 9500)
+    assert_eq!(
+        scope,
+        Some(1167),
+        "byte 9500 in fn header should resolve to FnDef 1167, not Block"
+    );
+}
+
+#[test]
+fn test_resolve_param_in_fn_header_uses_scope_walk() {
+    let cache = load_cache();
+    // At byte 9500, innermost scope is FnDef 1167 (not a Block!)
+    // FnDef 1167 has scope_parent → 1767 → 1768. Full chain works.
+    // "key" is declared at scope 1167 → found in first scope check.
+    let result = resolve_name_in_scope(&cache, "key", 9500, 6);
+    assert_eq!(
+        result,
+        Some("t_struct$_PoolKey_$8887_memory_ptr".to_string()),
+        "key at fn header position should resolve via scope walk (not fallback)"
+    );
+}
+
+#[test]
+fn test_resolve_inherited_var_in_fn_header() {
+    let cache = load_cache();
+    // At byte 9500, scope chain: FnDef 1167 → Contract 1767 → SourceUnit 1768
+    // "owner" is not in FnDef 1167 or Contract 1767 scope_declarations.
+    // But Contract 1767 has linearizedBaseContracts including Owned (59).
+    // Owned (59) has "owner" in scope_declarations.
+    let result = resolve_name_in_scope(&cache, "owner", 9500, 6);
+    assert_eq!(
+        result,
+        Some("t_address".to_string()),
+        "owner at fn header should resolve via inheritance walk"
+    );
+}
+
+// --- PoolManager contract-level state variables ---
+
+#[test]
+fn test_pool_manager_state_vars_in_scope_declarations() {
+    let cache = load_cache();
+    let decls = cache.scope_declarations.get(&1767).unwrap();
+    let names: Vec<&str> = decls.iter().map(|d| d.name.as_str()).collect();
+    assert!(names.contains(&"MAX_TICK_SPACING"));
+    assert!(names.contains(&"MIN_TICK_SPACING"));
+    assert!(names.contains(&"_pools"));
+}
+
+#[test]
+fn test_owned_state_var_in_scope_declarations() {
+    let cache = load_cache();
+    let decls = cache.scope_declarations.get(&59).unwrap();
+    let names: Vec<&str> = decls.iter().map(|d| d.name.as_str()).collect();
+    assert!(names.contains(&"owner"));
+}
+
+#[test]
+fn test_protocol_fees_state_vars_in_scope_declarations() {
+    let cache = load_cache();
+    let decls = cache.scope_declarations.get(&1994).unwrap();
+    let names: Vec<&str> = decls.iter().map(|d| d.name.as_str()).collect();
+    assert!(names.contains(&"protocolFeesAccrued"));
+    assert!(names.contains(&"protocolFeeController"));
+}

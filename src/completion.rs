@@ -1180,7 +1180,7 @@ fn resolve_name_to_type_id(cache: &CompletionCache, name: &str) -> Option<String
 /// Find the innermost scope node that contains the given byte position and file.
 /// `scope_ranges` must be sorted by span size ascending (smallest first).
 /// Returns the node_id of the smallest scope enclosing the position.
-fn find_innermost_scope(cache: &CompletionCache, byte_pos: usize, file_id: u64) -> Option<u64> {
+pub fn find_innermost_scope(cache: &CompletionCache, byte_pos: usize, file_id: u64) -> Option<u64> {
     // scope_ranges is sorted smallest-first, so the first match is the innermost scope
     cache
         .scope_ranges
