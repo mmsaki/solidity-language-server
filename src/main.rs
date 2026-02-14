@@ -6,10 +6,10 @@ use tracing::info;
 
 #[derive(Clone, Debug, clap::ValueEnum)]
 pub enum CompletionMode {
-    /// Pre-built completions, zero per-request computation (default)
-    Fast,
-    /// Full completions with per-request scope filtering (for power users)
+    /// Scope-aware completions with inheritance resolution (default)
     Full,
+    /// Flat type resolution for dot completions (no scope awareness)
+    Fast,
 }
 
 #[derive(Clone, Debug, Parser)]
@@ -22,7 +22,7 @@ pub struct LspArgs {
     pub stdio: bool,
     #[arg(long)]
     pub use_solar: bool,
-    #[arg(long, value_enum, default_value_t = CompletionMode::Fast)]
+    #[arg(long, value_enum, default_value_t = CompletionMode::Full)]
     pub completion_mode: CompletionMode,
 }
 

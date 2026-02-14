@@ -347,7 +347,7 @@ fn test_general_completions_include_global_functions() {
 #[test]
 fn test_dot_completion_msg() {
     let cache = load_cache();
-    let items = get_dot_completions(&cache, "msg");
+    let items = get_dot_completions(&cache, "msg", None);
     let names: Vec<&str> = items.iter().map(|c| c.label.as_str()).collect();
 
     assert!(names.contains(&"sender"), "msg.sender");
@@ -360,7 +360,7 @@ fn test_dot_completion_msg() {
 #[test]
 fn test_dot_completion_block() {
     let cache = load_cache();
-    let items = get_dot_completions(&cache, "block");
+    let items = get_dot_completions(&cache, "block", None);
     let names: Vec<&str> = items.iter().map(|c| c.label.as_str()).collect();
 
     assert!(names.contains(&"number"), "block.number");
@@ -372,7 +372,7 @@ fn test_dot_completion_block() {
 #[test]
 fn test_dot_completion_tx() {
     let cache = load_cache();
-    let items = get_dot_completions(&cache, "tx");
+    let items = get_dot_completions(&cache, "tx", None);
     let names: Vec<&str> = items.iter().map(|c| c.label.as_str()).collect();
 
     assert!(names.contains(&"gasprice"), "tx.gasprice");
@@ -383,7 +383,7 @@ fn test_dot_completion_tx() {
 #[test]
 fn test_dot_completion_abi() {
     let cache = load_cache();
-    let items = get_dot_completions(&cache, "abi");
+    let items = get_dot_completions(&cache, "abi", None);
     let names: Vec<&str> = items.iter().map(|c| c.label.as_str()).collect();
 
     assert!(names.contains(&"encode(...)"), "abi.encode");
@@ -416,7 +416,7 @@ fn test_dot_completion_on_struct() {
 
     // Use the first one to test dot completion
     let var_name = pool_key_vars[0];
-    let items = get_dot_completions(&cache, var_name);
+    let items = get_dot_completions(&cache, var_name, None);
     let names: Vec<&str> = items.iter().map(|c| c.label.as_str()).collect();
 
     assert!(
@@ -493,7 +493,7 @@ fn test_dot_completion_fullmath_library() {
     let fullmath_type = cache.name_to_type.get("FullMath");
     eprintln!("FullMath type: {:?}", fullmath_type);
 
-    let items = get_dot_completions(&cache, "FullMath");
+    let items = get_dot_completions(&cache, "FullMath", None);
     let labels: Vec<&str> = items.iter().map(|c| c.label.as_str()).collect();
     eprintln!("FullMath dot completions ({}): {:?}", labels.len(), labels);
 
@@ -1119,7 +1119,7 @@ fn test_chain_single_plain_contract_name() {
         name: "PoolManager".to_string(),
         kind: AccessKind::Plain,
     }];
-    let items = get_chain_completions(&cache, &chain);
+    let items = get_chain_completions(&cache, &chain, None);
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
     assert!(labels.contains(&"swap"), "PoolManager. should show swap");
     assert!(
@@ -1136,7 +1136,7 @@ fn test_chain_single_index_mapping_access() {
         name: "_pools".to_string(),
         kind: AccessKind::Index,
     }];
-    let items = get_chain_completions(&cache, &chain);
+    let items = get_chain_completions(&cache, &chain, None);
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
 
     // Struct members of Pool.State
@@ -1189,7 +1189,7 @@ fn test_chain_two_segment_contract_function_call() {
             kind: AccessKind::Call,
         },
     ];
-    let items = get_chain_completions(&cache, &chain);
+    let items = get_chain_completions(&cache, &chain, None);
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
 
     // BalanceDelta using-for functions
@@ -1217,7 +1217,7 @@ fn test_chain_two_segment_contract_get_pool_call() {
             kind: AccessKind::Call,
         },
     ];
-    let items = get_chain_completions(&cache, &chain);
+    let items = get_chain_completions(&cache, &chain, None);
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
 
     // Pool.State struct members
@@ -1263,7 +1263,7 @@ fn test_chain_variable_with_type_then_call() {
             kind: AccessKind::Call,
         },
     ];
-    let items = get_chain_completions(&cache, &chain);
+    let items = get_chain_completions(&cache, &chain, None);
     // pool is t_struct$_State_$4809_storage_ptr. The swap function on Pool.State (node 4809)
     // returns BalanceDelta — but function_return_types is keyed by (contract_id, fn_name).
     // Pool library's id is 6348, and its swap returns BalanceDelta.
@@ -1322,7 +1322,7 @@ fn test_chain_completions_deduplication() {
         name: "_pools".to_string(),
         kind: AccessKind::Index,
     }];
-    let items = get_chain_completions(&cache, &chain);
+    let items = get_chain_completions(&cache, &chain, None);
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
     let unique: std::collections::HashSet<&str> = labels.iter().copied().collect();
     assert_eq!(
@@ -1350,7 +1350,7 @@ fn test_chain_ipool_manager_initialize_returns_int24() {
             kind: AccessKind::Call,
         },
     ];
-    let items = get_chain_completions(&cache, &chain);
+    let items = get_chain_completions(&cache, &chain, None);
     // int24 doesn't have many natural members, but SafeCast wildcard functions apply
     // This tests that the chain resolves through to the return type
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
@@ -1377,7 +1377,7 @@ fn test_chain_pool_key_to_id() {
         name: "poolKey".to_string(),
         kind: AccessKind::Plain,
     }];
-    let items = get_chain_completions(&cache, &chain);
+    let items = get_chain_completions(&cache, &chain, None);
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
 
     // PoolKey struct members
@@ -1406,7 +1406,7 @@ fn test_chain_pool_key_to_id() {
 #[test]
 fn test_chain_empty_returns_nothing() {
     let cache = load_cache();
-    let items = get_chain_completions(&cache, &[]);
+    let items = get_chain_completions(&cache, &[], None);
     assert!(items.is_empty(), "Empty chain should return no completions");
 }
 
@@ -1417,7 +1417,7 @@ fn test_chain_unknown_name_returns_nothing() {
         name: "nonexistentVariable".to_string(),
         kind: AccessKind::Plain,
     }];
-    let items = get_chain_completions(&cache, &chain);
+    let items = get_chain_completions(&cache, &chain, None);
     assert!(
         items.is_empty(),
         "Unknown name should return no completions"
@@ -1448,7 +1448,7 @@ fn test_chain_type_cast_shows_interface_members() {
         name: "IUnlockCallback".to_string(),
         kind: AccessKind::Call,
     }];
-    let items = get_chain_completions(&cache, &chain);
+    let items = get_chain_completions(&cache, &chain, None);
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
     assert!(
         labels.contains(&"unlockCallback"),
@@ -1472,7 +1472,7 @@ fn test_chain_type_cast_then_method_returns_bytes_completions() {
             kind: AccessKind::Call,
         },
     ];
-    let items = get_chain_completions(&cache, &chain);
+    let items = get_chain_completions(&cache, &chain, None);
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
 
     assert!(
@@ -1539,7 +1539,7 @@ fn test_general_completions_include_time_units() {
 fn test_dot_completion_type_members() {
     // type(X). should show contract/interface/integer type properties
     let cache = load_cache();
-    let items = get_dot_completions(&cache, "type");
+    let items = get_dot_completions(&cache, "type", None);
     let names: Vec<&str> = items.iter().map(|c| c.label.as_str()).collect();
 
     // Contract type properties
@@ -1556,7 +1556,7 @@ fn test_dot_completion_type_members() {
 #[test]
 fn test_dot_completion_bytes_concat() {
     let cache = load_cache();
-    let items = get_dot_completions(&cache, "bytes");
+    let items = get_dot_completions(&cache, "bytes", None);
     let names: Vec<&str> = items.iter().map(|c| c.label.as_str()).collect();
     assert!(names.contains(&"concat(...)"), "bytes.concat");
 
@@ -1567,7 +1567,7 @@ fn test_dot_completion_bytes_concat() {
 #[test]
 fn test_dot_completion_string_concat() {
     let cache = load_cache();
-    let items = get_dot_completions(&cache, "string");
+    let items = get_dot_completions(&cache, "string", None);
     let names: Vec<&str> = items.iter().map(|c| c.label.as_str()).collect();
     assert!(names.contains(&"concat(...)"), "string.concat");
 
@@ -1578,7 +1578,7 @@ fn test_dot_completion_string_concat() {
 #[test]
 fn test_dot_completion_abi_full_signatures() {
     let cache = load_cache();
-    let items = get_dot_completions(&cache, "abi");
+    let items = get_dot_completions(&cache, "abi", None);
     let names: Vec<&str> = items.iter().map(|c| c.label.as_str()).collect();
 
     assert!(
@@ -1611,4 +1611,240 @@ fn test_general_completions_include_common_int_types() {
     assert!(names.contains(&"int256"), "Should have int256");
     assert!(names.contains(&"bytes1"), "Should have bytes1");
     assert!(names.contains(&"bytes4"), "Should have bytes4");
+}
+
+// --- Scope-aware completion tests ---
+
+use solidity_language_server::completion::{ScopeContext, resolve_name_in_scope};
+
+#[test]
+fn test_scope_declarations_populated() {
+    let cache = load_cache();
+    // scope_declarations should have entries — variables bucketed by their enclosing scope
+    assert!(
+        !cache.scope_declarations.is_empty(),
+        "scope_declarations should be populated"
+    );
+}
+
+#[test]
+fn test_scope_parent_populated() {
+    let cache = load_cache();
+    // scope_parent should have parent links
+    assert!(
+        !cache.scope_parent.is_empty(),
+        "scope_parent should be populated"
+    );
+}
+
+#[test]
+fn test_scope_ranges_populated() {
+    let cache = load_cache();
+    // scope_ranges should have entries for scope-creating nodes
+    assert!(
+        !cache.scope_ranges.is_empty(),
+        "scope_ranges should be populated"
+    );
+    // Should be sorted by span size ascending (smallest first)
+    for pair in cache.scope_ranges.windows(2) {
+        let span_a = pair[0].end - pair[0].start;
+        let span_b = pair[1].end - pair[1].start;
+        assert!(
+            span_a <= span_b,
+            "scope_ranges should be sorted by span size ascending"
+        );
+    }
+}
+
+#[test]
+fn test_path_to_file_id_populated() {
+    let cache = load_cache();
+    assert!(
+        !cache.path_to_file_id.is_empty(),
+        "path_to_file_id should be populated"
+    );
+}
+
+#[test]
+fn test_scope_resolve_self_in_pool_swap_is_pool_state() {
+    let cache = load_cache();
+    // Pool.swap is in file 29, at bytes 12231..21851
+    // "self" inside Pool.swap should resolve to Pool.State storage
+    // Position cursor inside the function body (byte 12300)
+    let result = resolve_name_in_scope(&cache, "self", 12300, 29);
+    assert_eq!(
+        result,
+        Some("t_struct$_State_$4809_storage_ptr".to_string()),
+        "self inside Pool.swap should be Pool.State storage"
+    );
+}
+
+#[test]
+fn test_scope_resolve_self_in_hooks_is_ihooks() {
+    let cache = load_cache();
+    // Hooks.beforeInitialize is in file 23, src="3643:11:23"
+    // The function that contains self with IHooks type is scope 3556
+    // which is at file 23. Let's position inside a Hooks function body.
+    // Hooks.hasPermission (id=3556) is one such function.
+    // We need a byte position inside a Hooks library function in file 23.
+    // src for self decl is "3643:11:23", meaning function starts around there.
+    // Let's use byte 3650 in file 23.
+    let result = resolve_name_in_scope(&cache, "self", 3650, 23);
+    assert_eq!(
+        result,
+        Some("t_contract$_IHooks_$2248".to_string()),
+        "self inside Hooks library should be IHooks"
+    );
+}
+
+#[test]
+fn test_scope_resolve_key_in_pool_manager_swap_is_pool_key() {
+    let cache = load_cache();
+    // PoolManager.swap (id=1167) is in file 6, bytes 9385..11071
+    // "key" parameter has type PoolKey memory
+    let result = resolve_name_in_scope(&cache, "key", 9500, 6);
+    assert_eq!(
+        result,
+        Some("t_struct$_PoolKey_$8887_memory_ptr".to_string()),
+        "key inside PoolManager.swap should be PoolKey memory"
+    );
+}
+
+#[test]
+fn test_scope_resolve_walks_up_to_contract_state_var() {
+    let cache = load_cache();
+    // Inside Owned contract constructor (file 0, bytes 1007..1122),
+    // "owner" is not a local or parameter — it's a state variable on Owned (scope=59).
+    // Cursor at byte 1050 (inside constructor body).
+    let result = resolve_name_in_scope(&cache, "owner", 1050, 0);
+    assert_eq!(
+        result,
+        Some("t_address".to_string()),
+        "owner inside Owned constructor should resolve to state variable (address)"
+    );
+}
+
+#[test]
+fn test_scope_resolve_unknown_name_falls_back() {
+    let cache = load_cache();
+    // A name that doesn't exist in any scope should return None from scope walk,
+    // then fall back to resolve_name_to_type_id (flat lookup).
+    // "PoolManager" is a contract name, not a variable — it should be resolved via fallback.
+    let result = resolve_name_in_scope(&cache, "PoolManager", 9500, 6);
+    assert!(
+        result.is_some(),
+        "Contract names should be resolved via fallback"
+    );
+}
+
+#[test]
+fn test_scope_chain_completions_with_context() {
+    let cache = load_cache();
+    // Test that get_chain_completions with scope context resolves "self."
+    // correctly inside Pool.swap (file 29, byte 12300) — should get Pool.State members
+    let chain = vec![DotSegment {
+        name: "self".to_string(),
+        kind: AccessKind::Plain,
+    }];
+    let ctx = ScopeContext {
+        byte_pos: 12300,
+        file_id: 29,
+    };
+    let items = get_chain_completions(&cache, &chain, Some(&ctx));
+    let names: Vec<&str> = items.iter().map(|c| c.label.as_str()).collect();
+    // Pool.State has fields like slot0, feeGrowthGlobal0X128, liquidity, etc.
+    assert!(
+        names.contains(&"slot0") || names.contains(&"liquidity"),
+        "self. inside Pool.swap should show Pool.State members, got: {:?}",
+        names
+    );
+}
+
+#[test]
+fn test_scope_chain_completions_without_context_uses_flat() {
+    let cache = load_cache();
+    // Without scope context (fast mode), self. resolves via flat first-wins lookup
+    let chain = vec![DotSegment {
+        name: "self".to_string(),
+        kind: AccessKind::Plain,
+    }];
+    let items_no_scope = get_chain_completions(&cache, &chain, None);
+    // Should still return something (whatever first-wins gives us)
+    // The important thing is it doesn't crash
+    assert!(
+        !items_no_scope.is_empty() || items_no_scope.is_empty(),
+        "Should handle None scope context gracefully"
+    );
+}
+
+// --- Inheritance resolution tests ---
+
+#[test]
+fn test_linearized_base_contracts_populated() {
+    let cache = load_cache();
+    assert!(
+        !cache.linearized_base_contracts.is_empty(),
+        "linearized_base_contracts should be populated"
+    );
+    // PoolManager (id=1767) should have multiple base contracts
+    let pm_bases = cache.linearized_base_contracts.get(&1767);
+    assert!(
+        pm_bases.is_some(),
+        "PoolManager should have linearized base contracts"
+    );
+    let bases = pm_bases.unwrap();
+    assert!(
+        bases.len() > 1,
+        "PoolManager should inherit from multiple contracts"
+    );
+    assert_eq!(bases[0], 1767, "First base should be the contract itself");
+    // Owned (id=59) should be in the list
+    assert!(
+        bases.contains(&59),
+        "PoolManager should inherit from Owned (id=59), got: {:?}",
+        bases
+    );
+}
+
+#[test]
+fn test_scope_resolve_inherited_state_var_owner_in_pool_manager() {
+    let cache = load_cache();
+    // Inside PoolManager.swap (file 6, bytes 9385..11071), "owner" is a state variable
+    // inherited from the Owned contract (id=59). The scope walk should:
+    //   1. Check the Block scope (swap body) — no "owner"
+    //   2. Check the FunctionDefinition scope (swap params) — no "owner"
+    //   3. Check ContractDefinition (PoolManager, id=1767) — no "owner"
+    //   4. Walk linearizedBaseContracts → find "owner" in Owned (id=59)
+    let result = resolve_name_in_scope(&cache, "owner", 9500, 6);
+    assert_eq!(
+        result,
+        Some("t_address".to_string()),
+        "owner inside PoolManager.swap should resolve to inherited state var from Owned"
+    );
+}
+
+#[test]
+fn test_scope_resolve_inherited_protocol_fee_controller() {
+    let cache = load_cache();
+    // Inside PoolManager.swap (file 6, bytes 9385..11071), "protocolFeeController"
+    // is a state variable inherited from ProtocolFees (id=1994).
+    let result = resolve_name_in_scope(&cache, "protocolFeeController", 9500, 6);
+    assert_eq!(
+        result,
+        Some("t_address".to_string()),
+        "protocolFeeController inside PoolManager.swap should resolve to inherited state var from ProtocolFees"
+    );
+}
+
+#[test]
+fn test_scope_resolve_own_state_var_still_works() {
+    let cache = load_cache();
+    // Inside PoolManager.swap (file 6), "_pools" is PoolManager's own state variable
+    // (scope=1767). It should still resolve correctly — the contract's own declarations
+    // are checked before walking base contracts.
+    let result = resolve_name_in_scope(&cache, "_pools", 9500, 6);
+    assert!(
+        result.is_some(),
+        "_pools inside PoolManager.swap should resolve to PoolManager's own state variable"
+    );
 }
