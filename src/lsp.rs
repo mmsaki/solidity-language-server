@@ -225,24 +225,6 @@ impl ForgeLsp {
             }
         }
     }
-
-    async fn apply_workspace_edit(&self, workspace_edit: &WorkspaceEdit) -> Result<(), String> {
-        if let Some(changes) = &workspace_edit.changes {
-            for (uri, edits) in changes {
-                let path = uri.to_file_path().map_err(|_| "Invalid uri".to_string())?;
-                let mut content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-                let mut sorted_edits = edits.clone();
-                sorted_edits.sort_by(|a, b| b.range.start.cmp(&a.range.start));
-                for edit in sorted_edits {
-                    let start_byte = byte_offset(&content, edit.range.start)?;
-                    let end_byte = byte_offset(&content, edit.range.end)?;
-                    content.replace_range(start_byte..end_byte, &edit.new_text);
-                }
-                std::fs::write(&path, &content).map_err(|e| e.to_string())?;
-            }
-        }
-        Ok(())
-    }
 }
 
 #[tower_lsp::async_trait]
@@ -901,7 +883,12 @@ impl LanguageServer for ForgeLsp {
                     .log_message(
                         MessageType::INFO,
                         format!(
-                            "created rename edit with {} changes",
+                            "created rename edit with {} file(s), {} total change(s)",
+                            workspace_edit
+                                .changes
+                                .as_ref()
+                                .map(|c| c.len())
+                                .unwrap_or(0),
                             workspace_edit
                                 .changes
                                 .as_ref()
@@ -911,53 +898,11 @@ impl LanguageServer for ForgeLsp {
                     )
                     .await;
 
-                let mut server_changes = HashMap::new();
-                let mut client_changes = HashMap::new();
-                if let Some(changes) = &workspace_edit.changes {
-                    for (file_uri, edits) in changes {
-                        if file_uri == &uri {
-                            client_changes.insert(file_uri.clone(), edits.clone());
-                        } else {
-                            server_changes.insert(file_uri.clone(), edits.clone());
-                        }
-                    }
-                }
-
-                if !server_changes.is_empty() {
-                    let server_edit = WorkspaceEdit {
-                        changes: Some(server_changes.clone()),
-                        ..Default::default()
-                    };
-                    if let Err(e) = self.apply_workspace_edit(&server_edit).await {
-                        self.client
-                            .log_message(
-                                MessageType::ERROR,
-                                format!("failed to apply server-side rename edit: {e}"),
-                            )
-                            .await;
-                        return Ok(None);
-                    }
-                    self.client
-                        .log_message(
-                            MessageType::INFO,
-                            "applied server-side rename edits and saved other files",
-                        )
-                        .await;
-                    let mut cache = self.ast_cache.write().await;
-                    for uri in server_changes.keys() {
-                        cache.remove(uri.as_str());
-                    }
-                }
-
-                if client_changes.is_empty() {
-                    Ok(None)
-                } else {
-                    let client_edit = WorkspaceEdit {
-                        changes: Some(client_changes),
-                        ..Default::default()
-                    };
-                    Ok(Some(client_edit))
-                }
+                // Return the full WorkspaceEdit to the client so the editor
+                // applies all changes (including cross-file renames) via the
+                // LSP protocol. This keeps undo working and avoids writing
+                // files behind the editor's back.
+                Ok(Some(workspace_edit))
             }
 
             None => {
@@ -1172,12 +1117,4 @@ impl LanguageServer for ForgeLsp {
             Ok(Some(result))
         }
     }
-}
-
-fn byte_offset(content: &str, position: Position) -> Result<usize, String> {
-    let offset = utils::position_to_byte_offset(content, position.line, position.character);
-    if offset > content.len() {
-        return Err("Character out of range".to_string());
-    }
-    Ok(offset)
 }
