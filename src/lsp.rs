@@ -206,6 +206,26 @@ impl ForgeLsp {
         }
     }
 
+    /// Get the source bytes for a file, preferring the in-memory text cache
+    /// (which reflects unsaved editor changes) over reading from disk.
+    async fn get_source_bytes(&self, uri: &Url, file_path: &std::path::Path) -> Option<Vec<u8>> {
+        {
+            let text_cache = self.text_cache.read().await;
+            if let Some((_, content)) = text_cache.get(&uri.to_string()) {
+                return Some(content.as_bytes().to_vec());
+            }
+        }
+        match std::fs::read(file_path) {
+            Ok(bytes) => Some(bytes),
+            Err(e) => {
+                self.client
+                    .log_message(MessageType::ERROR, format!("failed to read file: {e}"))
+                    .await;
+                None
+            }
+        }
+    }
+
     async fn apply_workspace_edit(&self, workspace_edit: &WorkspaceEdit) -> Result<(), String> {
         if let Some(changes) = &workspace_edit.changes {
             for (uri, edits) in changes {
@@ -337,16 +357,27 @@ impl LanguageServer for ForgeLsp {
         let text_content = if let Some(text) = params.text {
             text
         } else {
-            match std::fs::read_to_string(params.text_document.uri.path()) {
-                Ok(content) => content,
-                Err(e) => {
-                    self.client
-                        .log_message(
-                            MessageType::ERROR,
-                            format!("Failed to read file on save: {e}"),
-                        )
-                        .await;
-                    return;
+            // Prefer text_cache (reflects unsaved changes), fall back to disk
+            let cached = {
+                let text_cache = self.text_cache.read().await;
+                text_cache
+                    .get(params.text_document.uri.as_str())
+                    .map(|(_, content)| content.clone())
+            };
+            if let Some(content) = cached {
+                content
+            } else {
+                match std::fs::read_to_string(params.text_document.uri.path()) {
+                    Ok(content) => content,
+                    Err(e) => {
+                        self.client
+                            .log_message(
+                                MessageType::ERROR,
+                                format!("Failed to read file on save: {e}"),
+                            )
+                            .await;
+                        return;
+                    }
                 }
             }
         };
@@ -575,14 +606,9 @@ impl LanguageServer for ForgeLsp {
             }
         };
 
-        let source_bytes = match std::fs::read(&file_path) {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                self.client
-                    .log_message(MessageType::ERROR, format!("failed to read file: {e}"))
-                    .await;
-                return Ok(None);
-            }
+        let source_bytes = match self.get_source_bytes(&uri, &file_path).await {
+            Some(bytes) => bytes,
+            None => return Ok(None),
         };
 
         let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
@@ -633,14 +659,9 @@ impl LanguageServer for ForgeLsp {
             }
         };
 
-        let source_bytes = match std::fs::read(&file_path) {
-            Ok(bytes) => bytes,
-            Err(_) => {
-                self.client
-                    .log_message(MessageType::ERROR, "failed to read file bytes")
-                    .await;
-                return Ok(None);
-            }
+        let source_bytes = match self.get_source_bytes(&uri, &file_path).await {
+            Some(bytes) => bytes,
+            None => return Ok(None),
         };
 
         let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
@@ -689,14 +710,9 @@ impl LanguageServer for ForgeLsp {
                 return Ok(None);
             }
         };
-        let source_bytes = match std::fs::read(&file_path) {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                self.client
-                    .log_message(MessageType::ERROR, format!("Failed to read file: {e}"))
-                    .await;
-                return Ok(None);
-            }
+        let source_bytes = match self.get_source_bytes(&uri, &file_path).await {
+            Some(bytes) => bytes,
+            None => return Ok(None),
         };
         let cached_build = self.get_or_fetch_build(&uri, &file_path, true).await;
         let cached_build = match cached_build {
@@ -782,14 +798,9 @@ impl LanguageServer for ForgeLsp {
             }
         };
 
-        let source_bytes = match std::fs::read(&file_path) {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                self.client
-                    .log_message(MessageType::ERROR, format!("failed to read file: {e}"))
-                    .await;
-                return Ok(None);
-            }
+        let source_bytes = match self.get_source_bytes(&uri, &file_path).await {
+            Some(bytes) => bytes,
+            None => return Ok(None),
         };
 
         if let Some(range) = rename::get_identifier_range(&source_bytes, position) {
@@ -831,14 +842,9 @@ impl LanguageServer for ForgeLsp {
                 return Ok(None);
             }
         };
-        let source_bytes = match std::fs::read(&file_path) {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                self.client
-                    .log_message(MessageType::ERROR, format!("failed to read file: {e}"))
-                    .await;
-                return Ok(None);
-            }
+        let source_bytes = match self.get_source_bytes(&uri, &file_path).await {
+            Some(bytes) => bytes,
+            None => return Ok(None),
         };
 
         let current_identifier = match rename::get_identifier_at_position(&source_bytes, position) {
@@ -1093,14 +1099,9 @@ impl LanguageServer for ForgeLsp {
             }
         };
 
-        let source_bytes = match std::fs::read(&file_path) {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                self.client
-                    .log_message(MessageType::ERROR, format!("failed to read file: {e}"))
-                    .await;
-                return Ok(None);
-            }
+        let source_bytes = match self.get_source_bytes(&uri, &file_path).await {
+            Some(bytes) => bytes,
+            None => return Ok(None),
         };
 
         let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
@@ -1143,14 +1144,9 @@ impl LanguageServer for ForgeLsp {
             }
         };
 
-        let source_bytes = match std::fs::read(&file_path) {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                self.client
-                    .log_message(MessageType::ERROR, format!("failed to read file: {e}"))
-                    .await;
-                return Ok(None);
-            }
+        let source_bytes = match self.get_source_bytes(&uri, &file_path).await {
+            Some(bytes) => bytes,
+            None => return Ok(None),
         };
 
         let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
