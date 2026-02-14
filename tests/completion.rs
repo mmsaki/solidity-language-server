@@ -2496,14 +2496,15 @@ fn test_cache_scope_declarations_has_state_vars() {
 
 #[test]
 fn test_cache_scope_parent_count() {
-    // Only nodes with `scope` field get parent links.
-    // 258 scope-creating nodes have scope fields (FunctionDef=215, ContractDef=43).
-    // Block(0), UncheckedBlock(0), ModifierDef(0), SourceUnit(0) don't.
+    // scope_parent has entries for:
+    // - Nodes with AST `scope` field: FunctionDef(215) + ContractDef(43) = 258
+    // - Inferred parents: Block(277) + UncheckedBlock(29) + ModifierDef(4) = 310
+    // Total = 568. SourceUnit(45) has no parent (root).
     let cache = load_cache();
     assert_eq!(
         cache.scope_parent.len(),
-        258,
-        "scope_parent should have 258 entries (only nodes with scope field)"
+        568,
+        "scope_parent should have 568 entries (258 from AST + 310 inferred)"
     );
 }
 
@@ -2548,10 +2549,9 @@ fn test_cache_blocks_have_no_parent_link() {
         .filter(|id| cache.scope_parent.contains_key(id))
         .count();
 
-    // BUG: 0 blocks have parent links. After fix, this should be 277.
     assert_eq!(
-        blocks_with_parent, 0,
-        "BUG: no Block nodes have parent links in scope_parent"
+        blocks_with_parent, 277,
+        "all Block nodes should have inferred parent links in scope_parent"
     );
 }
 
@@ -2579,10 +2579,9 @@ fn test_cache_unchecked_blocks_have_no_parent_link() {
         .filter(|id| cache.scope_parent.contains_key(id))
         .count();
 
-    // BUG: 0 unchecked blocks have parent links. After fix, this should be 29.
     assert_eq!(
-        with_parent, 0,
-        "BUG: no UncheckedBlock nodes have parent links in scope_parent"
+        with_parent, 29,
+        "all UncheckedBlock nodes should have inferred parent links in scope_parent"
     );
 }
 
@@ -2631,11 +2630,11 @@ fn test_scope_chain_lpfee_in_initialize() {
         "PoolManager (1767) should have parent SourceUnit (1768)"
     );
 
-    // BUG: Block 880 has no parent link
+    // Block 880 now has an inferred parent link to FunctionDefinition 881
     assert_eq!(
         cache.scope_parent.get(&880),
-        None,
-        "BUG: Block 880 has no parent link — should point to FunctionDefinition 881"
+        Some(&881),
+        "Block 880 should have inferred parent link to FunctionDefinition 881"
     );
 }
 
@@ -2776,15 +2775,9 @@ fn test_innermost_scope_in_swap_body() {
 #[test]
 fn test_scope_chain_from_swap_body_block() {
     let cache = load_cache();
-    // Block 1166 has no scope field → scope_parent has no entry → chain stops at [1166]
+    // Block 1166 → FnDef 1167 → Contract 1767 → SourceUnit 1768
     let chain = walk_scope_chain(&cache, 1166);
-    // BUG: chain is [1166] because Block has no parent link
-    // After fix it should be [1166, 1167, 1767, 1768]
-    assert_eq!(
-        chain,
-        vec![1166],
-        "BUG: Block 1166 has no parent — chain stops immediately"
-    );
+    assert_eq!(chain, vec![1166, 1167, 1767, 1768]);
 }
 
 #[test]
@@ -2919,14 +2912,9 @@ fn test_nested_block_declaration_types() {
 #[test]
 fn test_scope_chain_from_nested_block() {
     let cache = load_cache();
-    // Nested Block 1125 has no scope field → chain stops at [1125]
-    // After fix: [1125, 1166, 1167, 1767, 1768]
+    // Nested Block 1125 → Block 1166 → FnDef 1167 → Contract 1767 → SourceUnit 1768
     let chain = walk_scope_chain(&cache, 1125);
-    assert_eq!(
-        chain,
-        vec![1125],
-        "BUG: nested Block 1125 has no parent link"
-    );
+    assert_eq!(chain, vec![1125, 1166, 1167, 1767, 1768]);
 }
 
 // --- PoolManager.initialize: byte 6300 in file 6 ---
@@ -2999,14 +2987,12 @@ fn test_resolve_local_var_pool_in_swap_body() {
 fn test_resolve_param_key_in_swap_body() {
     let cache = load_cache();
     // "key" at byte 9600 (swap body, Block 1166)
-    // Not in Block 1166 declarations. Should walk up to FnDef 1167 to find the param.
-    // BUG: Block has no parent → falls back to flat lookup.
-    // Flat lookup returns SOME type for "key" (first-wins), which happens to be correct
-    // because PoolManager.swap is likely the first function encountered.
+    // Not in Block 1166 declarations. Walks up to FnDef 1167 where "key" is a param.
     let result = resolve_name_in_scope(&cache, "key", 9600, 6);
-    assert!(
-        result.is_some(),
-        "key should resolve (via fallback if scope walk is broken)"
+    assert_eq!(
+        result,
+        Some("t_struct$_PoolKey_$8887_memory_ptr".to_string()),
+        "key in swap body should walk up to FnDef scope and find the parameter"
     );
 }
 
@@ -3020,24 +3006,28 @@ fn test_resolve_nested_block_sees_own_vars() {
 }
 
 #[test]
-fn test_resolve_nested_block_outer_local_falls_back() {
+fn test_resolve_nested_block_outer_local_walks_up() {
     let cache = load_cache();
     // "pool" at byte 9900 (nested Block 1125)
-    // Not in Block 1125. Should walk up to Block 1166 to find it.
-    // BUG: Block 1125 has no parent → falls back to flat lookup.
+    // Not in Block 1125. Walks up to Block 1166 where "pool" is a local var.
     let result = resolve_name_in_scope(&cache, "pool", 9900, 6);
-    // Flat fallback should still find "pool" since it exists in name_to_type
-    assert!(result.is_some(), "pool should resolve (via fallback)");
+    assert_eq!(
+        result,
+        Some("t_struct$_State_$4809_storage_ptr".to_string()),
+        "pool in nested block should walk up to outer block and find the local var"
+    );
 }
 
 #[test]
 fn test_resolve_state_var_in_function_body() {
     let cache = load_cache();
     // "_pools" at byte 9600 (swap body)
-    // Not in Block 1166. Not in FnDef 1167 params. Should be in ContractDef 1767 state vars.
-    // BUG: Block 1166 has no parent → falls back to flat lookup.
+    // Not in Block 1166. Not in FnDef 1167 params. Walks up to ContractDef 1767 state vars.
     let result = resolve_name_in_scope(&cache, "_pools", 9600, 6);
-    assert!(result.is_some(), "_pools should resolve (via fallback)");
+    assert!(
+        result.is_some(),
+        "_pools should walk up to contract scope and resolve"
+    );
 }
 
 // --- Position at function header (between fn signature and body) ---

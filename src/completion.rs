@@ -820,6 +820,41 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
     // Sort scope_ranges by span size ascending (smallest first) for innermost-scope lookup
     scope_ranges.sort_by_key(|r| r.end - r.start);
 
+    // Infer parent links for Block/UncheckedBlock/ModifierDefinition nodes.
+    // These AST nodes have no `scope` field, so scope_parent has no entry for them.
+    // For each orphan, find the next-larger enclosing scope range in the same file.
+    // scope_ranges is sorted smallest-first, so we scan forward from each orphan's
+    // position to find the first range that strictly contains it.
+    let orphan_ids: Vec<u64> = scope_ranges
+        .iter()
+        .filter(|r| !scope_parent.contains_key(&r.node_id))
+        .map(|r| r.node_id)
+        .collect();
+    // Build a lookup from node_id → (start, end, file_id) for quick access
+    let range_by_id: HashMap<u64, (usize, usize, u64)> = scope_ranges
+        .iter()
+        .map(|r| (r.node_id, (r.start, r.end, r.file_id)))
+        .collect();
+    for orphan_id in &orphan_ids {
+        if let Some(&(start, end, file_id)) = range_by_id.get(orphan_id) {
+            // Find the smallest range that strictly contains this orphan's range
+            // (same file, starts at or before, ends at or after, and is strictly larger)
+            let parent = scope_ranges
+                .iter()
+                .find(|r| {
+                    r.node_id != *orphan_id
+                        && r.file_id == file_id
+                        && r.start <= start
+                        && r.end >= end
+                        && (r.end - r.start) > (end - start)
+                })
+                .map(|r| r.node_id);
+            if let Some(parent_id) = parent {
+                scope_parent.insert(*orphan_id, parent_id);
+            }
+        }
+    }
+
     CompletionCache {
         names,
         name_to_type,
