@@ -2,7 +2,7 @@ use solidity_language_server::build::{build_output_to_diagnostics, ignored_error
 use solidity_language_server::runner::{ForgeRunner, Runner};
 use solidity_language_server::utils::byte_offset_to_position;
 use std::fs;
-use tower_lsp::lsp_types::{DiagnosticSeverity, NumberOrString};
+use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, NumberOrString};
 
 static CONTRACT: &str = r#"// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.29;
@@ -157,4 +157,121 @@ async fn test_ignored_code_for_tests() {
         }
     });
     assert!(!ignored_error_code_warning(&error_json_other_code));
+}
+
+// ---------------------------------------------------------------------------
+// Regression: Issue #41 — AST cache not updated when there are compilation
+// warnings. The old check was `diagnostics.is_empty()` which rejected any
+// build with diagnostics, including warnings. The fix is to only block on
+// ERROR-severity diagnostics.
+// ---------------------------------------------------------------------------
+
+/// Contract that compiles successfully but produces warnings (unused variables).
+/// This is the same pattern as example/Counter.sol.
+static WARNING_ONLY_CONTRACT: &str = r#"// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.29;
+
+contract Counter {
+    uint256 public count;
+
+    function increment() public {
+        uint256 oldCount = count;
+        count += 1;
+    }
+}"#;
+
+/// Contract with a real compilation error (undefined identifier).
+static ERROR_CONTRACT: &str = r#"// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.29;
+
+contract Broken {
+    function bad() public pure returns (uint256) {
+        return undefinedVariable;
+    }
+}"#;
+
+/// Mirrors the `build_succeeded` logic from src/lsp.rs:78.
+/// Returns true when there are no ERROR-severity diagnostics.
+fn build_succeeded(diagnostics: &[Diagnostic]) -> bool {
+    diagnostics
+        .iter()
+        .all(|d| d.severity != Some(DiagnosticSeverity::ERROR))
+}
+
+#[tokio::test]
+async fn test_warning_only_build_should_succeed() {
+    // Regression for issue #41: a contract with only warnings must not
+    // prevent the AST cache from updating.
+    let (_temp_dir, contract_path, compiler) = setup(WARNING_ONLY_CONTRACT);
+    let file_path = _temp_dir.path().to_string_lossy().to_string();
+    let source_code = tokio::fs::read_to_string(&contract_path)
+        .await
+        .expect("read source");
+    let build_output = compiler.build(&file_path).await.expect("build failed");
+    let filename = contract_path
+        .file_name()
+        .and_then(|f| f.to_str())
+        .expect("filename");
+
+    let diagnostics = build_output_to_diagnostics(&build_output, filename, &source_code);
+
+    // There should be at least one warning (unused variable)
+    assert!(
+        !diagnostics.is_empty(),
+        "expected warnings from unused variable"
+    );
+    assert!(
+        diagnostics
+            .iter()
+            .all(|d| d.severity == Some(DiagnosticSeverity::WARNING)),
+        "all diagnostics should be warnings, got: {:?}",
+        diagnostics.iter().map(|d| d.severity).collect::<Vec<_>>()
+    );
+
+    // The build_succeeded check must pass — this is what was broken in issue #41
+    assert!(
+        build_succeeded(&diagnostics),
+        "build_succeeded should be true when only warnings are present"
+    );
+}
+
+#[tokio::test]
+async fn test_error_build_should_fail() {
+    // Counterpart: a contract with a real error must block AST cache update.
+    let (_temp_dir, contract_path, compiler) = setup(ERROR_CONTRACT);
+    let file_path = _temp_dir.path().to_string_lossy().to_string();
+    let source_code = tokio::fs::read_to_string(&contract_path)
+        .await
+        .expect("read source");
+    let build_output = compiler.build(&file_path).await.expect("build failed");
+    let filename = contract_path
+        .file_name()
+        .and_then(|f| f.to_str())
+        .expect("filename");
+
+    let diagnostics = build_output_to_diagnostics(&build_output, filename, &source_code);
+
+    assert!(!diagnostics.is_empty(), "expected errors");
+    assert!(
+        diagnostics
+            .iter()
+            .any(|d| d.severity == Some(DiagnosticSeverity::ERROR)),
+        "expected at least one ERROR diagnostic"
+    );
+
+    // build_succeeded must be false
+    assert!(
+        !build_succeeded(&diagnostics),
+        "build_succeeded should be false when errors are present"
+    );
+}
+
+#[tokio::test]
+async fn test_empty_diagnostics_should_succeed() {
+    // A clean build with zero diagnostics should also succeed.
+    let diagnostics: Vec<Diagnostic> = vec![];
+    assert!(
+        build_succeeded(&diagnostics),
+        "build_succeeded should be true when no diagnostics at all"
+    );
 }

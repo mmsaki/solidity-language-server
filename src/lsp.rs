@@ -74,8 +74,8 @@ impl ForgeLsp {
             self.compiler.ast(path_str)
         );
 
-        // Only replace cache with new AST if build succeeded (no build errors)
-        let build_succeeded = matches!(&build_result, Ok(builds) if builds.is_empty());
+        // Only replace cache with new AST if build succeeded (no errors; warnings are OK)
+        let build_succeeded = matches!(&build_result, Ok(diagnostics) if diagnostics.iter().all(|d| d.severity != Some(DiagnosticSeverity::ERROR)));
 
         if build_succeeded {
             if let Ok(ast_data) = ast_result {
