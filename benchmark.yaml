@@ -1,0 +1,32 @@
+# Solidity Language Server — PR benchmark config
+# Usage: cargo build --release && lsp-bench
+project: example
+file: Shop.sol
+line: 105
+col: 27
+
+iterations: 10
+warmup: 2
+timeout: 10
+index_timeout: 15
+output: benchmarks
+report: DELTA.md
+
+benchmarks:
+  - initialize
+  - textDocument/diagnostic
+  - textDocument/definition
+  - textDocument/declaration
+  - textDocument/hover
+  - textDocument/references
+  - textDocument/documentSymbol
+
+servers:
+  - label: baseline
+    description: Published crates.io release
+    link: https://github.com/mmsaki/solidity-language-server
+    cmd: solidity-language-server
+
+  - label: head
+    description: Local branch build
+    cmd: ./target/release/solidity-language-server
