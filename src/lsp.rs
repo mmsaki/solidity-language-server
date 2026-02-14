@@ -562,12 +562,27 @@ impl LanguageServer for ForgeLsp {
         }
 
         let cache_ref = cached.as_deref();
+
+        // Look up the AST file_id for scope-aware resolution in full mode
+        let file_id = if !self.fast_completions {
+            let uri_path = uri.to_file_path().ok();
+            cache_ref.and_then(|c| {
+                uri_path.as_ref().and_then(|p| {
+                    let path_str = p.to_str()?;
+                    c.path_to_file_id.get(path_str).copied()
+                })
+            })
+        } else {
+            None
+        };
+
         let result = completion::handle_completion(
             cache_ref,
             &source_text,
             position,
             trigger_char,
             self.fast_completions,
+            file_id,
         );
         Ok(result)
     }

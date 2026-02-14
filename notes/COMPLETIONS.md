@@ -97,9 +97,33 @@ pub struct CompletionCache {
     /// Wildcard using-for: `using X for *` — available on all types.
     pub using_for_wildcard: Vec<CompletionItem>,
 
-    /// Pre-built general completions (names + keywords + globals + units).
-    /// Used in fast mode — returned directly with zero per-request computation.
+    /// Pre-built general completions (AST names + keywords + globals + units).
+    /// Built once, returned by reference on every non-dot completion request.
     pub general_completions: Vec<CompletionItem>,
+
+    // --- Scope-aware completion data (used by --completion-mode full) ---
+
+    /// scope node_id → declarations in that scope.
+    /// Each scope (Block, FunctionDefinition, ContractDefinition, SourceUnit)
+    /// has the variables/functions/types declared directly within it.
+    pub scope_declarations: HashMap<u64, Vec<ScopedDeclaration>>,
+
+    /// node_id → parent scope node_id.
+    /// Walk this chain upward to widen the search scope.
+    pub scope_parent: HashMap<u64, u64>,
+
+    /// All scope ranges, for finding which scope a byte position falls in.
+    /// Sorted by span size ascending (smallest first) for efficient innermost-scope lookup.
+    pub scope_ranges: Vec<ScopeRange>,
+
+    /// absolute file path → AST source file id.
+    /// Used to map a URI to the file_id needed for scope resolution.
+    pub path_to_file_id: HashMap<String, u64>,
+
+    /// contract node_id → linearized base contracts (C3 linearization order).
+    /// First element is the contract itself, followed by parents in resolution order.
+    /// Used to search inherited state variables during scope resolution.
+    pub linearized_base_contracts: HashMap<u64, Vec<u64>>,
 }
 ```
 
@@ -377,10 +401,11 @@ completion_provider: Some(CompletionOptions {
 
 | File | Role |
 |---|---|
-| `src/completion.rs` | CompletionCache, build logic, dot/general completion, type resolution, magic types, keywords |
-| `src/lsp.rs` | LSP handler, server capabilities, trigger character registration |
+| `src/completion.rs` | CompletionCache, build logic, scope resolution, dot/general completion, type resolution, magic types, keywords |
+| `src/lsp.rs` | LSP handler, server capabilities, trigger character registration, file_id → scope context threading |
 | `src/lib.rs` | `pub mod completion` |
-| `tests/completion.rs` | Completion tests against `pool-manager-ast.json` |
+| `tests/completion.rs` | Completion tests (101 completion + 71 scope/AST) against `pool-manager-ast.json` |
+| `benchmarks/v4-core-completion.yaml` | v4-core benchmark config for scope-aware dot-completion |
 
 ## Exploration Tools
 
@@ -467,45 +492,27 @@ t_mapping$_t_userDefinedValueType$_PoolId_$8841_$_t_struct$_State_$4809_storage_
 
 For nested mappings, it extracts the deepest value type (we don't count brackets — "what matters is the end of the type").
 
-## Known Limitations
-
-### Wildcard using-for scope
-
-`using SafeCast for *` is scoped to the contract that declares it, but we currently add wildcard functions to ALL types globally. This means completions may show library functions that aren't actually available in the current scope. This is a scope-aware feature for later.
-
-### Inherited function return types
-
-`function_return_types` only collects from a contract's direct `nodes` array, not inherited functions. If a function is defined on a base contract and not redeclared on the child, the return type won't be in `function_return_types` for the child's node_id.
-
-### Tuple return types
-
-Only single-return functions are stored in `function_return_types`. Functions returning tuples (multiple values) require destructuring and can't be dot-chained, so they're excluded.
-
 ## Completion Mode
 
-The `--completion-mode` CLI flag controls how general (non-dot) completions are served:
+The `--completion-mode` CLI flag controls dot-completion type resolution:
 
 ```sh
-# Default — zero per-request computation, pre-built list
-solidity-language-server --stdio --completion-mode fast
-
-# For power users — per-request filtering (scope-aware completions in the future)
+# Default — scope-aware type resolution using AST scope hierarchy
 solidity-language-server --stdio --completion-mode full
+
+# Lightweight — flat first-encountered-wins lookup, no scope walking
+solidity-language-server --stdio --completion-mode fast
 ```
 
-### Fast Mode (default)
+### Full Mode (default)
 
-Returns `cache.general_completions` directly — a pre-built list of all unique AST names + keywords + globals + units. Equivalent to:
+Uses scope-aware type resolution for dot-completions. When the user types `self.` inside a function, full mode walks the AST scope chain from the cursor position upward (Block → FunctionDefinition → ContractDefinition → SourceUnit) to find the correct type for `self` in the enclosing function, rather than whichever `self` was seen first during the AST walk.
 
-```sh
-jq '[.. | objects | select(has("name")) | .name] | unique' ast.json
-```
+General (non-dot) completions return the same pre-built list in both modes.
 
-No per-request computation, no clones of intermediate data. This is the recommended mode for large projects.
+### Fast Mode
 
-### Full Mode
-
-Calls `get_general_completions(cache)` on each request, which currently produces the same result but allows for per-request filtering (e.g. scope-aware completions) in the future.
+Skips scope resolution entirely. Uses the flat `name_to_type` map (first-encountered-wins) for dot-completion type resolution. Faster but produces wrong results when the same name appears with different types in different scopes (e.g. `self` in a library with multiple functions).
 
 ## Caching Architecture
 
@@ -517,12 +524,396 @@ The completion cache is designed for zero-blocking reads:
 - **Before cache exists** — static completions (keywords, globals, magic dot members like `msg.`, `block.`, `abi.`) are served immediately with `is_incomplete: true` so the editor re-requests once the full cache is built
 - **On every keystroke** — completion handler clones the `Arc` (pointer copy, ~8 bytes), drops the lock, and serves from the snapshot. No lock is held during computation.
 
-## Future Work
+## Scope-Aware Completions
 
-### Scope-Aware Completions
+### The Problem
 
-Every `VariableDeclaration` and `FunctionDefinition` has a `scope` field pointing to its containing node. Build `scope_id → Vec<CompletionItem>` and at completion time, determine the cursor's scope and walk up the chain (block → function → contract → file). This would be enabled via `--completion-mode full`.
+The flat `name_to_type` map is first-encountered-wins during the AST walk. When the same name appears in multiple scopes with different types, the flat map picks an arbitrary one. In Uniswap v4-core's Pool library, `self` appears 39 times across the AST with 7 different types:
 
-### Inherited Function Resolution
+| Function | `self` type |
+|----------|------------|
+| `Pool.swap(Pool.State storage self, ...)` | `t_struct$_State_$4809_storage_ptr` |
+| `Pool.modifyLiquidity(Pool.State storage self, ...)` | `t_struct$_State_$4809_storage_ptr` |
+| `LPFeeLibrary.isDynamicFee(uint24 self)` | `t_uint24` |
+| `ProtocolFeeLibrary.isValidProtocolFee(uint24 self)` | `t_uint24` |
+| `Slot0.tick(Slot0 self)` | `t_userDefinedValueType$_Slot0_$...` |
 
-For chain resolution across inheritance hierarchies, walk `linearizedBaseContracts` on the contract definition to resolve inherited function return types.
+The flat map resolves `self` to whichever of these the AST walk encountered first (typically `uint24` from a library function). Typing `self.` inside `Pool.swap` shows `uint24` library functions instead of `Pool.State` struct fields.
+
+### AST Scope Fields
+
+The Solidity compiler provides scope information through two mechanisms:
+
+**1. `scope` field on declarations**
+
+Most `VariableDeclaration` and `FunctionDefinition` nodes have a `scope` field pointing to the node id of their containing scope:
+
+```json
+{
+  "id": 5277,
+  "nodeType": "VariableDeclaration",
+  "name": "self",
+  "scope": 5310,
+  "typeDescriptions": {
+    "typeIdentifier": "t_struct$_State_$4809_storage_ptr"
+  }
+}
+```
+
+Here `scope: 5310` points to the `FunctionDefinition` for `Pool.modifyLiquidity`.
+
+**2. `src` byte ranges on scope-creating nodes**
+
+Every node has a `src` field (`"offset:length:fileId"`) giving its byte range. Scope-creating nodes (Block, FunctionDefinition, ContractDefinition, SourceUnit) have ranges that contain their children.
+
+### Scope Hierarchy
+
+The AST scope chain forms a tree:
+
+```
+SourceUnit (file root)
+  └── ContractDefinition (library Pool)
+        ├── FunctionDefinition (swap)
+        │     └── Block (function body)
+        │           ├── Block (nested { ... })
+        │           └── UncheckedBlock (unchecked { ... })
+        └── FunctionDefinition (modifyLiquidity)
+              └── Block (function body)
+```
+
+Example for `Pool.swap`:
+
+```
+Block 1166  (function body, bytes 6497–8746, file 29)
+  ↑ scope_parent
+FunctionDefinition 1167  (swap, bytes 6226–8746, file 29)
+  ↑ scope_parent
+ContractDefinition 1767  (library Pool, bytes 1236–21108, file 29)
+  ↑ scope_parent
+SourceUnit 1768  (Pool.sol root, bytes 0–21108, file 29)
+```
+
+### Scope Data Structures
+
+```rust
+/// A declaration found within a specific scope.
+pub struct ScopedDeclaration {
+    pub name: String,
+    pub type_id: String,
+}
+
+/// A byte range identifying a scope-creating AST node.
+pub struct ScopeRange {
+    pub node_id: u64,
+    pub start: usize,
+    pub end: usize,
+    pub file_id: u64,
+}
+
+/// Scope context for a single completion request.
+pub struct ScopeContext {
+    pub byte_pos: usize,
+    pub file_id: u64,
+}
+```
+
+### Building the Scope Data
+
+During the AST walk in `build_completion_cache`:
+
+1. **`scope_declarations`**: For each `VariableDeclaration` or `FunctionDefinition` with a `scope` field, record `ScopedDeclaration { name, type_id }` under the scope node_id.
+
+2. **`scope_parent`**: For each node with a `scope` field, insert `node_id → scope_id`. This covers most of the hierarchy — FunctionDefinition → ContractDefinition, VariableDeclaration → Block, etc.
+
+3. **`scope_ranges`**: For each scope-creating node (Block, FunctionDefinition, ContractDefinition, SourceUnit, UncheckedBlock, ModifierDefinition), parse the `src` field and record a `ScopeRange`.
+
+4. **`path_to_file_id`**: Built from the AST's `sources` section — maps each absolute file path to its file_id.
+
+5. **`linearized_base_contracts`**: For each `ContractDefinition`, stores the `linearizedBaseContracts` array — the C3 linearization order used by Solidity for inheritance resolution.
+
+### The Block Parent Linkage Bug
+
+Block (277 nodes), UncheckedBlock (29 nodes), and ModifierDefinition (4 nodes) AST nodes have **no `scope` field**. After the AST walk, `scope_parent` had entries only for nodes with explicit `scope` fields (258 entries). All Block nodes were orphans — the scope walk would hit a Block, find no parent, and immediately fall back to the flat lookup.
+
+**The fix**: After building `scope_ranges` (sorted by span size ascending), scan for orphan scope nodes and infer their parent by finding the smallest enclosing scope range in the same file:
+
+```rust
+let orphan_ids: Vec<u64> = scope_ranges
+    .iter()
+    .filter(|r| !scope_parent.contains_key(&r.node_id))
+    .map(|r| r.node_id)
+    .collect();
+
+for orphan_id in &orphan_ids {
+    if let Some(&(start, end, file_id)) = range_by_id.get(orphan_id) {
+        let parent = scope_ranges
+            .iter()
+            .find(|r| {
+                r.node_id != *orphan_id
+                    && r.file_id == file_id
+                    && r.start <= start
+                    && r.end >= end
+                    && (r.end - r.start) > (end - start)
+            })
+            .map(|r| r.node_id);
+        if let Some(parent_id) = parent {
+            scope_parent.insert(*orphan_id, parent_id);
+        }
+    }
+}
+```
+
+This increased `scope_parent` from 258 entries to 568 (258 from AST `scope` fields + 310 inferred). All Block/UncheckedBlock nodes now have parent links.
+
+### Resolution Algorithm
+
+`resolve_name_in_scope(cache, name, byte_pos, file_id)`:
+
+1. **Find innermost scope**: Scan `scope_ranges` (sorted smallest-first) for the first range in the same file that contains `byte_pos`. This is O(n) but n is small (~1700 scope ranges for Uniswap v4-core) and only happens on dot-completion.
+
+2. **Walk up the scope chain**: At each scope level, check `scope_declarations[scope_id]` for a matching name. If found, return its `type_id`.
+
+3. **Check inherited contracts**: When the current scope is a `ContractDefinition`, walk `linearized_base_contracts` (C3 linearization) to find inherited state variables and functions. Skip index 0 (the contract itself, already checked).
+
+4. **Follow `scope_parent`**: Move to the parent scope and repeat.
+
+5. **Fallback**: If the scope walk reaches the top (SourceUnit has no parent) with no match, fall back to the flat `resolve_name_to_type_id` lookup. This handles contract/library names which aren't in `scope_declarations`.
+
+```
+Cursor at byte 6550, file 29 (inside Pool.swap body):
+
+find_innermost_scope → Block 1166 (bytes 6497–8746)
+  scope_declarations[1166]: (no `self` here — declared in the FunctionDefinition)
+  scope_parent[1166] → FunctionDefinition 1167
+
+scope_declarations[1167]: self = t_struct$_State_$4809_storage_ptr ✓
+→ resolve to Pool.State struct → show struct fields
+```
+
+### LSP Integration
+
+In `--completion-mode full` (default), the completion handler:
+
+1. Converts the cursor position to a byte offset using `position_to_byte_offset`
+2. Looks up the source file's AST `file_id` from `cache.path_to_file_id`
+3. Builds a `ScopeContext { byte_pos, file_id }`
+4. Passes the scope context to `get_chain_completions` → `resolve_name` → `resolve_name_in_scope`
+
+In `--completion-mode fast`, `scope_ctx` is `None` and all resolution falls through to the flat `name_to_type` lookup.
+
+### Concrete Example: `self.` in Pool.swap
+
+```
+File: src/libraries/Pool.sol (file_id 29)
+Line 207: Slot0 _slot0 = self.slot0;
+Cursor: after the dot in `self.`
+```
+
+**v0.1.14 (broken)**: Flat lookup → `self` resolves to `uint24` → shows `isDynamicFee`, `isValid`, `validate`, `getInitialLPFee` (LPFeeLibrary functions for uint24)
+
+**v0.1.15 (scope-aware)**: Scope walk → Block 1166 → FunctionDefinition 1167 → finds `self` declared as `t_struct$_State_$4809_storage_ptr` → shows struct fields:
+- `slot0` (Slot0)
+- `feeGrowthGlobal0X128` (uint256)
+- `feeGrowthGlobal1X128` (uint256)
+- `liquidity` (uint128)
+- `ticks` (mapping(int24 => struct Pool.TickInfo))
+- `tickBitmap` (mapping(int16 => uint256))
+- `positions` (mapping(bytes32 => struct Position.State))
+
+Plus all Pool library functions (`initialize`, `swap`, `modifyLiquidity`, `donate`, etc.) via `using_for`.
+
+## Benchmarking
+
+### Setup
+
+Benchmarks use [`lsp-bench`](https://github.com/mmsaki/solidity-lsp-benchmarks), a benchmark framework for LSP servers. Install it:
+
+```sh
+cargo install --path /path/to/solidity-lsp-benchmarks
+```
+
+Benchmarks compare two server binaries side-by-side against the same project. The installed release (`solidity-language-server` in PATH) represents the baseline, and the local build (`./target/release/solidity-language-server`) represents the current branch.
+
+### Benchmark Config
+
+Benchmark configs are YAML files in `benchmarks/`. The config specifies the project directory, target file and cursor position, server binaries, and what LSP requests to benchmark.
+
+```yaml
+# benchmarks/v4-core-completion.yaml
+project: /path/to/uniswap/v4-core
+file: src/libraries/Pool.sol
+line: 206                    # 0-based line number
+col: 32                      # 0-based column (after the dot in `self.`)
+
+iterations: 10
+warmup: 2
+timeout: 10
+index_timeout: 15
+response: full               # include full response JSON in output
+trigger_character: "."        # send triggerKind:2 with this character
+output: benchmarks/v4-core
+report: benchmarks/v4-core/COMPLETION.md
+
+benchmarks:
+  - initialize
+  - textDocument/completion
+
+servers:
+  - label: v0.1.14-full
+    cmd: solidity-language-server
+    args: ["--completion-mode", "full"]
+
+  - label: v0.1.15-full
+    cmd: ./target/release/solidity-language-server
+    args: ["--completion-mode", "full"]
+```
+
+Key config fields:
+
+| Field | Purpose |
+|-------|---------|
+| `project` | Path to a Solidity project with `foundry.toml` (must have been built with `forge build`) |
+| `file` | Relative path to the source file for completion requests |
+| `line`, `col` | 0-based cursor position in the file |
+| `trigger_character` | Sends `context: { triggerKind: 2, triggerCharacter: "." }` in the completion request. Without this, the server gets `triggerKind: 1` (Invoked) which may produce different results. |
+| `response: full` | Records the full JSON response body for each iteration (for comparing correctness, not just timing) |
+| `warmup` | Number of warmup iterations (not included in timing) |
+| `iterations` | Number of timed iterations per benchmark |
+| `output` | Directory for raw JSON result files |
+| `report` | Path for the markdown comparison table |
+
+### Running
+
+```sh
+# Build the release binary first
+cargo build --release
+
+# Run the benchmark
+lsp-bench -c benchmarks/v4-core-completion.yaml
+```
+
+Output:
+```
+  config benchmarks/v4-core-completion.yaml
+  file src/libraries/Pool.sol  (line 206, col 32)
+
+Detecting versions...
+  v0.1.14-full = solidity-language-server 0.1.14+commit.3d6a3d1.macos.aarch64
+  v0.1.15-full = solidity-language-server 0.1.15+commit.3fc523a.macos.aarch64
+
+[1/2] initialize
+[2/2] textDocument/completion
+
+  report delta -> benchmarks/v4-core/COMPLETION.md
+```
+
+### Reading Results
+
+The report markdown shows timing (mean, p50, p95), RSS memory, and deltas:
+
+```
+| Benchmark               | v0.1.14        | v0.1.15        |       Delta | RSS v0.1.14 | RSS v0.1.15 |
+|-------------------------|----------------|----------------|-------------|-------------|-------------|
+| initialize              |         4.40ms |         2.98ms | 1.5x faster |          -- |          -- |
+| textDocument/completion |         0.48ms |         0.89ms | 1.9x slower |      29.1MB |      26.5MB |
+```
+
+The raw JSON files in `output/` contain per-iteration data including full response bodies. Check actual completion items returned:
+
+```sh
+# Pretty-print the latest benchmark result
+cat benchmarks/v4-core/2026-02-14T21-29-11Z.json | python3 -m json.tool | head -100
+
+# Extract just the completion response for v0.1.15
+cat benchmarks/v4-core/2026-02-14T21-29-11Z.json | \
+  jq '.benchmarks[1].servers[1].iterations[-1].response' -r | python3 -m json.tool
+```
+
+### What To Look For
+
+**Correctness** matters more than speed for scope-aware completions. Check the response bodies:
+
+- **v0.1.14 returns wrong items**: `isDynamicFee(uint24 self)`, `isValid(uint24 self)` — these are `uint24` library functions, not `Pool.State` struct fields. The flat `name_to_type` resolved `self` to `uint24`.
+
+- **v0.1.15 returns correct items**: `slot0` (Slot0), `liquidity` (uint128), `ticks` (mapping), `positions` (mapping) — actual struct fields from `Pool.State`, plus library methods like `initialize`, `swap`, `modifyLiquidity`.
+
+The items are distinguishable by their `kind` field: struct fields have `kind: 5` (FIELD), library functions have `kind: 3` (FUNCTION).
+
+**Warm-up behavior**: Early iterations may return `{ "items": [] }` while the server is still indexing the AST. This is expected — the server returns `is_incomplete: true` to tell the editor to re-request.
+
+### Choosing a Benchmark Position
+
+Pick a position where the scope-aware resolution makes a visible difference:
+
+1. Find a function where a parameter name is reused across multiple functions with different types
+2. Use `jq` to find all declarations of that name and their types:
+   ```sh
+   jq '[.. | objects | select(.nodeType == "VariableDeclaration" and .name == "self") | {scope, typeId: .typeDescriptions.typeIdentifier}]' ast.json
+   ```
+3. Pick a line inside one of those functions, right after a dot following the variable
+4. Set `line` (0-based) and `col` (0-based, after the dot character)
+5. Set `trigger_character: "."` to simulate the editor's dot-trigger behavior
+
+### File Layout
+
+```
+benchmarks/
+  v4-core-completion.yaml     # tracked in git (config)
+  v4-core/                    # gitignored (output)
+    2026-02-14T21-29-11Z.json # raw results
+    COMPLETION.md             # comparison report
+```
+
+The `.gitignore` uses `benchmarks/*` with `!benchmarks/*.yaml` to track configs but ignore output files.
+
+## Known Limitations
+
+### Wildcard using-for scope
+
+`using SafeCast for *` is scoped to the contract that declares it, but we currently add wildcard functions to ALL types globally. This means completions may show library functions that aren't actually available in the current scope.
+
+### Inherited function return types
+
+`function_return_types` only collects from a contract's direct `nodes` array, not inherited functions. If a function is defined on a base contract and not redeclared on the child, the return type won't be in `function_return_types` for the child's node_id.
+
+### Tuple return types
+
+Only single-return functions are stored in `function_return_types`. Functions returning tuples (multiple values) require destructuring and can't be dot-chained, so they're excluded.
+
+### Scope-aware general completions
+
+Currently, scope-awareness only applies to dot-completion type resolution (resolving the identifier before the dot). General (non-dot) completions still return the full flat list of all names + keywords. A future improvement could filter general completions to only names visible in the current scope.
+
+## Exploration Tools: Scope Data
+
+### jq: Scope Fields
+
+```sh
+# Distribution of scope field across node types
+jq '[.. | objects | select(.scope != null) | .nodeType] | group_by(.) | map({type: .[0], count: length}) | sort_by(-.count)' ast.json
+
+# What nodeType does each scope point to
+jq '[.. | objects | select(.scope != null) | {scope: .scope, nodeType: .nodeType}]' ast.json
+
+# All declarations in a specific scope (e.g. FunctionDefinition 1167 = Pool.swap)
+jq '[.. | objects | select(.scope == 1167) | {name, nodeType, typeId: .typeDescriptions.typeIdentifier}]' ast.json
+
+# All scopes containing `self` declarations with their types
+jq '[.. | objects | select(.name == "self" and .scope != null) | {scope, typeId: .typeDescriptions.typeIdentifier}]' ast.json
+```
+
+### jq: Scope Hierarchy
+
+```sh
+# Block nodes (have no scope field — need parent inference)
+jq '[.. | objects | select(.nodeType == "Block") | {id, src, hasScope: (.scope != null)}] | length' ast.json
+
+# UncheckedBlock nodes
+jq '[.. | objects | select(.nodeType == "UncheckedBlock") | {id, src}] | length' ast.json
+
+# linearizedBaseContracts for a specific contract
+jq '.. | objects | select(.nodeType == "ContractDefinition" and .name == "Pool") | .linearizedBaseContracts' ast.json
+
+# All contracts with their linearization
+jq '[.. | objects | select(.nodeType == "ContractDefinition") | {name, id, bases: .linearizedBaseContracts}]' ast.json
+```
