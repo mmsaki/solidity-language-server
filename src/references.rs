@@ -100,14 +100,12 @@ pub fn id_to_location_with_index(
     }
     let node = target_node?;
 
-    let (byte_str, length_str, file_id) = if let Some(index) = name_location_index {
-        if let Some(name_loc) = node.name_locations.get(index) {
-            let parts: Vec<&str> = name_loc.split(':').collect();
-            if parts.len() == 3 {
-                (parts[0], parts[1], parts[2])
-            } else {
-                return None;
-            }
+    let (byte_str, length_str, file_id) = if let Some(index) = name_location_index
+        && let Some(name_loc) = node.name_locations.get(index)
+    {
+        let parts: Vec<&str> = name_loc.split(':').collect();
+        if parts.len() == 3 {
+            (parts[0], parts[1], parts[2])
         } else {
             return None;
         }
