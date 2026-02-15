@@ -1,6 +1,7 @@
 use crate::completion;
 use crate::goto;
 use crate::hover;
+use crate::inlay_hints;
 use crate::links;
 use crate::references;
 use crate::rename;
@@ -16,9 +17,6 @@ pub struct ForgeLsp {
     client: Client,
     compiler: Arc<dyn Runner>,
     ast_cache: Arc<RwLock<HashMap<String, Arc<goto::CachedBuild>>>>,
-    /// Text cache for opened documents
-    ///
-    /// The key is the file's URI converted to string, and the value is a tuple of (version, content).
     text_cache: Arc<RwLock<HashMap<String, (i32, String)>>>,
     completion_cache: Arc<RwLock<HashMap<String, Arc<completion::CompletionCache>>>>,
 }
@@ -77,7 +75,9 @@ impl ForgeLsp {
 
         if build_succeeded {
             if let Ok(ast_data) = ast_result {
-                let cached_build = Arc::new(goto::CachedBuild::new(ast_data));
+                let mut build = goto::CachedBuild::new(ast_data);
+                build.build_source = Some(params.text.as_bytes().to_vec());
+                let cached_build = Arc::new(build);
                 let mut cache = self.ast_cache.write().await;
                 cache.insert(uri.to_string(), cached_build.clone());
                 drop(cache);
@@ -95,6 +95,7 @@ impl ForgeLsp {
                             .insert(uri_string, Arc::new(cc));
                     }
                 });
+
                 self.client
                     .log_message(MessageType::INFO, "Build successful, AST cache updated")
                     .await;
@@ -115,6 +116,13 @@ impl ForgeLsp {
                 )
                 .await;
         }
+
+        // Ask the editor to re-request inlay hints now that the on-disk
+        // content is current.
+        let client = self.client.clone();
+        tokio::spawn(async move {
+            let _ = client.inlay_hint_refresh().await;
+        });
 
         // cache text
         {
@@ -199,7 +207,9 @@ impl ForgeLsp {
         let path_str = file_path.to_str()?;
         match self.compiler.ast(path_str).await {
             Ok(data) => {
-                let build = Arc::new(goto::CachedBuild::new(data));
+                let mut b = goto::CachedBuild::new(data);
+                b.build_source = std::fs::read(file_path).ok();
+                let build = Arc::new(b);
                 if insert_on_miss {
                     let mut cache = self.ast_cache.write().await;
                     cache.insert(uri_str.clone(), build.clone());
@@ -282,6 +292,14 @@ impl LanguageServer for ForgeLsp {
                     },
                 }),
                 document_formatting_provider: Some(OneOf::Left(true)),
+                inlay_hint_provider: Some(OneOf::Right(InlayHintServerCapabilities::Options(
+                    InlayHintOptions {
+                        resolve_provider: Some(true),
+                        work_done_progress_options: WorkDoneProgressOptions {
+                            work_done_progress: None,
+                        },
+                    },
+                ))),
                 text_document_sync: Some(TextDocumentSyncCapability::Options(
                     TextDocumentSyncOptions {
                         will_save: Some(true),
@@ -1090,6 +1108,72 @@ impl LanguageServer for ForgeLsp {
         }
 
         Ok(result)
+    }
+
+    async fn inlay_hint(
+        &self,
+        params: InlayHintParams,
+    ) -> tower_lsp::jsonrpc::Result<Option<Vec<InlayHint>>> {
+        self.client
+            .log_message(MessageType::INFO, "got textDocument/inlayHint request")
+            .await;
+
+        let uri = params.text_document.uri;
+        let range = params.range;
+
+        let file_path = match uri.to_file_path() {
+            Ok(path) => path,
+            Err(_) => {
+                self.client
+                    .log_message(MessageType::ERROR, "invalid file uri")
+                    .await;
+                return Ok(None);
+            }
+        };
+
+        let cached_build = match self.get_or_fetch_build(&uri, &file_path, false).await {
+            Some(cb) => cb,
+            None => return Ok(None),
+        };
+
+        let source_bytes = match cached_build.build_source.as_ref() {
+            Some(bytes) => bytes.as_slice(),
+            None => return Ok(None),
+        };
+
+        let hints = inlay_hints::inlay_hints(&cached_build, &uri, range, source_bytes);
+
+        match &hints {
+            Some(h) => {
+                self.client
+                    .log_message(
+                        MessageType::INFO,
+                        format!("returning {} inlay hints", h.len()),
+                    )
+                    .await;
+            }
+            None => {
+                self.client
+                    .log_message(
+                        MessageType::WARNING,
+                        "inlay hints returned None (file not found in AST cache)",
+                    )
+                    .await;
+            }
+        }
+
+        Ok(hints)
+    }
+
+    async fn inlay_hint_resolve(&self, hint: InlayHint) -> tower_lsp::jsonrpc::Result<InlayHint> {
+        let ast_cache = self.ast_cache.read().await;
+        for cached_build in ast_cache.values() {
+            let resolved = inlay_hints::resolve_inlay_hint(cached_build, hint.clone());
+            if matches!(&resolved.label, InlayHintLabel::LabelParts(_)) {
+                return Ok(resolved);
+            }
+        }
+        Ok(hint)
     }
 
     async fn document_link(

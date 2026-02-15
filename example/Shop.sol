@@ -117,6 +117,7 @@ contract Shop {
         nonces[msg.sender]++;
         orders[orderId] = Transaction.Order(msg.sender, nonce, expectedTotal, block.timestamp, false);
         lastBuy = block.timestamp;
+
         emit BuyOrder(orderId, msg.value);
     }
 
@@ -229,6 +230,7 @@ contract Shop {
     function cancelOwnershipTransfer() public onlyOwner {
         if (pendingOwner == address(0)) revert NoPendingOwnershipTransfer();
         pendingOwner = payable(address(0));
+        emit OwnershipTransferInitiated(owner, address(0));
         emit OwnershipTransferInitiated(owner, address(0));
     }
 
