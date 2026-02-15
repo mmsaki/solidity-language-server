@@ -1,4 +1,7 @@
-use std::sync::OnceLock;
+use std::{
+    path::{Path, PathBuf},
+    sync::OnceLock,
+};
 use tower_lsp::lsp_types::PositionEncodingKind;
 
 /// How the LSP client counts column offsets within a line.
@@ -168,4 +171,31 @@ pub fn is_valid_solidity_identifier(name: &str) -> bool {
         }
     }
     true
+}
+
+/// Returns the path of the top-level directory of the working git tree.
+pub fn find_git_root(path: impl AsRef<Path>) -> Option<PathBuf> {
+    path.as_ref()
+        .ancestors()
+        .find(|p| p.join(".git").exists())
+        .map(Path::to_path_buf)
+}
+
+/// Finds the foundry project root by walking up from `path` looking for `foundry.toml`,
+/// bounded by the git root. Falls back to the git root if no `foundry.toml` is found.
+pub fn find_project_root(path: impl AsRef<Path>) -> Option<PathBuf> {
+    let path = path.as_ref();
+    let boundary = find_git_root(path);
+    let found = path
+        .ancestors()
+        .take_while(|p| {
+            if let Some(boundary) = &boundary {
+                p.starts_with(boundary)
+            } else {
+                true
+            }
+        })
+        .find(|p| p.join("foundry.toml").is_file())
+        .map(Path::to_path_buf);
+    found.or(boundary)
 }

@@ -90,11 +90,7 @@ async fn test_diagnostic_offsets_match_source() {
     let expected_end_byte = 82;
     let expected_start_pos = byte_offset_to_position(&source_code, expected_start_byte);
     let expected_end_pos = byte_offset_to_position(&source_code, expected_end_byte);
-    let filename = std::path::Path::new(&contract_path)
-        .file_name()
-        .and_then(|f| f.to_str())
-        .expect("filename");
-    let diagnostics = build_output_to_diagnostics(&build_output, filename, &source_code);
+    let diagnostics = build_output_to_diagnostics(&build_output, &contract_path, &source_code);
     assert!(!diagnostics.is_empty(), "no diagnostics found");
 
     let diag = &diagnostics[0];
@@ -115,12 +111,8 @@ async fn test_build_output_to_diagnostics_from_file() {
         .build(&file_path)
         .await
         .expect("Compiler build failed");
-    let filename = std::path::Path::new(&contract_path)
-        .file_name()
-        .and_then(|f| f.to_str())
-        .expect("Failed to get filename");
 
-    let diagnostics = build_output_to_diagnostics(&build_output, filename, &source_code);
+    let diagnostics = build_output_to_diagnostics(&build_output, &contract_path, &source_code);
     assert!(!diagnostics.is_empty(), "Expected at least one diagnostic");
 
     let diag = &diagnostics[0];
@@ -208,12 +200,8 @@ async fn test_warning_only_build_should_succeed() {
         .await
         .expect("read source");
     let build_output = compiler.build(&file_path).await.expect("build failed");
-    let filename = contract_path
-        .file_name()
-        .and_then(|f| f.to_str())
-        .expect("filename");
 
-    let diagnostics = build_output_to_diagnostics(&build_output, filename, &source_code);
+    let diagnostics = build_output_to_diagnostics(&build_output, &contract_path, &source_code);
 
     // There should be at least one warning (unused variable)
     assert!(
@@ -244,12 +232,8 @@ async fn test_error_build_should_fail() {
         .await
         .expect("read source");
     let build_output = compiler.build(&file_path).await.expect("build failed");
-    let filename = contract_path
-        .file_name()
-        .and_then(|f| f.to_str())
-        .expect("filename");
 
-    let diagnostics = build_output_to_diagnostics(&build_output, filename, &source_code);
+    let diagnostics = build_output_to_diagnostics(&build_output, &contract_path, &source_code);
 
     assert!(!diagnostics.is_empty(), "expected errors");
     assert!(

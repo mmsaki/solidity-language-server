@@ -138,15 +138,11 @@ impl Runner for ForgeRunner {
     async fn get_build_diagnostics(&self, file: &Url) -> Result<Vec<Diagnostic>, RunnerError> {
         let path = file.to_file_path().map_err(|_| RunnerError::InvalidUrl)?;
         let path_str = path.to_str().ok_or(RunnerError::InvalidUrl)?;
-        let filename = path
-            .file_name()
-            .and_then(|os_str| os_str.to_str())
-            .ok_or(RunnerError::InvalidUrl)?;
         let content = tokio::fs::read_to_string(&path)
             .await
             .map_err(|_| RunnerError::ReadError)?;
         let build_output = self.build(path_str).await?;
-        let diagnostics = build_output_to_diagnostics(&build_output, filename, &content);
+        let diagnostics = build_output_to_diagnostics(&build_output, &path, &content);
         Ok(diagnostics)
     }
 }
