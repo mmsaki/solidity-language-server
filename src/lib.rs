@@ -2,6 +2,7 @@ pub mod build;
 pub mod completion;
 pub mod goto;
 pub mod hover;
+pub mod inlay_hints;
 pub mod links;
 pub mod lint;
 pub mod lsp;

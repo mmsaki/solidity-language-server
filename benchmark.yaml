@@ -11,21 +11,23 @@ timeout: 10
 index_timeout: 15
 output: benchmarks
 report: DELTA.md
+response: full
 
 benchmarks:
   - initialize
-  - textDocument/diagnostic
-  - textDocument/definition
-  - textDocument/declaration
-  - textDocument/hover
-  - textDocument/references
-  - textDocument/completion
-  - textDocument/rename
-  - textDocument/prepareRename
-  - textDocument/documentSymbol
-  - textDocument/documentLink
-  - textDocument/formatting
-  - workspace/symbol
+  # - textDocument/diagnostic
+  # - textDocument/definition
+  # - textDocument/declaration
+  # - textDocument/hover
+  # - textDocument/references
+  # - textDocument/completion
+  # - textDocument/rename
+  # - textDocument/prepareRename
+  # - textDocument/documentSymbol
+  # - textDocument/documentLink
+  # - textDocument/formatting
+  - textDocument/inlayHint
+  # - workspace/symbol
 
 servers:
   - label: baseline

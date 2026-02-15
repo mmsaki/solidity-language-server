@@ -103,6 +103,7 @@ pub struct CachedBuild {
     pub path_to_abs: HashMap<String, String>,
     pub external_refs: ExternalRefs,
     pub id_to_path_map: HashMap<String, String>,
+    pub build_source: Option<Vec<u8>>,
 }
 
 impl CachedBuild {
@@ -133,6 +134,7 @@ impl CachedBuild {
             path_to_abs,
             external_refs,
             id_to_path_map,
+            build_source: None,
         }
     }
 }
