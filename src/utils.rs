@@ -55,10 +55,7 @@ pub fn set_encoding(enc: PositionEncoding) {
 
 /// Read the negotiated encoding (falls back to UTF-16 if never set).
 pub fn encoding() -> PositionEncoding {
-    ENCODING
-        .get()
-        .copied()
-        .unwrap_or(PositionEncoding::default())
+    ENCODING.get().copied().unwrap_or_default()
 }
 
 // ---------------------------------------------------------------------------
