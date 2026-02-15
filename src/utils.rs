@@ -30,10 +30,11 @@ impl PositionEncoding {
             PositionEncoding::Utf16
         }
     }
+}
 
-    /// Convert to the LSP wire type.
-    pub fn to_encoding_kind(self) -> PositionEncodingKind {
-        match self {
+impl From<PositionEncoding> for PositionEncodingKind {
+    fn from(value: PositionEncoding) -> Self {
+        match value {
             PositionEncoding::Utf8 => PositionEncodingKind::UTF8,
             PositionEncoding::Utf16 => PositionEncodingKind::UTF16,
         }

@@ -257,7 +257,7 @@ impl LanguageServer for ForgeLsp {
                 version: Some(env!("LONG_VERSION").to_string()),
             }),
             capabilities: ServerCapabilities {
-                position_encoding: Some(encoding.to_encoding_kind()),
+                position_encoding: Some(encoding.into()),
                 completion_provider: Some(CompletionOptions {
                     trigger_characters: Some(vec![".".to_string()]),
                     resolve_provider: Some(false),
