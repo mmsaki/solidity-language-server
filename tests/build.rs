@@ -94,10 +94,10 @@ async fn test_diagnostic_offsets_match_source() {
     assert!(!diagnostics.is_empty(), "no diagnostics found");
 
     let diag = &diagnostics[0];
-    assert_eq!(diag.range.start.line, expected_start_pos.0);
-    assert_eq!(diag.range.start.character, expected_start_pos.1);
-    assert_eq!(diag.range.end.line, expected_end_pos.0);
-    assert_eq!(diag.range.end.character, expected_end_pos.1);
+    assert_eq!(diag.range.start.line, expected_start_pos.line);
+    assert_eq!(diag.range.start.character, expected_start_pos.character);
+    assert_eq!(diag.range.end.line, expected_end_pos.line);
+    assert_eq!(diag.range.end.character, expected_end_pos.character);
 }
 
 #[tokio::test]

@@ -294,13 +294,13 @@ pub fn cache_ids(sources: &Value) -> Type {
 
 pub fn pos_to_bytes(source_bytes: &[u8], position: Position) -> usize {
     let text = String::from_utf8_lossy(source_bytes);
-    crate::utils::position_to_byte_offset(&text, position.line, position.character)
+    crate::utils::position_to_byte_offset(&text, position)
 }
 
 pub fn bytes_to_pos(source_bytes: &[u8], byte_offset: usize) -> Option<Position> {
     let text = String::from_utf8_lossy(source_bytes);
-    let (line, col) = crate::utils::byte_offset_to_position(&text, byte_offset);
-    Some(Position::new(line, col))
+    let pos = crate::utils::byte_offset_to_position(&text, byte_offset);
+    Some(pos)
 }
 
 /// Convert a `"offset:length:fileId"` src string to an LSP Location.

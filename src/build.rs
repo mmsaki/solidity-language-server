@@ -1,7 +1,7 @@
 use crate::utils::byte_offset_to_position;
 use serde_json::Value;
 use std::path::Path;
-use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, NumberOrString, Position, Range};
+use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, NumberOrString, Range};
 
 pub fn ignored_error_code_warning(value: &serde_json::Value) -> bool {
     let error_code = value
@@ -69,19 +69,10 @@ fn parse_diagnostic(err: &Value, path: &Path, content: &str) -> Option<Diagnosti
         .map(|v| v as usize)
         .unwrap_or(start_offset);
 
-    let (start_line, start_col) = byte_offset_to_position(content, start_offset);
-    let (end_line, end_col) = byte_offset_to_position(content, end_offset);
+    let start = byte_offset_to_position(content, start_offset);
+    let end = byte_offset_to_position(content, end_offset);
 
-    let range = Range {
-        start: Position {
-            line: start_line,
-            character: start_col,
-        },
-        end: Position {
-            line: end_line,
-            character: end_col,
-        },
-    };
+    let range = Range { start, end };
 
     let message = err
         .get("message")
