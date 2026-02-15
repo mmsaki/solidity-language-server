@@ -259,3 +259,43 @@ async fn test_empty_diagnostics_should_succeed() {
         "build_succeeded should be true when no diagnostics at all"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Regression: PR #55 — source path filtering drops diagnostics when forge
+// reports a path like "example/Shop.sol" but the foundry project root is the
+// `example/` directory.  `path.strip_prefix(root)` produces "Shop.sol" which
+// doesn't match "example/Shop.sol", so the diagnostic was silently dropped.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_source_location_matches_subdirectory_project() {
+    // Simulate: forge reports "example/Shop.sol", project root is "/repo/example",
+    // absolute path is "/repo/example/Shop.sol".
+    let forge_output = serde_json::json!({
+        "errors": [
+            {
+                "sourceLocation": {
+                    "file": "example/Shop.sol",
+                    "start": 10,
+                    "end": 20
+                },
+                "type": "TypeError",
+                "component": "general",
+                "severity": "error",
+                "errorCode": "9553",
+                "message": "some error",
+                "formattedMessage": "some error"
+            }
+        ]
+    });
+
+    let content = "0123456789\n0123456789\n0123456789\n";
+    let path = std::path::Path::new("/repo/example/Shop.sol");
+    let diagnostics = build_output_to_diagnostics(&forge_output, path, content);
+
+    assert!(
+        !diagnostics.is_empty(),
+        "diagnostic should not be dropped when forge path is 'example/Shop.sol' and file is '/repo/example/Shop.sol'"
+    );
+    assert_eq!(diagnostics[0].severity, Some(DiagnosticSeverity::ERROR));
+}
