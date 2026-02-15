@@ -34,7 +34,6 @@ Or download a pre-built binary from the [latest release](https://github.com/mmsa
 ```sh
 solidity-language-server                          # start LSP server
 solidity-language-server --version                # show version + commit + platform
-solidity-language-server --completion-mode full   # full scope-aware completions
 solidity-language-server --help                   # show all options
 ```
 
@@ -43,14 +42,8 @@ solidity-language-server --help                   # show all options
 | Flag | Values | Default | Description |
 |------|--------|---------|-------------|
 | `--version`, `-V` | | | Show version, commit hash, OS, and architecture |
-| `--completion-mode` | `fast`, `full` | `fast` | Controls completion computation strategy |
 | `--use-solar` | | | Use solar compiler instead of forge |
 | `--stdio` | | | Use stdio transport |
-
-**Completion modes:**
-
-- **fast** — Pre-built completions served from cache. Zero per-request computation. Best for large projects like Uniswap v4.
-- **full** — Per-request scope filtering with full completion recomputation. For power users who want scope-aware results.
 
 ### Neovim
 

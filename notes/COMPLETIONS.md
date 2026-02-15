@@ -101,8 +101,6 @@ pub struct CompletionCache {
     /// Built once, returned by reference on every non-dot completion request.
     pub general_completions: Vec<CompletionItem>,
 
-    // --- Scope-aware completion data (used by --completion-mode full) ---
-
     /// scope node_id → declarations in that scope.
     /// Each scope (Block, FunctionDefinition, ContractDefinition, SourceUnit)
     /// has the variables/functions/types declared directly within it.
@@ -492,28 +490,6 @@ t_mapping$_t_userDefinedValueType$_PoolId_$8841_$_t_struct$_State_$4809_storage_
 
 For nested mappings, it extracts the deepest value type (we don't count brackets — "what matters is the end of the type").
 
-## Completion Mode
-
-The `--completion-mode` CLI flag controls dot-completion type resolution:
-
-```sh
-# Default — scope-aware type resolution using AST scope hierarchy
-solidity-language-server --stdio --completion-mode full
-
-# Lightweight — flat first-encountered-wins lookup, no scope walking
-solidity-language-server --stdio --completion-mode fast
-```
-
-### Full Mode (default)
-
-Uses scope-aware type resolution for dot-completions. When the user types `self.` inside a function, full mode walks the AST scope chain from the cursor position upward (Block → FunctionDefinition → ContractDefinition → SourceUnit) to find the correct type for `self` in the enclosing function, rather than whichever `self` was seen first during the AST walk.
-
-General (non-dot) completions return the same pre-built list in both modes.
-
-### Fast Mode
-
-Skips scope resolution entirely. Uses the flat `name_to_type` map (first-encountered-wins) for dot-completion type resolution. Faster but produces wrong results when the same name appears with different types in different scopes (e.g. `self` in a library with multiple functions).
-
 ## Caching Architecture
 
 The completion cache is designed for zero-blocking reads:
@@ -690,17 +666,6 @@ scope_declarations[1167]: self = t_struct$_State_$4809_storage_ptr ✓
 → resolve to Pool.State struct → show struct fields
 ```
 
-### LSP Integration
-
-In `--completion-mode full` (default), the completion handler:
-
-1. Converts the cursor position to a byte offset using `position_to_byte_offset`
-2. Looks up the source file's AST `file_id` from `cache.path_to_file_id`
-3. Builds a `ScopeContext { byte_pos, file_id }`
-4. Passes the scope context to `get_chain_completions` → `resolve_name` → `resolve_name_in_scope`
-
-In `--completion-mode fast`, `scope_ctx` is `None` and all resolution falls through to the flat `name_to_type` lookup.
-
 ### Concrete Example: `self.` in Pool.swap
 
 ```
@@ -712,6 +677,7 @@ Cursor: after the dot in `self.`
 **v0.1.14 (broken)**: Flat lookup → `self` resolves to `uint24` → shows `isDynamicFee`, `isValid`, `validate`, `getInitialLPFee` (LPFeeLibrary functions for uint24)
 
 **v0.1.15 (scope-aware)**: Scope walk → Block 1166 → FunctionDefinition 1167 → finds `self` declared as `t_struct$_State_$4809_storage_ptr` → shows struct fields:
+
 - `slot0` (Slot0)
 - `feeGrowthGlobal0X128` (uint256)
 - `feeGrowthGlobal1X128` (uint256)
@@ -793,6 +759,7 @@ lsp-bench -c benchmarks/v4-core-completion.yaml
 ```
 
 Output:
+
 ```
   config benchmarks/v4-core-completion.yaml
   file src/libraries/Pool.sol  (line 206, col 32)
@@ -847,9 +814,11 @@ Pick a position where the scope-aware resolution makes a visible difference:
 
 1. Find a function where a parameter name is reused across multiple functions with different types
 2. Use `jq` to find all declarations of that name and their types:
+
    ```sh
    jq '[.. | objects | select(.nodeType == "VariableDeclaration" and .name == "self") | {scope, typeId: .typeDescriptions.typeIdentifier}]' ast.json
    ```
+
 3. Pick a line inside one of those functions, right after a dot following the variable
 4. Set `line` (0-based) and `col` (0-based, after the dot character)
 5. Set `trigger_character: "."` to simulate the editor's dot-trigger behavior

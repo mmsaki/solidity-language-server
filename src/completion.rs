@@ -64,7 +64,6 @@ pub struct CompletionCache {
     /// Built once, returned by reference on every non-dot completion request.
     pub general_completions: Vec<CompletionItem>,
 
-    // --- Scope-aware completion data (used by --completion-mode full) ---
     /// scope node_id → declarations in that scope.
     /// Each scope (Block, FunctionDefinition, ContractDefinition, SourceUnit)
     /// has the variables/functions/types declared directly within it.
@@ -1385,9 +1384,6 @@ pub fn get_dot_completions(
 
 /// Get completions by resolving a full dot-expression chain.
 /// This is the main entry point for dot-completions with chaining support.
-///
-/// When `scope_ctx` is provided (--completion-mode full), the first segment
-/// is resolved using scope-aware lookup. Otherwise, flat lookup is used.
 pub fn get_chain_completions(
     cache: &CompletionCache,
     chain: &[DotSegment],
