@@ -89,6 +89,97 @@ fn test_is_valid_solidity_identifier() {
     assert!(!is_valid_solidity_identifier("invalid.name"));
 }
 
+#[test]
+fn test_rejects_active_keywords() {
+    let keywords = [
+        "abstract", "address", "anonymous", "as", "assembly", "bool", "break", "bytes",
+        "calldata", "catch", "constant", "constructor", "continue", "contract", "delete", "do",
+        "else", "emit", "enum", "event", "external", "fallback", "false", "fixed", "for",
+        "function", "hex", "if", "immutable", "import", "indexed", "interface", "internal", "is",
+        "library", "mapping", "memory", "modifier", "new", "override", "payable", "pragma",
+        "private", "public", "pure", "receive", "return", "returns", "storage", "string",
+        "struct", "true", "try", "type", "ufixed", "unchecked", "unicode", "using", "view",
+        "virtual", "while",
+    ];
+    for kw in keywords {
+        assert!(
+            !is_valid_solidity_identifier(kw),
+            "{kw:?} should be rejected"
+        );
+    }
+}
+
+#[test]
+fn test_rejects_reserved_keywords() {
+    let reserved = [
+        "after", "alias", "apply", "auto", "byte", "case", "copyof", "default", "define",
+        "final", "implements", "in", "inline", "let", "macro", "match", "mutable", "null", "of",
+        "partial", "promise", "reference", "relocatable", "sealed", "sizeof", "static",
+        "supports", "switch", "typedef", "typeof", "var",
+    ];
+    for kw in reserved {
+        assert!(
+            !is_valid_solidity_identifier(kw),
+            "{kw:?} should be rejected"
+        );
+    }
+}
+
+#[test]
+fn test_rejects_numeric_type_keywords() {
+    // int / uint bare
+    assert!(!is_valid_solidity_identifier("int"));
+    assert!(!is_valid_solidity_identifier("uint"));
+
+    // int<N> / uint<N> for valid sizes
+    for n in (8..=256).step_by(8) {
+        let int_kw = format!("int{n}");
+        let uint_kw = format!("uint{n}");
+        assert!(
+            !is_valid_solidity_identifier(&int_kw),
+            "{int_kw:?} should be rejected"
+        );
+        assert!(
+            !is_valid_solidity_identifier(&uint_kw),
+            "{uint_kw:?} should be rejected"
+        );
+    }
+
+    // bytes1..bytes32
+    for n in 1..=32 {
+        let bytes_kw = format!("bytes{n}");
+        assert!(
+            !is_valid_solidity_identifier(&bytes_kw),
+            "{bytes_kw:?} should be rejected"
+        );
+    }
+}
+
+#[test]
+fn test_allows_identifier_keywords() {
+    // These 7 keywords are explicitly allowed as identifiers per SolidityParser.g4
+    let allowed = ["from", "error", "revert", "global", "transient", "layout", "at"];
+    for kw in allowed {
+        assert!(
+            is_valid_solidity_identifier(kw),
+            "{kw:?} should be allowed as identifier"
+        );
+    }
+}
+
+#[test]
+fn test_numeric_type_edge_cases() {
+    // Invalid sizes should still be valid identifiers (not keywords)
+    assert!(is_valid_solidity_identifier("int7"));
+    assert!(is_valid_solidity_identifier("int257"));
+    assert!(is_valid_solidity_identifier("int0"));
+    assert!(is_valid_solidity_identifier("uint3"));
+    assert!(is_valid_solidity_identifier("uint512"));
+    assert!(is_valid_solidity_identifier("bytes0"));
+    assert!(is_valid_solidity_identifier("bytes33"));
+    assert!(is_valid_solidity_identifier("bytes64"));
+}
+
 // ---------------------------------------------------------------------------
 // UTF-16 encoding-aware tests (default encoding = UTF-16)
 //

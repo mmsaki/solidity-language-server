@@ -124,6 +124,11 @@ pub fn position_to_byte_offset(source: &str, pos: Position) -> usize {
     source.len() // position not found, we default to the end of the content
 }
 
+// ---------------------------------------------------------------------------
+// Identifier validation
+// ---------------------------------------------------------------------------
+
+/// Check whether `name` is a valid Solidity identifier
 pub fn is_valid_solidity_identifier(name: &str) -> bool {
     let mut chars = name.chars();
     let Some(first) = chars.next() else {
@@ -132,5 +137,140 @@ pub fn is_valid_solidity_identifier(name: &str) -> bool {
     if !first.is_ascii_alphabetic() && first != '_' && first != '$' {
         return false;
     }
-    chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+    if !chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$') {
+        return false;
+    }
+    if SOLIDITY_KEYWORDS.contains(&name) {
+        return false;
+    }
+    if is_numeric_type_keyword(name) {
+        return false;
+    }
+    true
+}
+
+/// Keywords that are not allowed as identifiers in Solidity.
+///
+/// The grammar permits only 7 keywords as identifiers:
+/// `from`, `error`, `revert`, `global`, `transient`, `layout`, `at`.
+/// Everything else listed in the lexer is blacklisted here.
+const SOLIDITY_KEYWORDS: &[&str] = &[
+    // Active keywords
+    "abstract",
+    "address",
+    "anonymous",
+    "as",
+    "assembly",
+    "bool",
+    "break",
+    "bytes",
+    "calldata",
+    "catch",
+    "constant",
+    "constructor",
+    "continue",
+    "contract",
+    "delete",
+    "do",
+    "else",
+    "emit",
+    "enum",
+    "event",
+    "external",
+    "fallback",
+    "false",
+    "fixed",
+    "for",
+    "function",
+    "hex",
+    "if",
+    "immutable",
+    "import",
+    "indexed",
+    "interface",
+    "internal",
+    "is",
+    "library",
+    "mapping",
+    "memory",
+    "modifier",
+    "new",
+    "override",
+    "payable",
+    "pragma",
+    "private",
+    "public",
+    "pure",
+    "receive",
+    "return",
+    "returns",
+    "storage",
+    "string",
+    "struct",
+    "true",
+    "try",
+    "type",
+    "ufixed",
+    "unchecked",
+    "unicode",
+    "using",
+    "view",
+    "virtual",
+    "while",
+    // Reserved keywords (future use)
+    "after",
+    "alias",
+    "apply",
+    "auto",
+    "byte",
+    "case",
+    "copyof",
+    "default",
+    "define",
+    "final",
+    "implements",
+    "in",
+    "inline",
+    "let",
+    "macro",
+    "match",
+    "mutable",
+    "null",
+    "of",
+    "partial",
+    "promise",
+    "reference",
+    "relocatable",
+    "sealed",
+    "sizeof",
+    "static",
+    "supports",
+    "switch",
+    "typedef",
+    "typeof",
+    "var",
+];
+
+/// Check whether `name` is a numeric-type keyword: `int<N>`, `uint<N>`, or `bytes<N>`.
+fn is_numeric_type_keyword(name: &str) -> bool {
+    if let Some(suffix) = name
+        .strip_prefix("uint")
+        .or_else(|| name.strip_prefix("int"))
+    {
+        if suffix.is_empty() {
+            return true;
+        }
+        let Ok(n) = suffix.parse::<u16>() else {
+            return false;
+        };
+        return (8..=256).contains(&n) && n % 8 == 0;
+    }
+    if let Some(suffix) = name.strip_prefix("bytes") {
+        // bare "bytes" is in SOLIDITY_KEYWORDS; only "bytes1"–"bytes32" are handled here
+        let Ok(n) = suffix.parse::<u16>() else {
+            return false;
+        };
+        return (1..=32).contains(&n);
+    }
+    false
 }
