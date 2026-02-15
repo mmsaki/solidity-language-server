@@ -78,6 +78,9 @@ fn test_is_valid_solidity_identifier() {
     assert!(is_valid_solidity_identifier("name123"));
     assert!(is_valid_solidity_identifier("_"));
     assert!(is_valid_solidity_identifier("a_b_c"));
+    assert!(is_valid_solidity_identifier("$token"));
+    assert!(is_valid_solidity_identifier("$"));
+    assert!(is_valid_solidity_identifier("my$var"));
 
     assert!(!is_valid_solidity_identifier(""));
     assert!(!is_valid_solidity_identifier("123invalid"));

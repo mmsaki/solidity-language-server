@@ -125,18 +125,12 @@ pub fn position_to_byte_offset(source: &str, pos: Position) -> usize {
 }
 
 pub fn is_valid_solidity_identifier(name: &str) -> bool {
-    if name.is_empty() {
+    let mut chars = name.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if !first.is_ascii_alphabetic() && first != '_' && first != '$' {
         return false;
     }
-    let chars: Vec<char> = name.chars().collect();
-    let first = chars[0];
-    if !first.is_ascii_alphabetic() && first != '_' {
-        return false;
-    }
-    for &c in &chars {
-        if !c.is_ascii_alphanumeric() && c != '_' {
-            return false;
-        }
-    }
-    true
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
 }
