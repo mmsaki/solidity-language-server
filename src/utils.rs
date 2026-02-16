@@ -1,49 +1,8 @@
 use std::sync::OnceLock;
-use tower_lsp::lsp_types::PositionEncodingKind;
-
-/// How the LSP client counts column offsets within a line.
-///
-/// Set once during `initialize()` via [`set_encoding`] and read implicitly by
-/// [`byte_offset_to_position`] and [`position_to_byte_offset`].  All other
-/// modules are encoding-agnostic — they never need to know or pass this value.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PositionEncoding {
-    /// Column = number of bytes from the start of the line (UTF-8 code units).
-    Utf8,
-    /// Column = number of UTF-16 code units from the start of the line.
-    /// This is the **mandatory default** per the LSP specification.
-    Utf16,
-}
-
-impl PositionEncoding {
-    /// The mandatory LSP fallback encoding.
-    pub const DEFAULT: Self = PositionEncoding::Utf16;
-
-    /// Pick the best encoding from the set the client advertises.
-    ///
-    /// Preference: UTF-8 if supported, otherwise UTF-16 (the mandatory fallback).
-    pub fn negotiate(client_encodings: Option<&[PositionEncodingKind]>) -> Self {
-        let Some(encodings) = client_encodings else {
-            return Self::DEFAULT;
-        };
-        if encodings.contains(&PositionEncodingKind::UTF8) {
-            PositionEncoding::Utf8
-        } else {
-            PositionEncoding::Utf16
-        }
-    }
-
-    /// Convert to the LSP wire type.
-    pub fn to_encoding_kind(self) -> PositionEncodingKind {
-        match self {
-            PositionEncoding::Utf8 => PositionEncodingKind::UTF8,
-            PositionEncoding::Utf16 => PositionEncodingKind::UTF16,
-        }
-    }
-}
+use tower_lsp::lsp_types::{Position, PositionEncodingKind};
 
 // ---------------------------------------------------------------------------
-// Global encoding state — written once in `initialize`, read everywhere.
+// Position Encoding
 // ---------------------------------------------------------------------------
 
 static ENCODING: OnceLock<PositionEncoding> = OnceLock::new();
@@ -56,116 +15,262 @@ pub fn set_encoding(enc: PositionEncoding) {
 
 /// Read the negotiated encoding (falls back to UTF-16 if never set).
 pub fn encoding() -> PositionEncoding {
-    ENCODING.get().copied().unwrap_or(PositionEncoding::DEFAULT)
+    ENCODING.get().copied().unwrap_or_default()
+}
+
+/// How the LSP client counts column offsets within a line.
+///
+/// Set once during `initialize()` via [`set_encoding`] and read implicitly by
+/// [`byte_offset_to_position`] and [`position_to_byte_offset`].  All other
+/// modules are encoding-agnostic — they never need to know or pass this value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PositionEncoding {
+    /// Column = number of bytes from the start of the line (UTF-8 code units).
+    Utf8,
+    /// Column = number of UTF-16 code units from the start of the line.
+    /// This is the **mandatory default** per the LSP specification.
+    #[default]
+    Utf16,
+}
+
+impl PositionEncoding {
+    /// Pick the best encoding from the set the client advertises.
+    ///
+    /// Preference: UTF-8 if supported, otherwise UTF-16 (the mandatory fallback).
+    pub fn negotiate(client_encodings: Option<&[PositionEncodingKind]>) -> Self {
+        let Some(encodings) = client_encodings else {
+            return Self::default();
+        };
+        if encodings.contains(&PositionEncodingKind::UTF8) {
+            PositionEncoding::Utf8
+        } else {
+            PositionEncoding::Utf16
+        }
+    }
+}
+
+impl From<PositionEncoding> for PositionEncodingKind {
+    fn from(value: PositionEncoding) -> Self {
+        match value {
+            PositionEncoding::Utf8 => PositionEncodingKind::UTF8,
+            PositionEncoding::Utf16 => PositionEncodingKind::UTF16,
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
-// Byte-offset ↔ LSP-position conversion
+// Byte-offset to LSP Position conversion
 // ---------------------------------------------------------------------------
 
-/// Convert a byte offset in `source` to an `(line, column)` pair whose column
-/// unit depends on the negotiated [`PositionEncoding`].
-pub fn byte_offset_to_position(source: &str, byte_offset: usize) -> (u32, u32) {
+/// Convert a byte offset in `source` to a [`Position`] whose column unit depends
+/// on the negotiated [`PositionEncoding`].
+pub fn byte_offset_to_position(source: &str, byte_offset: usize) -> Position {
     let enc = encoding();
     let mut line: u32 = 0;
     let mut col: u32 = 0;
-    let bytes = source.as_bytes();
-    let mut i = 0;
 
-    while i < byte_offset && i < bytes.len() {
-        match bytes[i] {
-            b'\n' => {
+    for (i, ch) in source.char_indices() {
+        if i >= byte_offset {
+            break;
+        }
+        match (ch, enc) {
+            ('\n', _) => {
                 line += 1;
                 col = 0;
-                i += 1;
             }
-            b'\r' if i + 1 < bytes.len() && bytes[i + 1] == b'\n' => {
-                line += 1;
-                col = 0;
-                i += 2;
+            ('\r', _) => {}
+            (ch, PositionEncoding::Utf8) => {
+                col += ch.len_utf8() as u32;
             }
-            _ => {
-                match enc {
-                    PositionEncoding::Utf8 => {
-                        // One byte = one UTF-8 code unit.
-                        col += 1;
-                        i += 1;
-                    }
-                    PositionEncoding::Utf16 => {
-                        // Advance by the full character, count UTF-16 code units.
-                        let ch_len = utf8_char_len(bytes[i]);
-                        let ch = &source[i..i + ch_len];
-                        col += ch.chars().next().map(|c| c.len_utf16() as u32).unwrap_or(1);
-                        i += ch_len;
-                    }
-                }
+            (ch, PositionEncoding::Utf16) => {
+                col += ch.len_utf16() as u32;
             }
         }
     }
-
-    (line, col)
+    Position {
+        line,
+        character: col,
+    }
 }
 
-/// Convert an LSP `(line, character)` position back to a byte offset, where
+/// Convert an LSP [`Position`] position back to a byte offset, where
 /// `character` is interpreted according to the negotiated [`PositionEncoding`].
-pub fn position_to_byte_offset(source: &str, line: u32, character: u32) -> usize {
+pub fn position_to_byte_offset(source: &str, pos: Position) -> usize {
     let enc = encoding();
     let mut current_line: u32 = 0;
     let mut current_col: u32 = 0;
 
     for (i, ch) in source.char_indices() {
-        if current_line == line && current_col == character {
+        if current_line >= pos.line && current_col >= pos.character {
             return i;
         }
 
-        match ch {
-            '\n' => {
-                if current_line == line {
+        match (ch, enc) {
+            ('\n', _) => {
+                if current_line == pos.line {
                     return i; // clamp to end of line
                 }
                 current_line += 1;
                 current_col = 0;
             }
-            _ => {
-                current_col += match enc {
-                    PositionEncoding::Utf8 => ch.len_utf8() as u32,
-                    PositionEncoding::Utf16 => ch.len_utf16() as u32,
-                };
+            (ch, PositionEncoding::Utf8) => {
+                current_col += ch.len_utf8() as u32;
+            }
+            (ch, PositionEncoding::Utf16) => {
+                current_col += ch.len_utf16() as u32;
             }
         }
     }
-
-    source.len()
+    source.len() // position not found, we default to the end of the content
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Identifier validation
 // ---------------------------------------------------------------------------
 
-/// Number of bytes in a UTF-8 character given its leading byte.
-fn utf8_char_len(lead: u8) -> usize {
-    match lead {
-        0x00..=0x7F => 1,
-        0xC0..=0xDF => 2,
-        0xE0..=0xEF => 3,
-        0xF0..=0xF7 => 4,
-        _ => 1, // continuation byte — shouldn't happen at a char boundary
-    }
-}
-
+/// Check whether `name` is a valid Solidity identifier
 pub fn is_valid_solidity_identifier(name: &str) -> bool {
-    if name.is_empty() {
+    let mut chars = name.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if !first.is_ascii_alphabetic() && first != '_' && first != '$' {
         return false;
     }
-    let chars: Vec<char> = name.chars().collect();
-    let first = chars[0];
-    if !first.is_ascii_alphabetic() && first != '_' {
+    if !chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$') {
         return false;
     }
-    for &c in &chars {
-        if !c.is_ascii_alphanumeric() && c != '_' {
-            return false;
-        }
+    if SOLIDITY_KEYWORDS.contains(&name) {
+        return false;
+    }
+    if is_numeric_type_keyword(name) {
+        return false;
     }
     true
+}
+
+/// Keywords that are not allowed as identifiers in Solidity.
+///
+/// The grammar permits only 7 keywords as identifiers:
+/// `from`, `error`, `revert`, `global`, `transient`, `layout`, `at`.
+/// Everything else listed in the lexer is blacklisted here.
+const SOLIDITY_KEYWORDS: &[&str] = &[
+    // Active keywords
+    "abstract",
+    "address",
+    "anonymous",
+    "as",
+    "assembly",
+    "bool",
+    "break",
+    "bytes",
+    "calldata",
+    "catch",
+    "constant",
+    "constructor",
+    "continue",
+    "contract",
+    "delete",
+    "do",
+    "else",
+    "emit",
+    "enum",
+    "event",
+    "external",
+    "fallback",
+    "false",
+    "fixed",
+    "for",
+    "function",
+    "hex",
+    "if",
+    "immutable",
+    "import",
+    "indexed",
+    "interface",
+    "internal",
+    "is",
+    "library",
+    "mapping",
+    "memory",
+    "modifier",
+    "new",
+    "override",
+    "payable",
+    "pragma",
+    "private",
+    "public",
+    "pure",
+    "receive",
+    "return",
+    "returns",
+    "storage",
+    "string",
+    "struct",
+    "true",
+    "try",
+    "type",
+    "ufixed",
+    "unchecked",
+    "unicode",
+    "using",
+    "view",
+    "virtual",
+    "while",
+    // Reserved keywords (future use)
+    "after",
+    "alias",
+    "apply",
+    "auto",
+    "byte",
+    "case",
+    "copyof",
+    "default",
+    "define",
+    "final",
+    "implements",
+    "in",
+    "inline",
+    "let",
+    "macro",
+    "match",
+    "mutable",
+    "null",
+    "of",
+    "partial",
+    "promise",
+    "reference",
+    "relocatable",
+    "sealed",
+    "sizeof",
+    "static",
+    "supports",
+    "switch",
+    "typedef",
+    "typeof",
+    "var",
+];
+
+/// Check whether `name` is a numeric-type keyword: `int<N>`, `uint<N>`, or `bytes<N>`.
+fn is_numeric_type_keyword(name: &str) -> bool {
+    if let Some(suffix) = name
+        .strip_prefix("uint")
+        .or_else(|| name.strip_prefix("int"))
+    {
+        if suffix.is_empty() {
+            return true;
+        }
+        let Ok(n) = suffix.parse::<u16>() else {
+            return false;
+        };
+        return (8..=256).contains(&n) && n % 8 == 0;
+    }
+    if let Some(suffix) = name.strip_prefix("bytes") {
+        // bare "bytes" is in SOLIDITY_KEYWORDS; only "bytes1"–"bytes32" are handled here
+        let Ok(n) = suffix.parse::<u16>() else {
+            return false;
+        };
+        return (1..=32).contains(&n);
+    }
+    false
 }

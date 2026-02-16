@@ -2,9 +2,7 @@
 
 use crate::utils::byte_offset_to_position;
 use serde_json::Value;
-use tower_lsp::lsp_types::{
-    DocumentSymbol, Location, Position, Range, SymbolInformation, SymbolKind, Url,
-};
+use tower_lsp::lsp_types::{DocumentSymbol, Location, Range, SymbolInformation, SymbolKind, Url};
 
 pub fn extract_symbols(ast_data: &Value) -> Vec<SymbolInformation> {
     let mut symbols = Vec::new();
@@ -1254,19 +1252,10 @@ fn get_node_range(node: &Value, file_path: &str) -> Option<Range> {
 
     // Read the file content to convert byte offsets to positions
     let content = std::fs::read_to_string(file_path).ok()?;
-    let (start_line, start_col) = byte_offset_to_position(&content, start_offset);
-    let (end_line, end_col) = byte_offset_to_position(&content, start_offset + length);
+    let start = byte_offset_to_position(&content, start_offset);
+    let end = byte_offset_to_position(&content, start_offset + length);
 
-    Some(Range {
-        start: Position {
-            line: start_line,
-            character: start_col,
-        },
-        end: Position {
-            line: end_line,
-            character: end_col,
-        },
-    })
+    Some(Range { start, end })
 }
 
 fn get_symbol_range(node: &Value, file_path: &str) -> Option<Range> {
@@ -1277,18 +1266,9 @@ fn get_symbol_range(node: &Value, file_path: &str) -> Option<Range> {
             let start_offset: usize = parts[0].parse().ok()?;
             let length: usize = parts[1].parse().ok()?;
             let content = std::fs::read_to_string(file_path).ok()?;
-            let (start_line, start_col) = byte_offset_to_position(&content, start_offset);
-            let (end_line, end_col) = byte_offset_to_position(&content, start_offset + length);
-            return Some(Range {
-                start: Position {
-                    line: start_line,
-                    character: start_col,
-                },
-                end: Position {
-                    line: end_line,
-                    character: end_col,
-                },
-            });
+            let start = byte_offset_to_position(&content, start_offset);
+            let end = byte_offset_to_position(&content, start_offset + length);
+            return Some(Range { start, end });
         }
     }
     // Fallback to node range

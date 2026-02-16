@@ -37,10 +37,7 @@ fn test_get_identifier_at_position_struct_name() {
     // A.sol line 3: "struct Test {"
     //                       ^--- position (3, 7) should yield "Test"
     let source = b"// SPDX-License-Identifier: UNLICENSED\npragma solidity ^0.8.0;\n\nstruct Test {\n    uint256 foo;\n}\n";
-    let pos = Position {
-        line: 3,
-        character: 7,
-    };
+    let pos = Position::new(3, 7);
     let ident = get_identifier_at_position(source, pos);
     assert_eq!(ident.as_deref(), Some("Test"));
 }
@@ -48,10 +45,7 @@ fn test_get_identifier_at_position_struct_name() {
 #[test]
 fn test_get_identifier_at_position_on_whitespace_returns_none() {
     let source = b"  { Foo }\n";
-    let pos = Position {
-        line: 0,
-        character: 0,
-    }; // leading whitespace
+    let pos = Position::default(); // leading whitespace
     let ident = get_identifier_at_position(source, pos);
     assert_eq!(ident, None);
 }
@@ -60,10 +54,7 @@ fn test_get_identifier_at_position_on_whitespace_returns_none() {
 fn test_get_identifier_range_matches_identifier_bounds() {
     let source = b"// SPDX-License-Identifier: UNLICENSED\npragma solidity ^0.8.0;\n\nstruct Test {\n    uint256 foo;\n}\n";
     // "Test" starts at column 7, length 4
-    let pos = Position {
-        line: 3,
-        character: 9,
-    }; // middle of "Test"
+    let pos = Position::new(3, 9); // middle of "Test"
     let range = get_identifier_range(source, pos).expect("should find range");
     assert_eq!(range.start.line, 3);
     assert_eq!(range.start.character, 7);
@@ -109,10 +100,7 @@ async fn test_references_namelocations_fallback() {
 
     // Position on "Test" in the import: `import {Test} from "./A.sol";`
     // B.sol line 3, "Test" starts at column 8
-    let pos = Position {
-        line: 3,
-        character: 9,
-    };
+    let pos = Position::new(3, 9);
 
     // With name_location_index = Some(0), the old code would fail to resolve
     // the definition (StructDefinition has no nameLocations array).
@@ -174,10 +162,7 @@ async fn test_rename_uses_text_buffers_over_disk() {
     text_buffers.insert(a_uri.to_string(), a_source.clone());
 
     // Rename "Test" from B.sol import line
-    let pos = Position {
-        line: 3,
-        character: 9,
-    }; // on "Test" in import
+    let pos = Position::new(3, 9); // on "Test" in import
     let result = rename_symbol(
         &build,
         &b_uri,
@@ -232,10 +217,7 @@ async fn test_rename_returns_workspace_edit_for_all_files() {
     // We need the A.sol build for this
     let (build_a, _) = build_example("A.sol").await;
     let a_source_bytes = std::fs::read(&a_path).expect("read A.sol");
-    let pos = Position {
-        line: 3,
-        character: 8,
-    }; // on "Test" in struct definition
+    let pos = Position::new(3, 8); // on "Test" in struct definition
 
     // Pass build_b as other_builds so cross-file references are found
     let result = rename_symbol(
@@ -337,10 +319,7 @@ async fn test_rename_corrects_stale_ast_ranges_via_line_scan() {
     // We call rename with the ORIGINAL source bytes (what the AST was built from)
     // for position resolution, but with modified text_buffers for verification.
     // The rename function should use find_identifier_on_line to correct the range.
-    let pos = Position {
-        line: 3,
-        character: 9,
-    }; // on "Test"/"Foo" in import
+    let pos = Position::new(3, 9); // on "Test"/"Foo" in import
     let ident = get_identifier_at_position(&b_source, pos);
     assert_eq!(
         ident.as_deref(),
