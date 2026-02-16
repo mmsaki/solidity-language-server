@@ -4,5 +4,6 @@ cache
 bench/target
 benchmarks/*
 !benchmarks/*.yaml
+!benchmarks/*.md
 DELTA.md
 v4-core

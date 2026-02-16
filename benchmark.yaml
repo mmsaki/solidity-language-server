@@ -5,12 +5,12 @@ file: Shop.sol
 line: 105
 col: 27
 
-iterations: 10
-warmup: 2
-timeout: 10
-index_timeout: 15
+iterations: 1
+warmup: 0
+timeout: 5
+index_timeout: 5
 output: benchmarks
-report: DELTA.md
+report: benchmarks/v0.1.17.md
 
 benchmarks:
   - initialize
@@ -28,11 +28,35 @@ benchmarks:
   - workspace/symbol
 
 servers:
-  - label: baseline
+  - label: 0.1.16
     description: Published crates.io release
     link: https://github.com/mmsaki/solidity-language-server
     cmd: solidity-language-server
 
-  - label: head
+  - label: 0.1.17
     description: Local branch build
     cmd: ./target/release/solidity-language-server
+
+  - label: solc
+    description: Official Solidity compiler LSP
+    link: https://docs.soliditylang.org
+    cmd: solc
+    args: ["--lsp"]
+
+  - label: nomicfoundation
+    description: Hardhat/Nomic Foundation Solidity Language Server
+    link: https://github.com/NomicFoundation/hardhat-vscode
+    cmd: nomicfoundation-solidity-language-server
+    args: ["--stdio"]
+
+  - label: juanfranblanco
+    description: VSCode Solidity by Juan Blanco
+    link: https://github.com/juanfranblanco/vscode-solidity
+    cmd: vscode-solidity-server
+    args: ["--stdio"]
+
+  - label: qiuxiang
+    description: Solidity Language Server by qiuxiang
+    link: https://github.com/qiuxiang/solidity-ls
+    cmd: solidity-ls
+    args: ["--stdio"]
