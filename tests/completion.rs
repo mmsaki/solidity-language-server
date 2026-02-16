@@ -91,7 +91,8 @@ fn test_parse_chain_simple() {
         chain,
         vec![DotSegment {
             name: "msg".to_string(),
-            kind: AccessKind::Plain
+            kind: AccessKind::Plain,
+            call_args: None,
         }]
     );
 }
@@ -103,7 +104,8 @@ fn test_parse_chain_function_call() {
         chain,
         vec![DotSegment {
             name: "foo".to_string(),
-            kind: AccessKind::Call
+            kind: AccessKind::Call,
+            call_args: None,
         }]
     );
 }
@@ -115,7 +117,8 @@ fn test_parse_chain_function_call_with_args() {
         chain,
         vec![DotSegment {
             name: "swap".to_string(),
-            kind: AccessKind::Call
+            kind: AccessKind::Call,
+            call_args: Some("key, params".to_string()),
         }]
     );
 }
@@ -129,7 +132,8 @@ fn test_parse_chain_nested_calls_in_args() {
         chain,
         vec![DotSegment {
             name: "swap".to_string(),
-            kind: AccessKind::Call
+            kind: AccessKind::Call,
+            call_args: Some("getKey(), getParams(x, y())".to_string()),
         }]
     );
 }
@@ -141,7 +145,8 @@ fn test_parse_chain_index_access() {
         chain,
         vec![DotSegment {
             name: "_pools".to_string(),
-            kind: AccessKind::Index
+            kind: AccessKind::Index,
+            call_args: None,
         }]
     );
 }
@@ -155,7 +160,8 @@ fn test_parse_chain_index_with_nested_call() {
         chain,
         vec![DotSegment {
             name: "mapping".to_string(),
-            kind: AccessKind::Index
+            kind: AccessKind::Index,
+            call_args: None,
         }]
     );
 }
@@ -170,11 +176,13 @@ fn test_parse_chain_two_segments() {
         vec![
             DotSegment {
                 name: "poolManager".to_string(),
-                kind: AccessKind::Plain
+                kind: AccessKind::Plain,
+                call_args: None,
             },
             DotSegment {
                 name: "swap".to_string(),
-                kind: AccessKind::Call
+                kind: AccessKind::Call,
+                call_args: None,
             },
         ]
     );
@@ -190,11 +198,13 @@ fn test_parse_chain_three_segments_mixed() {
         vec![
             DotSegment {
                 name: "_pools".to_string(),
-                kind: AccessKind::Index
+                kind: AccessKind::Index,
+                call_args: None,
             },
             DotSegment {
                 name: "slot0".to_string(),
-                kind: AccessKind::Plain
+                kind: AccessKind::Plain,
+                call_args: None,
             },
         ]
     );
@@ -210,11 +220,13 @@ fn test_parse_chain_call_then_index() {
         vec![
             DotSegment {
                 name: "getPool".to_string(),
-                kind: AccessKind::Call
+                kind: AccessKind::Call,
+                call_args: Some("key".to_string()),
             },
             DotSegment {
                 name: "positions".to_string(),
-                kind: AccessKind::Index
+                kind: AccessKind::Index,
+                call_args: None,
             },
         ]
     );
@@ -1118,6 +1130,7 @@ fn test_chain_single_plain_contract_name() {
     let chain = vec![DotSegment {
         name: "PoolManager".to_string(),
         kind: AccessKind::Plain,
+        call_args: None,
     }];
     let items = get_chain_completions(&cache, &chain, None);
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
@@ -1135,6 +1148,7 @@ fn test_chain_single_index_mapping_access() {
     let chain = vec![DotSegment {
         name: "_pools".to_string(),
         kind: AccessKind::Index,
+        call_args: None,
     }];
     let items = get_chain_completions(&cache, &chain, None);
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
@@ -1183,10 +1197,12 @@ fn test_chain_two_segment_contract_function_call() {
         DotSegment {
             name: "PoolManager".to_string(),
             kind: AccessKind::Plain,
+            call_args: None,
         },
         DotSegment {
             name: "swap".to_string(),
             kind: AccessKind::Call,
+            call_args: None,
         },
     ];
     let items = get_chain_completions(&cache, &chain, None);
@@ -1211,10 +1227,12 @@ fn test_chain_two_segment_contract_get_pool_call() {
         DotSegment {
             name: "PoolManager".to_string(),
             kind: AccessKind::Plain,
+            call_args: None,
         },
         DotSegment {
             name: "_getPool".to_string(),
             kind: AccessKind::Call,
+            call_args: None,
         },
     ];
     let items = get_chain_completions(&cache, &chain, None);
@@ -1257,10 +1275,12 @@ fn test_chain_variable_with_type_then_call() {
         DotSegment {
             name: "pool".to_string(),
             kind: AccessKind::Plain,
+            call_args: None,
         },
         DotSegment {
             name: "swap".to_string(),
             kind: AccessKind::Call,
+            call_args: None,
         },
     ];
     let items = get_chain_completions(&cache, &chain, None);
@@ -1321,6 +1341,7 @@ fn test_chain_completions_deduplication() {
     let chain = vec![DotSegment {
         name: "_pools".to_string(),
         kind: AccessKind::Index,
+        call_args: None,
     }];
     let items = get_chain_completions(&cache, &chain, None);
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
@@ -1344,10 +1365,12 @@ fn test_chain_ipool_manager_initialize_returns_int24() {
         DotSegment {
             name: "IPoolManager".to_string(),
             kind: AccessKind::Plain,
+            call_args: None,
         },
         DotSegment {
             name: "initialize".to_string(),
             kind: AccessKind::Call,
+            call_args: None,
         },
     ];
     let items = get_chain_completions(&cache, &chain, None);
@@ -1376,6 +1399,7 @@ fn test_chain_pool_key_to_id() {
     let chain = vec![DotSegment {
         name: "poolKey".to_string(),
         kind: AccessKind::Plain,
+        call_args: None,
     }];
     let items = get_chain_completions(&cache, &chain, None);
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
@@ -1416,6 +1440,7 @@ fn test_chain_unknown_name_returns_nothing() {
     let chain = vec![DotSegment {
         name: "nonexistentVariable".to_string(),
         kind: AccessKind::Plain,
+        call_args: None,
     }];
     let items = get_chain_completions(&cache, &chain, None);
     assert!(
@@ -1447,6 +1472,7 @@ fn test_chain_type_cast_shows_interface_members() {
     let chain = vec![DotSegment {
         name: "IUnlockCallback".to_string(),
         kind: AccessKind::Call,
+        call_args: None,
     }];
     let items = get_chain_completions(&cache, &chain, None);
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
@@ -1466,10 +1492,12 @@ fn test_chain_type_cast_then_method_returns_bytes_completions() {
         DotSegment {
             name: "IUnlockCallback".to_string(),
             kind: AccessKind::Call,
+            call_args: None,
         },
         DotSegment {
             name: "unlockCallback".to_string(),
             kind: AccessKind::Call,
+            call_args: None,
         },
     ];
     let items = get_chain_completions(&cache, &chain, None);
@@ -1745,6 +1773,7 @@ fn test_scope_chain_completions_with_context() {
     let chain = vec![DotSegment {
         name: "self".to_string(),
         kind: AccessKind::Plain,
+        call_args: None,
     }];
     let ctx = ScopeContext {
         byte_pos: 12300,
@@ -1767,6 +1796,7 @@ fn test_scope_chain_completions_without_context_uses_flat() {
     let chain = vec![DotSegment {
         name: "self".to_string(),
         kind: AccessKind::Plain,
+        call_args: None,
     }];
     let items_no_scope = get_chain_completions(&cache, &chain, None);
     // Should still return something (whatever first-wins gives us)
@@ -3104,4 +3134,319 @@ fn test_protocol_fees_state_vars_in_scope_declarations() {
     let names: Vec<&str> = decls.iter().map(|d| d.name.as_str()).collect();
     assert!(names.contains(&"protocolFeesAccrued"));
     assert!(names.contains(&"protocolFeeController"));
+}
+
+// --- type(X). context-sensitive completions ---
+
+#[test]
+fn test_parse_chain_type_expression() {
+    let chain = parse_dot_chain("type(uint256).", 14);
+    assert_eq!(chain.len(), 1);
+    assert_eq!(
+        chain[0],
+        DotSegment {
+            name: "type".to_string(),
+            kind: AccessKind::Call,
+            call_args: Some("uint256".to_string()),
+        }
+    );
+}
+
+#[test]
+fn test_parse_chain_type_expression_contract() {
+    let line = "type(PoolManager).";
+    let chain = parse_dot_chain(line, line.len() as u32);
+    assert_eq!(chain.len(), 1);
+    assert_eq!(chain[0].name, "type");
+    assert_eq!(chain[0].kind, AccessKind::Call);
+    assert_eq!(chain[0].call_args, Some("PoolManager".to_string()));
+}
+
+#[test]
+fn test_parse_chain_type_expression_interface() {
+    let line = "type(IHooks).";
+    let chain = parse_dot_chain(line, line.len() as u32);
+    assert_eq!(chain.len(), 1);
+    assert_eq!(chain[0].name, "type");
+    assert_eq!(chain[0].kind, AccessKind::Call);
+    assert_eq!(chain[0].call_args, Some("IHooks".to_string()));
+}
+
+#[test]
+fn test_contract_kinds_populated() {
+    let cache = load_cache();
+    // PoolManager (1767) should be "contract"
+    assert_eq!(
+        cache.contract_kinds.get(&1767).map(|s| s.as_str()),
+        Some("contract"),
+        "PoolManager should be classified as contract"
+    );
+    // IHooks (2248) should be "interface"
+    assert_eq!(
+        cache.contract_kinds.get(&2248).map(|s| s.as_str()),
+        Some("interface"),
+        "IHooks should be classified as interface"
+    );
+    // FullMath (3250) should be "library"
+    assert_eq!(
+        cache.contract_kinds.get(&3250).map(|s| s.as_str()),
+        Some("library"),
+        "FullMath should be classified as library"
+    );
+}
+
+#[test]
+fn test_type_meta_contract_completions() {
+    // type(PoolManager). — contract, should show name, creationCode, runtimeCode
+    let cache = load_cache();
+    let chain = vec![DotSegment {
+        name: "type".to_string(),
+        kind: AccessKind::Call,
+        call_args: Some("PoolManager".to_string()),
+    }];
+    let items = get_chain_completions(&cache, &chain, None);
+    let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+
+    assert!(labels.contains(&"name"), "type(Contract). should have name");
+    assert!(
+        labels.contains(&"creationCode"),
+        "type(Contract). should have creationCode"
+    );
+    assert!(
+        labels.contains(&"runtimeCode"),
+        "type(Contract). should have runtimeCode"
+    );
+    assert!(
+        !labels.contains(&"interfaceId"),
+        "type(Contract). should NOT have interfaceId"
+    );
+    assert!(
+        !labels.contains(&"min"),
+        "type(Contract). should NOT have min"
+    );
+    assert!(
+        !labels.contains(&"max"),
+        "type(Contract). should NOT have max"
+    );
+    assert_eq!(
+        labels.len(),
+        3,
+        "type(Contract). should have exactly 3 members"
+    );
+}
+
+#[test]
+fn test_type_meta_interface_completions() {
+    // type(IHooks). — interface, should show name, interfaceId
+    let cache = load_cache();
+    let chain = vec![DotSegment {
+        name: "type".to_string(),
+        kind: AccessKind::Call,
+        call_args: Some("IHooks".to_string()),
+    }];
+    let items = get_chain_completions(&cache, &chain, None);
+    let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+
+    assert!(
+        labels.contains(&"name"),
+        "type(Interface). should have name"
+    );
+    assert!(
+        labels.contains(&"interfaceId"),
+        "type(Interface). should have interfaceId"
+    );
+    assert!(
+        !labels.contains(&"creationCode"),
+        "type(Interface). should NOT have creationCode"
+    );
+    assert!(
+        !labels.contains(&"runtimeCode"),
+        "type(Interface). should NOT have runtimeCode"
+    );
+    assert!(
+        !labels.contains(&"min"),
+        "type(Interface). should NOT have min"
+    );
+    assert!(
+        !labels.contains(&"max"),
+        "type(Interface). should NOT have max"
+    );
+    assert_eq!(
+        labels.len(),
+        2,
+        "type(Interface). should have exactly 2 members"
+    );
+}
+
+#[test]
+fn test_type_meta_integer_completions() {
+    // type(uint256). — integer type, should show min, max
+    let cache = load_cache();
+    let chain = vec![DotSegment {
+        name: "type".to_string(),
+        kind: AccessKind::Call,
+        call_args: Some("uint256".to_string()),
+    }];
+    let items = get_chain_completions(&cache, &chain, None);
+    let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+
+    assert!(labels.contains(&"min"), "type(uint256). should have min");
+    assert!(labels.contains(&"max"), "type(uint256). should have max");
+    assert!(
+        !labels.contains(&"name"),
+        "type(uint256). should NOT have name"
+    );
+    assert!(
+        !labels.contains(&"creationCode"),
+        "type(uint256). should NOT have creationCode"
+    );
+    assert!(
+        !labels.contains(&"interfaceId"),
+        "type(uint256). should NOT have interfaceId"
+    );
+    assert_eq!(
+        labels.len(),
+        2,
+        "type(uint256). should have exactly 2 members"
+    );
+}
+
+#[test]
+fn test_type_meta_int8_completions() {
+    // type(int8). — also integer type
+    let cache = load_cache();
+    let chain = vec![DotSegment {
+        name: "type".to_string(),
+        kind: AccessKind::Call,
+        call_args: Some("int8".to_string()),
+    }];
+    let items = get_chain_completions(&cache, &chain, None);
+    let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+
+    assert!(labels.contains(&"min"), "type(int8). should have min");
+    assert!(labels.contains(&"max"), "type(int8). should have max");
+    assert_eq!(labels.len(), 2);
+}
+
+#[test]
+fn test_type_meta_unknown_fallback() {
+    // type(SomethingUnknown). — unknown, should return all 6 members as fallback
+    let cache = load_cache();
+    let chain = vec![DotSegment {
+        name: "type".to_string(),
+        kind: AccessKind::Call,
+        call_args: Some("SomethingUnknown".to_string()),
+    }];
+    let items = get_chain_completions(&cache, &chain, None);
+    let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+
+    assert!(
+        labels.contains(&"name"),
+        "unknown fallback should have name"
+    );
+    assert!(
+        labels.contains(&"creationCode"),
+        "unknown fallback should have creationCode"
+    );
+    assert!(
+        labels.contains(&"runtimeCode"),
+        "unknown fallback should have runtimeCode"
+    );
+    assert!(
+        labels.contains(&"interfaceId"),
+        "unknown fallback should have interfaceId"
+    );
+    assert!(labels.contains(&"min"), "unknown fallback should have min");
+    assert!(labels.contains(&"max"), "unknown fallback should have max");
+    assert_eq!(
+        labels.len(),
+        6,
+        "unknown fallback should have all 6 members"
+    );
+}
+
+#[test]
+fn test_type_meta_no_args_fallback() {
+    // type(). — empty parens, should return all 6 members as fallback
+    let cache = load_cache();
+    let chain = vec![DotSegment {
+        name: "type".to_string(),
+        kind: AccessKind::Call,
+        call_args: None,
+    }];
+    let items = get_chain_completions(&cache, &chain, None);
+    let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+
+    assert_eq!(
+        labels.len(),
+        6,
+        "type(). with no args should have all 6 members"
+    );
+}
+
+#[test]
+fn test_type_meta_library_completions() {
+    // type(FullMath). — library, should show name, creationCode, runtimeCode (same as contract)
+    let cache = load_cache();
+    let chain = vec![DotSegment {
+        name: "type".to_string(),
+        kind: AccessKind::Call,
+        call_args: Some("FullMath".to_string()),
+    }];
+    let items = get_chain_completions(&cache, &chain, None);
+    let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+
+    assert!(labels.contains(&"name"), "type(Library). should have name");
+    assert!(
+        labels.contains(&"creationCode"),
+        "type(Library). should have creationCode"
+    );
+    assert!(
+        labels.contains(&"runtimeCode"),
+        "type(Library). should have runtimeCode"
+    );
+    assert!(
+        !labels.contains(&"interfaceId"),
+        "type(Library). should NOT have interfaceId"
+    );
+    assert_eq!(
+        labels.len(),
+        3,
+        "type(Library). should have exactly 3 members"
+    );
+}
+
+#[test]
+fn test_type_meta_items_are_property_kind() {
+    let cache = load_cache();
+    let chain = vec![DotSegment {
+        name: "type".to_string(),
+        kind: AccessKind::Call,
+        call_args: Some("uint256".to_string()),
+    }];
+    let items = get_chain_completions(&cache, &chain, None);
+    for item in &items {
+        assert_eq!(
+            item.kind,
+            Some(CompletionItemKind::PROPERTY),
+            "{} should be PROPERTY kind",
+            item.label
+        );
+    }
+}
+
+#[test]
+fn test_type_meta_items_have_detail() {
+    let cache = load_cache();
+    let chain = vec![DotSegment {
+        name: "type".to_string(),
+        kind: AccessKind::Call,
+        call_args: Some("IPoolManager".to_string()),
+    }];
+    let items = get_chain_completions(&cache, &chain, None);
+    let name_item = items.iter().find(|i| i.label == "name").unwrap();
+    assert_eq!(name_item.detail.as_deref(), Some("string"));
+
+    let iid_item = items.iter().find(|i| i.label == "interfaceId").unwrap();
+    assert_eq!(iid_item.detail.as_deref(), Some("bytes4"));
 }

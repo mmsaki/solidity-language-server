@@ -85,6 +85,11 @@ pub struct CompletionCache {
     /// First element is the contract itself, followed by parents in resolution order.
     /// Used to search inherited state variables and functions during scope resolution.
     pub linearized_base_contracts: HashMap<u64, Vec<u64>>,
+
+    /// contract/interface/library node_id → contractKind string.
+    /// Values are `"contract"`, `"interface"`, or `"library"`.
+    /// Used to determine which `type(X).` members to offer.
+    pub contract_kinds: HashMap<u64, String>,
 }
 
 fn push_if_node_or_array<'a>(tree: &'a Value, key: &str, stack: &mut Vec<&'a Value>) {
@@ -345,6 +350,7 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
     let mut type_to_node: HashMap<String, u64> = HashMap::new();
     let mut method_identifiers: HashMap<u64, Vec<CompletionItem>> = HashMap::new();
     let mut name_to_node_id: HashMap<String, u64> = HashMap::new();
+    let mut contract_kinds: HashMap<u64, String> = HashMap::new();
 
     // Collect (path, contract_name, node_id) during AST walk for methodIdentifiers lookup after.
     let mut contract_locations: Vec<(String, String, u64)> = Vec::new();
@@ -633,6 +639,11 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
                             contract_locations.push((path.clone(), name.to_string(), id));
                             name_to_node_id.insert(name.to_string(), id);
                         }
+
+                        // Record contractKind (contract, interface, library) for type(X). completions
+                        if let Some(ck) = tree.get("contractKind").and_then(|v| v.as_str()) {
+                            contract_kinds.insert(id, ck.to_string());
+                        }
                     }
 
                     // Collect enum members
@@ -865,6 +876,7 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
         scope_ranges,
         path_to_file_id,
         linearized_base_contracts,
+        contract_kinds,
     }
 }
 
@@ -926,6 +938,84 @@ fn magic_members(name: &str) -> Option<Vec<CompletionItem>> {
     )
 }
 
+/// The kind of argument passed to `type(X)`, which determines which
+/// meta-type members are available.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TypeMetaKind {
+    /// `type(SomeContract)` — has `name`, `creationCode`, `runtimeCode`
+    Contract,
+    /// `type(SomeInterface)` — has `name`, `interfaceId`
+    Interface,
+    /// `type(uint256)` / `type(int8)` — has `min`, `max`
+    IntegerType,
+    /// Unknown argument — return all possible members as a fallback
+    Unknown,
+}
+
+/// Classify the argument of `type(X)` based on the cache.
+fn classify_type_arg(arg: &str, cache: Option<&CompletionCache>) -> TypeMetaKind {
+    // Check if it's an integer type: int, uint, int8..int256, uint8..uint256
+    if arg == "int" || arg == "uint" {
+        return TypeMetaKind::IntegerType;
+    }
+    if let Some(suffix) = arg.strip_prefix("uint").or_else(|| arg.strip_prefix("int")) {
+        if let Ok(n) = suffix.parse::<u16>() {
+            if (8..=256).contains(&n) && n % 8 == 0 {
+                return TypeMetaKind::IntegerType;
+            }
+        }
+    }
+
+    // With a cache, look up the name to determine contract vs interface
+    if let Some(c) = cache {
+        if let Some(&node_id) = c.name_to_node_id.get(arg) {
+            return match c.contract_kinds.get(&node_id).map(|s| s.as_str()) {
+                Some("interface") => TypeMetaKind::Interface,
+                Some("library") => TypeMetaKind::Contract, // libraries have name/creationCode/runtimeCode
+                _ => TypeMetaKind::Contract,
+            };
+        }
+    }
+
+    TypeMetaKind::Unknown
+}
+
+/// Return context-sensitive `type(X).` completions based on what `X` is.
+fn type_meta_members(arg: Option<&str>, cache: Option<&CompletionCache>) -> Vec<CompletionItem> {
+    let kind = match arg {
+        Some(a) => classify_type_arg(a, cache),
+        None => TypeMetaKind::Unknown,
+    };
+
+    let items: Vec<(&str, &str)> = match kind {
+        TypeMetaKind::Contract => vec![
+            ("name", "string"),
+            ("creationCode", "bytes memory"),
+            ("runtimeCode", "bytes memory"),
+        ],
+        TypeMetaKind::Interface => vec![("name", "string"), ("interfaceId", "bytes4")],
+        TypeMetaKind::IntegerType => vec![("min", "T"), ("max", "T")],
+        TypeMetaKind::Unknown => vec![
+            ("name", "string"),
+            ("creationCode", "bytes memory"),
+            ("runtimeCode", "bytes memory"),
+            ("interfaceId", "bytes4"),
+            ("min", "T"),
+            ("max", "T"),
+        ],
+    };
+
+    items
+        .into_iter()
+        .map(|(label, detail)| CompletionItem {
+            label: label.to_string(),
+            kind: Some(CompletionItemKind::PROPERTY),
+            detail: Some(detail.to_string()),
+            ..Default::default()
+        })
+        .collect()
+}
+
 /// Address type members (available on any address value).
 fn address_members() -> Vec<CompletionItem> {
     [
@@ -980,6 +1070,9 @@ pub enum AccessKind {
 pub struct DotSegment {
     pub name: String,
     pub kind: AccessKind,
+    /// For `Call` segments, the raw text inside the parentheses.
+    /// e.g. `type(uint256).` → `call_args = Some("uint256")`
+    pub call_args: Option<String>,
 }
 
 /// Skip backwards over a matched bracket pair (parens or square brackets).
@@ -1030,16 +1123,25 @@ pub fn parse_dot_chain(line: &str, character: u32) -> Vec<DotSegment> {
         }
 
         // Determine access kind by what's immediately before: ')' = Call, ']' = Index, else Plain
-        let kind = if bytes[pos - 1] == b')' {
-            pos -= 1; // point to ')'
-            pos = skip_brackets_backwards(bytes, pos);
-            AccessKind::Call
+        let (kind, call_args) = if bytes[pos - 1] == b')' {
+            let close = pos - 1; // position of ')'
+            pos = skip_brackets_backwards(bytes, close);
+            // Extract the text between '(' and ')'
+            let args_text = String::from_utf8_lossy(&bytes[pos + 1..close])
+                .trim()
+                .to_string();
+            let args = if args_text.is_empty() {
+                None
+            } else {
+                Some(args_text)
+            };
+            (AccessKind::Call, args)
         } else if bytes[pos - 1] == b']' {
             pos -= 1; // point to ']'
             pos = skip_brackets_backwards(bytes, pos);
-            AccessKind::Index
+            (AccessKind::Index, None)
         } else {
-            AccessKind::Plain
+            (AccessKind::Plain, None)
         };
 
         // Now extract the identifier name (walk backwards over alphanumeric + underscore)
@@ -1054,7 +1156,11 @@ pub fn parse_dot_chain(line: &str, character: u32) -> Vec<DotSegment> {
         }
 
         let name = String::from_utf8_lossy(&bytes[pos..end]).to_string();
-        segments.push(DotSegment { name, kind });
+        segments.push(DotSegment {
+            name,
+            kind,
+            call_args,
+        });
 
         // Check if there's a dot before this segment (meaning more chain)
         if pos > 0 && bytes[pos - 1] == b'.' {
@@ -1398,6 +1504,10 @@ pub fn get_chain_completions(
                 return get_dot_completions(cache, &seg.name, scope_ctx);
             }
             AccessKind::Call => {
+                // type(X). — Solidity metatype expression
+                if seg.name == "type" {
+                    return type_meta_members(seg.call_args.as_deref(), Some(cache));
+                }
                 // foo(). — could be a function call or a type cast like IFoo(addr).
                 // First check if it's a type cast: name matches a contract/interface/library
                 if let Some(type_id) = resolve_name(cache, &seg.name, scope_ctx) {
@@ -1574,8 +1684,16 @@ pub fn handle_completion(
             Some(c) => get_chain_completions(c, &chain, scope_ctx.as_ref()),
             None => {
                 // No cache yet — serve magic dot completions (msg., block., etc.)
-                if chain.len() == 1 && chain[0].kind == AccessKind::Plain {
-                    magic_members(&chain[0].name).unwrap_or_default()
+                if chain.len() == 1 {
+                    let seg = &chain[0];
+                    if seg.name == "type" && seg.kind == AccessKind::Call {
+                        // type(X). without cache — classify based on name alone
+                        type_meta_members(seg.call_args.as_deref(), None)
+                    } else if seg.kind == AccessKind::Plain {
+                        magic_members(&seg.name).unwrap_or_default()
+                    } else {
+                        vec![]
+                    }
                 } else {
                     vec![]
                 }

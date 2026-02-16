@@ -1,0 +1,23 @@
+project: example
+file: type.sol
+
+line: 3
+col: 38
+
+iterations: 1    # number of measured iterations
+warmup: 1         # warmup iterations (discarded)
+timeout: 10       # seconds per LSP request
+index_timeout: 15 # seconds for server to index/warm up
+output: example/type # directory for JSON results
+trigger_character: "."
+
+benchmarks:
+  - textDocument/completion
+response: full
+
+servers:
+  - label: mmsaki
+    description: Solidity Language Server by mmsaki
+    link: https://github.com/mmsaki/solidity-language-server
+    cmd: ./target/release/solidity-language-server
+    args: []
