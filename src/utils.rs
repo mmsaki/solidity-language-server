@@ -1,3 +1,4 @@
+use lintspec_core::textindex::{TextIndex, compute_indices};
 use std::sync::OnceLock;
 use tower_lsp::lsp_types::{Position, PositionEncodingKind};
 
@@ -65,63 +66,84 @@ impl From<PositionEncoding> for PositionEncodingKind {
 /// Convert a byte offset in `source` to a [`Position`] whose column unit depends
 /// on the negotiated [`PositionEncoding`].
 pub fn byte_offset_to_position(source: &str, byte_offset: usize) -> Position {
-    let enc = encoding();
-    let mut line: u32 = 0;
-    let mut col: u32 = 0;
-
-    for (i, ch) in source.char_indices() {
-        if i >= byte_offset {
-            break;
-        }
-        match (ch, enc) {
-            ('\n', _) => {
-                line += 1;
-                col = 0;
-            }
-            ('\r', _) => {}
-            (ch, PositionEncoding::Utf8) => {
-                col += ch.len_utf8() as u32;
-            }
-            (ch, PositionEncoding::Utf16) => {
-                col += ch.len_utf16() as u32;
-            }
-        }
+    if source.is_empty() {
+        return Position::new(0, 0);
     }
+
+    let idx = if byte_offset >= source.len() {
+        // Offset is at or past the end of source — walk the entire string.
+        // `compute_indices` only handles offsets that fall within the source.
+        let mut ti = TextIndex::ZERO;
+        let mut chars = source.chars().peekable();
+        while let Some(c) = chars.next() {
+            ti.advance(c, chars.peek());
+        }
+        ti
+    } else {
+        // SIMD-accelerated lookup for offsets within the source.
+        let indices = compute_indices(source, &[byte_offset]);
+        match indices.first() {
+            Some(ti) => *ti,
+            None => return Position::new(0, 0),
+        }
+    };
+
     Position {
-        line,
-        character: col,
+        line: idx.line,
+        character: match encoding() {
+            PositionEncoding::Utf8 => idx.col_utf8,
+            PositionEncoding::Utf16 => idx.col_utf16,
+        },
     }
 }
 
 /// Convert an LSP [`Position`] position back to a byte offset, where
 /// `character` is interpreted according to the negotiated [`PositionEncoding`].
+///
+/// Uses a single SIMD-accelerated pass with [`compute_indices`] to build a
+/// coarse index of the file at 128-byte intervals, then does a short linear
+/// walk (at most 128 bytes) with [`TextIndex::advance`] to find the exact
+/// byte offset.
 pub fn position_to_byte_offset(source: &str, pos: Position) -> usize {
-    let enc = encoding();
-    let mut current_line: u32 = 0;
-    let mut current_col: u32 = 0;
-
-    for (i, ch) in source.char_indices() {
-        if current_line >= pos.line && current_col >= pos.character {
-            return i;
-        }
-
-        match (ch, enc) {
-            ('\n', _) => {
-                if current_line == pos.line {
-                    return i; // clamp to end of line
-                }
-                current_line += 1;
-                current_col = 0;
-            }
-            (ch, PositionEncoding::Utf8) => {
-                current_col += ch.len_utf8() as u32;
-            }
-            (ch, PositionEncoding::Utf16) => {
-                current_col += ch.len_utf16() as u32;
-            }
-        }
+    if source.is_empty() {
+        return 0;
     }
-    source.len() // position not found, we default to the end of the content
+
+    let enc = encoding();
+
+    // 1. Build chunk offsets at 128-byte intervals across the source.
+    let chunk_offsets: Vec<usize> = (0..source.len()).step_by(128).collect();
+
+    // 2. Single SIMD-accelerated pass — compute TextIndex for every chunk.
+    let chunk_indices = compute_indices(source, &chunk_offsets);
+
+    // 3. Find the last chunk whose line is still before the target line.
+    //    Everything up to that chunk is guaranteed to be before our target.
+    let start = chunk_indices
+        .iter()
+        .take_while(|ti| ti.line <= pos.line)
+        .last()
+        .copied()
+        .unwrap_or(TextIndex::ZERO);
+
+    // 4. Linear walk from `start` (at most ~128 bytes) to the exact position.
+    let mut idx = start;
+    let mut chars = source[idx.utf8..].chars().peekable();
+
+    while let Some(c) = chars.next() {
+        let col = match enc {
+            PositionEncoding::Utf8 => idx.col_utf8,
+            PositionEncoding::Utf16 => idx.col_utf16,
+        };
+        if idx.line >= pos.line && col >= pos.character {
+            return idx.utf8;
+        }
+        if idx.line == pos.line && c == '\n' {
+            return idx.utf8; // clamp to end of line
+        }
+        idx.advance(c, chars.peek());
+    }
+    source.len() // position past end of source
 }
 
 // ---------------------------------------------------------------------------

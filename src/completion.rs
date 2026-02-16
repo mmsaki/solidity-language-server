@@ -400,73 +400,68 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
                             | "Block"
                             | "UncheckedBlock"
                     );
-                    if is_scope_node {
-                        if let Some(nid) = node_id {
-                            if let Some((start, len, file_id)) = parse_src(tree) {
-                                scope_ranges.push(ScopeRange {
-                                    node_id: nid,
-                                    start,
-                                    end: start + len,
-                                    file_id,
-                                });
-                            }
-                            // Record parent link: this node's scope → its parent
-                            if let Some(parent_id) = tree.get("scope").and_then(|v| v.as_u64()) {
-                                scope_parent.insert(nid, parent_id);
-                            }
+                    if is_scope_node && let Some(nid) = node_id {
+                        if let Some((start, len, file_id)) = parse_src(tree) {
+                            scope_ranges.push(ScopeRange {
+                                node_id: nid,
+                                start,
+                                end: start + len,
+                                file_id,
+                            });
+                        }
+                        // Record parent link: this node's scope → its parent
+                        if let Some(parent_id) = tree.get("scope").and_then(|v| v.as_u64()) {
+                            scope_parent.insert(nid, parent_id);
                         }
                     }
 
                     // For ContractDefinitions, record linearizedBaseContracts
-                    if node_type == "ContractDefinition" {
-                        if let Some(nid) = node_id {
-                            if let Some(bases) = tree
-                                .get("linearizedBaseContracts")
-                                .and_then(|v| v.as_array())
-                            {
-                                let base_ids: Vec<u64> =
-                                    bases.iter().filter_map(|b| b.as_u64()).collect();
-                                if !base_ids.is_empty() {
-                                    linearized_base_contracts.insert(nid, base_ids);
-                                }
-                            }
+                    if node_type == "ContractDefinition"
+                        && let Some(nid) = node_id
+                        && let Some(bases) = tree
+                            .get("linearizedBaseContracts")
+                            .and_then(|v| v.as_array())
+                    {
+                        let base_ids: Vec<u64> = bases.iter().filter_map(|b| b.as_u64()).collect();
+                        if !base_ids.is_empty() {
+                            linearized_base_contracts.insert(nid, base_ids);
                         }
                     }
 
                     // For VariableDeclarations, record the declaration in its scope
-                    if node_type == "VariableDeclaration" && !name.is_empty() {
-                        if let Some(scope_id) = tree.get("scope").and_then(|v| v.as_u64()) {
-                            if let Some(tid) = tree
-                                .get("typeDescriptions")
-                                .and_then(|td| td.get("typeIdentifier"))
-                                .and_then(|v| v.as_str())
-                            {
-                                scope_declarations.entry(scope_id).or_default().push(
-                                    ScopedDeclaration {
-                                        name: name.to_string(),
-                                        type_id: tid.to_string(),
-                                    },
-                                );
-                            }
-                        }
+                    if node_type == "VariableDeclaration"
+                        && !name.is_empty()
+                        && let Some(scope_id) = tree.get("scope").and_then(|v| v.as_u64())
+                        && let Some(tid) = tree
+                            .get("typeDescriptions")
+                            .and_then(|td| td.get("typeIdentifier"))
+                            .and_then(|v| v.as_str())
+                    {
+                        scope_declarations
+                            .entry(scope_id)
+                            .or_default()
+                            .push(ScopedDeclaration {
+                                name: name.to_string(),
+                                type_id: tid.to_string(),
+                            });
                     }
 
                     // For FunctionDefinitions, record them in their parent scope (the contract)
-                    if node_type == "FunctionDefinition" && !name.is_empty() {
-                        if let Some(scope_id) = tree.get("scope").and_then(|v| v.as_u64()) {
-                            if let Some(tid) = tree
-                                .get("typeDescriptions")
-                                .and_then(|td| td.get("typeIdentifier"))
-                                .and_then(|v| v.as_str())
-                            {
-                                scope_declarations.entry(scope_id).or_default().push(
-                                    ScopedDeclaration {
-                                        name: name.to_string(),
-                                        type_id: tid.to_string(),
-                                    },
-                                );
-                            }
-                        }
+                    if node_type == "FunctionDefinition"
+                        && !name.is_empty()
+                        && let Some(scope_id) = tree.get("scope").and_then(|v| v.as_u64())
+                        && let Some(tid) = tree
+                            .get("typeDescriptions")
+                            .and_then(|td| td.get("typeIdentifier"))
+                            .and_then(|v| v.as_str())
+                    {
+                        scope_declarations
+                            .entry(scope_id)
+                            .or_default()
+                            .push(ScopedDeclaration {
+                                name: name.to_string(),
+                                type_id: tid.to_string(),
+                            });
                     }
 
                     // Collect named nodes as completion items
