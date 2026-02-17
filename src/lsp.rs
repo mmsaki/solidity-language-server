@@ -79,7 +79,7 @@ impl ForgeLsp {
 
         if build_succeeded {
             if let Ok(ast_data) = ast_result {
-                let cached_build = Arc::new(goto::CachedBuild::new(ast_data));
+                let cached_build = Arc::new(goto::CachedBuild::new(ast_data, version));
                 let mut cache = self.ast_cache.write().await;
                 cache.insert(uri.to_string(), cached_build.clone());
                 drop(cache);
@@ -213,7 +213,9 @@ impl ForgeLsp {
         let path_str = file_path.to_str()?;
         match self.compiler.ast(path_str).await {
             Ok(data) => {
-                let build = Arc::new(goto::CachedBuild::new(data));
+                // Built from disk (cache miss) — use version 0; the next
+                // didSave/on_change will stamp the correct version.
+                let build = Arc::new(goto::CachedBuild::new(data, 0));
                 if insert_on_miss {
                     let mut cache = self.ast_cache.write().await;
                     cache.insert(uri_str.clone(), build.clone());
@@ -641,31 +643,163 @@ impl LanguageServer for ForgeLsp {
             None => return Ok(None),
         };
 
-        let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
-        let cached_build = match cached_build {
-            Some(cb) => cb,
-            None => return Ok(None),
+        let source_text = String::from_utf8_lossy(&source_bytes).to_string();
+
+        // Extract the identifier name under the cursor for tree-sitter validation.
+        let cursor_name = goto::cursor_context(&source_text, position).map(|ctx| ctx.name);
+
+        // Determine if the file is dirty (unsaved edits since last build).
+        // When dirty, AST byte offsets are stale so we prefer tree-sitter.
+        // When clean, AST has proper semantic resolution (scoping, types).
+        let (is_dirty, cached_build) = {
+            let text_version = self
+                .text_cache
+                .read()
+                .await
+                .get(&uri.to_string())
+                .map(|(v, _)| *v)
+                .unwrap_or(0);
+            let cb = self.get_or_fetch_build(&uri, &file_path, false).await;
+            let build_version = cb.as_ref().map(|b| b.build_version).unwrap_or(0);
+            (text_version > build_version, cb)
         };
 
-        if let Some(location) =
-            goto::goto_declaration(&cached_build.ast, &uri, position, &source_bytes)
-        {
+        // Validate a tree-sitter result: read the target source and check that
+        // the text at the location matches the cursor identifier. Tree-sitter
+        // resolves by name so a mismatch means it landed on the wrong node.
+        // AST results are NOT validated — the AST can legitimately resolve to a
+        // different name (e.g. `.selector` → error declaration).
+        let validate_ts = |loc: &Location| -> bool {
+            let Some(ref name) = cursor_name else {
+                return true; // can't validate, trust it
+            };
+            let target_src = if loc.uri == uri {
+                Some(source_text.clone())
+            } else {
+                loc.uri
+                    .to_file_path()
+                    .ok()
+                    .and_then(|p| std::fs::read_to_string(&p).ok())
+            };
+            match target_src {
+                Some(src) => goto::validate_goto_target(&src, loc, name),
+                None => true, // can't read target, trust it
+            }
+        };
+
+        if is_dirty {
             self.client
-                .log_message(
-                    MessageType::INFO,
-                    format!(
-                        "found definition at {}:{}",
-                        location.uri, location.range.start.line
-                    ),
-                )
+                .log_message(MessageType::INFO, "file is dirty, trying tree-sitter first")
                 .await;
-            Ok(Some(GotoDefinitionResponse::from(location)))
+
+            // DIRTY: tree-sitter first (validated) → AST fallback
+            let ts_result = {
+                let comp_cache = self.completion_cache.read().await;
+                let text_cache = self.text_cache.read().await;
+                if let Some(cc) = comp_cache.get(&uri.to_string()) {
+                    goto::goto_definition_ts(&source_text, position, &uri, cc, &text_cache)
+                } else {
+                    None
+                }
+            };
+
+            if let Some(location) = ts_result {
+                if validate_ts(&location) {
+                    self.client
+                        .log_message(
+                            MessageType::INFO,
+                            format!(
+                                "found definition (tree-sitter) at {}:{}",
+                                location.uri, location.range.start.line
+                            ),
+                        )
+                        .await;
+                    return Ok(Some(GotoDefinitionResponse::from(location)));
+                }
+                self.client
+                    .log_message(
+                        MessageType::INFO,
+                        "tree-sitter result failed validation, trying AST fallback",
+                    )
+                    .await;
+            }
+
+            // Tree-sitter failed or didn't validate — try name-based AST lookup.
+            // Instead of matching by byte offset (which is stale on dirty files),
+            // search cached AST nodes whose source text matches the cursor name
+            // and follow their referencedDeclaration.
+            if let Some(ref cb) = cached_build {
+                if let Some(ref name) = cursor_name {
+                    let byte_hint = goto::pos_to_bytes(&source_bytes, position);
+                    if let Some(location) =
+                        goto::goto_declaration_by_name(cb, &uri, name, byte_hint)
+                    {
+                        self.client
+                            .log_message(
+                                MessageType::INFO,
+                                format!(
+                                    "found definition (AST by name) at {}:{}",
+                                    location.uri, location.range.start.line
+                                ),
+                            )
+                            .await;
+                        return Ok(Some(GotoDefinitionResponse::from(location)));
+                    }
+                }
+            }
         } else {
-            self.client
-                .log_message(MessageType::INFO, "no definition found")
-                .await;
-            Ok(None)
+            // CLEAN: AST first → tree-sitter fallback (validated)
+            if let Some(ref cb) = cached_build {
+                if let Some(location) =
+                    goto::goto_declaration(&cb.ast, &uri, position, &source_bytes)
+                {
+                    self.client
+                        .log_message(
+                            MessageType::INFO,
+                            format!(
+                                "found definition (AST) at {}:{}",
+                                location.uri, location.range.start.line
+                            ),
+                        )
+                        .await;
+                    return Ok(Some(GotoDefinitionResponse::from(location)));
+                }
+            }
+
+            // AST couldn't resolve — try tree-sitter fallback (validated)
+            let ts_result = {
+                let comp_cache = self.completion_cache.read().await;
+                let text_cache = self.text_cache.read().await;
+                if let Some(cc) = comp_cache.get(&uri.to_string()) {
+                    goto::goto_definition_ts(&source_text, position, &uri, cc, &text_cache)
+                } else {
+                    None
+                }
+            };
+
+            if let Some(location) = ts_result {
+                if validate_ts(&location) {
+                    self.client
+                        .log_message(
+                            MessageType::INFO,
+                            format!(
+                                "found definition (tree-sitter fallback) at {}:{}",
+                                location.uri, location.range.start.line
+                            ),
+                        )
+                        .await;
+                    return Ok(Some(GotoDefinitionResponse::from(location)));
+                }
+                self.client
+                    .log_message(MessageType::INFO, "tree-sitter fallback failed validation")
+                    .await;
+            }
         }
+
+        self.client
+            .log_message(MessageType::INFO, "no definition found")
+            .await;
+        Ok(None)
     }
 
     async fn goto_declaration(

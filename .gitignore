@@ -5,5 +5,7 @@ bench/target
 benchmarks/*
 !benchmarks/*.yaml
 !benchmarks/*.md
+!benchmarks/issue-*
+benchmarks/issue-*/results
 DELTA.md
 v4-core

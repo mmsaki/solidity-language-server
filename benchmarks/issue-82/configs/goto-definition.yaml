@@ -1,0 +1,55 @@
+# Goto definition accuracy test — didChange snapshots
+#
+# Target: TickMath on line 103 (editor) → should resolve to TickMath.sol
+#
+# Snapshots:
+#   snapshot0 — identical to Pool.sol (baseline)
+#   snapshot1 — 1 blank line at top (+1)
+#   snapshot2 — 5 blank lines at top (+5)
+#   snapshot3 — 3-line comment above initialize() (+3)
+#   snapshot4 — TickMath import deleted (-1)
+#
+project: v4-core
+file: src/libraries/Pool.sol
+line: 102
+col: 15
+response: full
+output: benchmarks/issue-82/results/goto-definition
+timeout: 10
+index_timeout: 30
+
+benchmarks:
+  - textDocument/definition
+
+methods:
+  textDocument/definition:
+    line: 102
+    col: 15
+    expect:
+      file: TickMath.sol
+      line: 9
+    didChange:
+      # snapshot0: no edits — baseline
+      - file: src/libraries/Pool.sol.snapshot0
+        line: 102
+        col: 15
+      # snapshot1: 1 blank line at top — TickMath shifts +1
+      - file: src/libraries/Pool.sol.snapshot1
+        line: 103
+        col: 15
+      # snapshot2: 5 blank lines at top — TickMath shifts +5
+      - file: src/libraries/Pool.sol.snapshot2
+        line: 107
+        col: 15
+      # snapshot3: 3-line comment above initialize() — TickMath shifts +3
+      - file: src/libraries/Pool.sol.snapshot3
+        line: 105
+        col: 15
+      # snapshot4: TickMath import deleted — TickMath shifts -1
+      - file: src/libraries/Pool.sol.snapshot4
+        line: 101
+        col: 15
+
+servers:
+  - label: mmsaki
+    cmd: ./target/release/solidity-language-server

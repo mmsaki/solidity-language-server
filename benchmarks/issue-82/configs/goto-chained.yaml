@@ -1,0 +1,46 @@
+# Goto definition — SqrtPriceMath.getAmount0Delta chained edits
+#
+# Target: getAmount0Delta on line 214 (editor) → should resolve to SqrtPriceMath.sol:260
+#         (3-param overload: getAmount0Delta(uint160,uint160,int128))
+#
+# Snapshots (chained didChange sequence):
+#   chain0 — identical to Pool.sol (baseline, clean)
+#   chain1 — 1 `uint256 test;` line inserted at line 213 (+1)
+#   chain2 — 5 `uint256 test;` lines inserted at line 213 (+5)
+#
+project: v4-core
+file: src/libraries/Pool.sol
+line: 213
+col: 34
+response: full
+output: benchmarks/issue-82/results/goto-chained
+timeout: 10
+index_timeout: 30
+
+benchmarks:
+  - textDocument/definition
+
+methods:
+  textDocument/definition:
+    line: 213
+    col: 34
+    expect:
+      file: SqrtPriceMath.sol
+      line: 260
+    didChange:
+      # chain0: no edits — baseline (same as original)
+      - file: src/libraries/Pool.sol.chain0
+        line: 213
+        col: 34
+      # chain1: +1 line at 213 — getAmount0Delta shifts to 215
+      - file: src/libraries/Pool.sol.chain1
+        line: 214
+        col: 34
+      # chain2: +5 lines at 213 — getAmount0Delta shifts to 219
+      - file: src/libraries/Pool.sol.chain2
+        line: 218
+        col: 34
+
+servers:
+  - label: mmsaki
+    cmd: ./target/release/solidity-language-server
