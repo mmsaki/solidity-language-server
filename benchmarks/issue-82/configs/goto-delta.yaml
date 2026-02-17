@@ -1,0 +1,28 @@
+# Goto definition — delta variable scoping (clean file)
+#
+# Target: `delta` on line 213 (editor) → should resolve to Pool.sol:147
+#         (return param declaration in modifyLiquidity signature)
+#
+# No didChange snapshots — this is a clean-file baseline test.
+# Verifies AST path correctly resolves `delta` to the return parameter.
+#
+project: v4-core
+file: src/libraries/Pool.sol
+line: 212
+col: 16
+response: full
+output: benchmarks/issue-82/results/goto-delta
+timeout: 10
+index_timeout: 30
+
+benchmarks:
+  - textDocument/definition
+
+methods:
+  textDocument/definition:
+    line: 212
+    col: 16
+
+servers:
+  - label: mmsaki
+    cmd: ./target/release/solidity-language-server

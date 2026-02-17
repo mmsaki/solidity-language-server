@@ -1,0 +1,52 @@
+# Goto definition — toInt128 method-on-return-value (first occurrence)
+#
+# Target: .toInt128() on line 218 (editor) → should resolve to SafeCast.sol:39
+#         (toInt128(int256) overload, NOT toInt128(uint256) at line 55)
+#
+# This tests method calls on return values: getAmount0Delta(...).toInt128()
+# Tree-sitter can't resolve this; falls back to name-based AST lookup with
+# byte hint proximity to pick the correct overload.
+#
+# Snapshots:
+#   chain0 — identical to Pool.sol (baseline, clean)
+#   toint128_dirty — `uint test;` added + reformatted args (single-line getAmount0Delta)
+#   chain1 — 1 `uint256 test;` inserted at line 213 (+1)
+#   chain2 — 5 `uint256 test;` lines inserted at line 213 (+5)
+#
+project: v4-core
+file: src/libraries/Pool.sol
+line: 217
+col: 26
+response: full
+output: benchmarks/issue-82/results/goto-toInt128
+timeout: 10
+index_timeout: 30
+
+benchmarks:
+  - textDocument/definition
+
+methods:
+  textDocument/definition:
+    line: 217
+    col: 26
+    didChange:
+      # chain0: no edits — baseline (clean file, AST path)
+      - file: src/libraries/Pool.sol.chain0
+        line: 217
+        col: 26
+      # toint128_dirty: `uint test;` added + args reformatted — toInt128 shifts
+      - file: src/libraries/Pool.sol.toint128_dirty
+        line: 216
+        col: 22
+      # chain1: +1 line at 213 — toInt128 shifts to line 219
+      - file: src/libraries/Pool.sol.chain1
+        line: 218
+        col: 26
+      # chain2: +5 lines at 213 — toInt128 shifts to line 223
+      - file: src/libraries/Pool.sol.chain2
+        line: 222
+        col: 26
+
+servers:
+  - label: mmsaki
+    cmd: ./target/release/solidity-language-server

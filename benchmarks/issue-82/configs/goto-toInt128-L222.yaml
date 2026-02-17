@@ -1,0 +1,42 @@
+# Goto definition — toInt128 second occurrence (line 224, editor)
+#
+# Target: .toInt128() on line 224 (editor) → should resolve to SafeCast.sol:39
+#         (toInt128(int256) overload)
+#
+# This is the second .toInt128() call, on the inline getAmount0Delta:
+#   SqrtPriceMath.getAmount0Delta(sqrtPriceX96, ..., liquidityDelta)
+#       .toInt128(),
+#
+# Snapshots:
+#   chain0 — identical to Pool.sol (baseline, clean)
+#   toint128_dirty — `uint test;` added + reformatted args
+#
+project: v4-core
+file: src/libraries/Pool.sol
+line: 223
+col: 25
+response: full
+output: benchmarks/issue-82/results/goto-toInt128-L222
+timeout: 10
+index_timeout: 30
+
+benchmarks:
+  - textDocument/definition
+
+methods:
+  textDocument/definition:
+    line: 223
+    col: 25
+    didChange:
+      # chain0: no edits — baseline (clean file, AST path)
+      - file: src/libraries/Pool.sol.chain0
+        line: 223
+        col: 25
+      # toint128_dirty: `uint test;` added + args reformatted — toInt128 shifts
+      - file: src/libraries/Pool.sol.toint128_dirty
+        line: 222
+        col: 25
+
+servers:
+  - label: mmsaki
+    cmd: ./target/release/solidity-language-server
