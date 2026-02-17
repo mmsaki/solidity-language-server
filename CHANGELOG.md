@@ -21,6 +21,43 @@
 
 - Add `textDocument/semanticTokens/full` via tree-sitter (#75, #76)
 
+### Notes
+
+#### Symbol kinds
+
+The `documentSymbol` response returns hierarchical symbols with the following kind mappings:
+
+| Solidity construct         | LSP SymbolKind     |
+|----------------------------|--------------------|
+| `contract`                 | CLASS              |
+| `interface`                | INTERFACE          |
+| `library`                  | NAMESPACE          |
+| `function`                 | FUNCTION           |
+| `constructor`              | CONSTRUCTOR        |
+| `fallback` / `receive`     | FUNCTION           |
+| `state variable`           | FIELD              |
+| `event`                    | EVENT              |
+| `error`                    | EVENT              |
+| `modifier`                 | METHOD             |
+| `struct`                   | STRUCT             |
+| `struct member`            | FIELD              |
+| `enum`                     | ENUM               |
+| `enum value`               | ENUM_MEMBER        |
+| `using ... for`            | PROPERTY           |
+| `type ... is ...`          | TYPE_PARAMETER     |
+| `pragma`                   | STRING             |
+| `import`                   | MODULE             |
+
+Functions include a detail string with parameters and return types (e.g. `(address to, uint256 amount) returns (bool)`).
+
+Contracts, structs, and enums are returned as parent symbols with their members nested as children. Top-level declarations (pragma, import, free functions, free structs/enums) appear at root level.
+
+#### Semantic tokens and tree-sitter coexistence
+
+LSP semantic tokens in Neovim have higher priority (125-127) than tree-sitter highlights (100). When both emit tokens for the same range, LSP wins. This causes problems when `@lsp.typemod.*` groups fall back to the generic `@lsp` highlight with undesirable colors.
+
+The approach taken here: only emit semantic tokens where the LSP adds value that tree-sitter cannot provide. Let tree-sitter handle syntax it already highlights well (builtins, variables, member access, pragmas, modifiers). The LSP focuses on declaration identifiers, parameters, type references, and call targets where semantic knowledge matters.
+
 ## v0.1.18
 
 ### Features
