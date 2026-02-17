@@ -23,3 +23,5 @@ tower-lsp = "0.20.0"
 tracing = "0.1.43"
 tracing-subscriber = "0.3.22"
 lintspec-core = { version = "0.15.0", default-features = false }
+tree-sitter = "0.26.5"
+tree-sitter-solidity = "1.2.13"
