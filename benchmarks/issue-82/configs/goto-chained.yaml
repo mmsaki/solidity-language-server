@@ -24,6 +24,9 @@ methods:
   textDocument/definition:
     line: 213
     col: 34
+    expect:
+      file: SqrtPriceMath.sol
+      line: 260
     didChange:
       # chain0: no edits — baseline (same as original)
       - file: src/libraries/Pool.sol.chain0

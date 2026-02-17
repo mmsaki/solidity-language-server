@@ -25,6 +25,9 @@ methods:
   textDocument/definition:
     line: 102
     col: 15
+    expect:
+      file: TickMath.sol
+      line: 9
     didChange:
       # snapshot0: no edits — baseline
       - file: src/libraries/Pool.sol.snapshot0

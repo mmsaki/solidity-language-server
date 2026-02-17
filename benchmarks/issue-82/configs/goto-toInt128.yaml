@@ -29,6 +29,9 @@ methods:
   textDocument/definition:
     line: 217
     col: 26
+    expect:
+      file: SafeCast.sol
+      line: 39
     didChange:
       # chain0: no edits — baseline (clean file, AST path)
       - file: src/libraries/Pool.sol.chain0

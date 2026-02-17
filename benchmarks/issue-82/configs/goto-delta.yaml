@@ -22,6 +22,9 @@ methods:
   textDocument/definition:
     line: 212
     col: 16
+    expect:
+      file: Pool.sol
+      line: 147
 
 servers:
   - label: mmsaki
