@@ -572,6 +572,10 @@ pub struct CursorContext {
     pub function: Option<String>,
     /// Enclosing contract/interface/library name (if any).
     pub contract: Option<String>,
+    /// Object in a member access expression (e.g. `SqrtPriceMath` in
+    /// `SqrtPriceMath.getAmount0Delta`). Set when the cursor is on the
+    /// property side of a dot expression.
+    pub object: Option<String>,
 }
 
 /// Parse Solidity source with tree-sitter.
@@ -633,6 +637,24 @@ pub fn cursor_context(source: &str, position: Position) -> Option<CursorContext>
     let mut function = None;
     let mut contract = None;
 
+    // Detect member access: if the identifier is the `property` side of a
+    // member_expression (e.g. `SqrtPriceMath.getAmount0Delta`), extract
+    // the object name so the caller can resolve cross-file.
+    let object = id_node.parent().and_then(|parent| {
+        if parent.kind() == "member_expression" {
+            let prop = parent.child_by_field_name("property")?;
+            // Only set object when cursor is on the property, not the object side
+            if prop.id() == id_node.id() {
+                let obj = parent.child_by_field_name("object")?;
+                Some(source[obj.byte_range()].to_string())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    });
+
     // Walk ancestors
     let mut current = id_node.parent();
     while let Some(node) = current {
@@ -657,6 +679,7 @@ pub fn cursor_context(source: &str, position: Position) -> Option<CursorContext>
         name,
         function,
         contract,
+        object,
     })
 }
 
@@ -885,6 +908,31 @@ pub fn goto_definition_ts(
     text_cache: &HashMap<String, (i32, String)>,
 ) -> Option<Location> {
     let ctx = cursor_context(source, position)?;
+
+    // Member access: cursor is on `getAmount0Delta` in `SqrtPriceMath.getAmount0Delta`.
+    // Look up the object (SqrtPriceMath) in the completion cache to find its file,
+    // then search that file for the member declaration.
+    if let Some(obj_name) = &ctx.object {
+        if let Some(path) = find_file_for_contract(completion_cache, obj_name, file_uri) {
+            let target_source = read_target_source(&path, text_cache)?;
+            let target_uri = Url::from_file_path(&path).ok()?;
+            let decls = find_declarations_by_name(&target_source, &ctx.name);
+            if let Some(d) = decls.first() {
+                return Some(Location {
+                    uri: target_uri,
+                    range: d.range,
+                });
+            }
+        }
+        // Object might be in the same file (e.g. a struct or contract in this file)
+        let decls = find_declarations_by_name(source, &ctx.name);
+        if let Some(d) = decls.first() {
+            return Some(Location {
+                uri: file_uri.clone(),
+                range: d.range,
+            });
+        }
+    }
 
     // Step 1: Try to resolve via CompletionCache to find which file + name the declaration is in.
     // Use the scope chain by names: find the contract scope, then resolve the name.
@@ -1237,6 +1285,7 @@ contract B { uint256 public x; }
             name: "x".into(),
             function: None,
             contract: Some("B".into()),
+            object: None,
         };
         let uri = Url::parse("file:///test.sol").unwrap();
         let loc = find_best_declaration(source, &ctx, &uri).unwrap();

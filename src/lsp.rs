@@ -641,6 +641,34 @@ impl LanguageServer for ForgeLsp {
             None => return Ok(None),
         };
 
+        // Try tree-sitter path first — works correctly with unsaved edits
+        // because it resolves by identifier name, not stale AST byte offsets.
+        let source_text = String::from_utf8_lossy(&source_bytes).to_string();
+        let ts_result = {
+            let comp_cache = self.completion_cache.read().await;
+            let text_cache = self.text_cache.read().await;
+            if let Some(cc) = comp_cache.get(&uri.to_string()) {
+                goto::goto_definition_ts(&source_text, position, &uri, cc, &text_cache)
+            } else {
+                None
+            }
+        };
+
+        if let Some(location) = ts_result {
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    format!(
+                        "found definition (tree-sitter) at {}:{}",
+                        location.uri, location.range.start.line
+                    ),
+                )
+                .await;
+            return Ok(Some(GotoDefinitionResponse::from(location)));
+        }
+
+        // Fallback: AST byte-range path (works when tree-sitter can't resolve,
+        // e.g. Yul external references, or when completion cache is empty).
         let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
         let cached_build = match cached_build {
             Some(cb) => cb,
