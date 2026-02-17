@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.1.18
+
+### Features
+
+- Context-sensitive `type(X).` completions (#70)
+  - Typing `type(ContractName).` now shows `creationCode`, `runtimeCode`, `name`, `interfaceId`
+  - Typing `type(IntegerType).` shows `min`, `max`
+
+### Fixes
+
+- Fix SIMD chunk selection skipping past target column in `position_to_byte_offset` (#73, #74)
+  - The SIMD-accelerated position calculation introduced in #68 could pick a chunk boundary past the target column on long lines, returning the wrong byte offset
+  - Go-to-definition on `AlreadyUnlocked` in PoolManager.sol resolved to `revertWith` in CustomRevert.sol instead of the correct `error AlreadyUnlocked()` in IPoolManager.sol
+
+### Performance
+
+- SIMD-accelerated position calculation via `lintspec-core` TextIndex (#68)
+  - `position_to_byte_offset` and `byte_offset_to_position` now use a single SIMD pass over 128-byte chunks instead of a full linear scan
+  - Short linear walk (at most 128 bytes) from the nearest chunk to the exact position
+
+### Refactor
+
+- Rewrite position conversion to use `lintspec-core` `compute_indices` and `TextIndex` (#64, #68)
+- Simplify conversion functions, use builtin traits and constructors
+- Improved identifier validation for Solidity keywords
+
+## v0.1.17
+
+### Fixes
+
+- Simplify diagnostic path matching to fix silent drop (#63)
+
 ## v0.1.16
 
 ### Features
