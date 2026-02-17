@@ -2,15 +2,15 @@
 # Usage: cargo build --release && lsp-bench
 project: example
 file: Shop.sol
-line: 105
-col: 28
+line: 134
+col: 38
 
 iterations: 10
 warmup: 2
 timeout: 10
 index_timeout: 15
 output: benchmarks
-report: benchmarks/v0.1.18.md
+report: benchmarks/v0.1.20.md
 
 benchmarks:
   - initialize
@@ -28,16 +28,20 @@ benchmarks:
   - textDocument/semanticTokens/full
   - workspace/symbol
 
-method:
+methods:
   textDocument/completion:
-    line: 111
-    col: 38
+    line: 134
+    col: 37
     trigger: "."
 
 servers:
-  - label: 0.1.18
+  - label: 0.1.20
     description: Local branch build
     cmd: ./target/release/solidity-language-server
+
+  - label: 0.1.19
+    description: Local branch build
+    cmd: solidity-language-server
 
   - label: solc
     description: Official Solidity compiler LSP

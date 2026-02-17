@@ -3,7 +3,7 @@ project: v4-core
 file: src/libraries/Pool.sol
 line: 102
 col: 15
-iterations: 10
+iterations: 1
 warmup: 2
 timeout: 10
 index_timeout: 30
@@ -31,6 +31,8 @@ benchmarks:
 methods:
   textDocument/completion:
     trigger: "."
+    line: 102
+    col: 24
 
 servers:
   - label: v0.1.19
