@@ -950,40 +950,19 @@ impl LanguageServer for ForgeLsp {
             .log_message(MessageType::INFO, "got workspace/symbol request")
             .await;
 
-        // Use a cached AST if available (any entry has the full workspace build).
-        // Fall back to a fresh build only on cache miss.
-        let ast_data = {
-            let cache = self.ast_cache.read().await;
-            cache.values().next().map(|cb| cb.ast.clone())
-        };
-        let ast_data = match ast_data {
-            Some(data) => data,
-            None => {
-                let current_dir = std::env::current_dir().ok();
-                if let Some(dir) = current_dir {
-                    let path_str = dir.to_str().unwrap_or(".");
-                    match self.compiler.ast(path_str).await {
-                        Ok(data) => data,
-                        Err(e) => {
-                            self.client
-                                .log_message(
-                                    MessageType::WARNING,
-                                    format!("failed to get ast data: {e}"),
-                                )
-                                .await;
-                            return Ok(None);
-                        }
-                    }
-                } else {
-                    self.client
-                        .log_message(MessageType::ERROR, "could not get current directory")
-                        .await;
-                    return Ok(None);
-                }
-            }
+        // Collect sources from open files in text_cache
+        let files: Vec<(Url, String)> = {
+            let cache = self.text_cache.read().await;
+            cache
+                .iter()
+                .filter(|(uri_str, _)| uri_str.ends_with(".sol"))
+                .filter_map(|(uri_str, (_, content))| {
+                    Url::parse(uri_str).ok().map(|uri| (uri, content.clone()))
+                })
+                .collect()
         };
 
-        let mut all_symbols = symbols::extract_symbols(&ast_data);
+        let mut all_symbols = symbols::extract_workspace_symbols(&files);
         if !params.query.is_empty() {
             let query = params.query.to_lowercase();
             all_symbols.retain(|symbol| symbol.name.to_lowercase().contains(&query));
@@ -997,7 +976,7 @@ impl LanguageServer for ForgeLsp {
             self.client
                 .log_message(
                     MessageType::INFO,
-                    format!("found {} symbol", all_symbols.len()),
+                    format!("found {} symbols", all_symbols.len()),
                 )
                 .await;
             Ok(Some(all_symbols))
@@ -1022,22 +1001,22 @@ impl LanguageServer for ForgeLsp {
             }
         };
 
-        let path_str = match file_path.to_str() {
+        // Read source from text_cache (open files) or disk
+        let source = {
+            let cache = self.text_cache.read().await;
+            cache
+                .get(&uri.to_string())
+                .map(|(_, content)| content.clone())
+        };
+        let source = match source {
             Some(s) => s,
-            None => {
-                self.client
-                    .log_message(MessageType::ERROR, "invalid path")
-                    .await;
-                return Ok(None);
-            }
+            None => match std::fs::read_to_string(&file_path) {
+                Ok(s) => s,
+                Err(_) => return Ok(None),
+            },
         };
-        // Use cached AST if available, otherwise fetch fresh
-        let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
-        let cached_build = match cached_build {
-            Some(cb) => cb,
-            None => return Ok(None),
-        };
-        let symbols = symbols::extract_document_symbols(&cached_build.ast, path_str);
+
+        let symbols = symbols::extract_document_symbols(&source);
         if symbols.is_empty() {
             self.client
                 .log_message(MessageType::INFO, "no document symbols found")
