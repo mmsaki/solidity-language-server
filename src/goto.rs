@@ -104,11 +104,14 @@ pub struct CachedBuild {
     pub path_to_abs: HashMap<String, String>,
     pub external_refs: ExternalRefs,
     pub id_to_path_map: HashMap<String, String>,
+    /// The text_cache version this build was created from.
+    /// Used to detect dirty files (unsaved edits since last build).
+    pub build_version: i32,
 }
 
 impl CachedBuild {
     /// Build the index from raw `forge build --ast` output.
-    pub fn new(ast: Value) -> Self {
+    pub fn new(ast: Value, build_version: i32) -> Self {
         let (nodes, path_to_abs, external_refs) = if let Some(sources) = ast.get("sources") {
             cache_ids(sources)
         } else {
@@ -134,6 +137,7 @@ impl CachedBuild {
             path_to_abs,
             external_refs,
             id_to_path_map,
+            build_version,
         }
     }
 }
@@ -576,6 +580,12 @@ pub struct CursorContext {
     /// `SqrtPriceMath.getAmount0Delta`). Set when the cursor is on the
     /// property side of a dot expression.
     pub object: Option<String>,
+    /// Number of arguments at the call site (for overload disambiguation).
+    /// Set when the cursor is on a function name inside a `call_expression`.
+    pub arg_count: Option<usize>,
+    /// Inferred argument types at the call site (e.g. `["uint160", "uint160", "int128"]`).
+    /// `None` entries mean the type couldn't be inferred for that argument.
+    pub arg_types: Vec<Option<String>>,
 }
 
 /// Parse Solidity source with tree-sitter.
@@ -610,6 +620,212 @@ fn ts_child_id_text<'a>(node: Node<'a>, source: &'a str) -> Option<&'a str> {
     node.children(&mut cursor)
         .find(|c| c.kind() == "identifier" && c.is_named())
         .map(|c| &source[c.byte_range()])
+}
+
+/// Infer the type of an expression node using tree-sitter.
+///
+/// For identifiers, walks up to find the variable declaration and extracts its type.
+/// For literals, infers the type from the literal kind.
+/// For function calls, returns None (would need return type resolution).
+fn infer_argument_type<'a>(arg_node: Node<'a>, source: &'a str) -> Option<String> {
+    // Unwrap call_argument → get inner expression
+    let expr = if arg_node.kind() == "call_argument" {
+        let mut c = arg_node.walk();
+        arg_node.children(&mut c).find(|ch| ch.is_named())?
+    } else {
+        arg_node
+    };
+
+    match expr.kind() {
+        "identifier" => {
+            let var_name = &source[expr.byte_range()];
+            // Walk up scopes to find the variable declaration
+            find_variable_type(expr, source, var_name)
+        }
+        "number_literal" | "decimal_number" | "hex_number" => Some("uint256".into()),
+        "boolean_literal" => Some("bool".into()),
+        "string_literal" | "hex_string_literal" => Some("string".into()),
+        _ => None,
+    }
+}
+
+/// Find the type of a variable by searching upward through enclosing scopes.
+///
+/// Looks for `parameter`, `variable_declaration`, and `state_variable_declaration`
+/// nodes whose identifier matches the variable name.
+fn find_variable_type(from: Node, source: &str, var_name: &str) -> Option<String> {
+    let mut scope = from.parent();
+    while let Some(node) = scope {
+        match node.kind() {
+            "function_definition" | "modifier_definition" | "constructor_definition" => {
+                // Check parameters
+                let mut c = node.walk();
+                for child in node.children(&mut c) {
+                    if child.kind() == "parameter" {
+                        if let Some(id) = ts_child_id_text(child, source) {
+                            if id == var_name {
+                                // Extract the type from this parameter
+                                let mut pc = child.walk();
+                                return child
+                                    .children(&mut pc)
+                                    .find(|c| {
+                                        matches!(
+                                            c.kind(),
+                                            "type_name"
+                                                | "primitive_type"
+                                                | "user_defined_type"
+                                                | "mapping"
+                                        )
+                                    })
+                                    .map(|t| source[t.byte_range()].trim().to_string());
+                            }
+                        }
+                    }
+                }
+            }
+            "function_body" | "block_statement" | "unchecked_block" => {
+                // Check local variable declarations
+                let mut c = node.walk();
+                for child in node.children(&mut c) {
+                    if child.kind() == "variable_declaration_statement"
+                        || child.kind() == "variable_declaration"
+                    {
+                        if let Some(id) = ts_child_id_text(child, source) {
+                            if id == var_name {
+                                let mut pc = child.walk();
+                                return child
+                                    .children(&mut pc)
+                                    .find(|c| {
+                                        matches!(
+                                            c.kind(),
+                                            "type_name"
+                                                | "primitive_type"
+                                                | "user_defined_type"
+                                                | "mapping"
+                                        )
+                                    })
+                                    .map(|t| source[t.byte_range()].trim().to_string());
+                            }
+                        }
+                    }
+                }
+            }
+            "contract_declaration" | "library_declaration" | "interface_declaration" => {
+                // Check state variables
+                if let Some(body) = ts_find_child(node, "contract_body") {
+                    let mut c = body.walk();
+                    for child in body.children(&mut c) {
+                        if child.kind() == "state_variable_declaration" {
+                            if let Some(id) = ts_child_id_text(child, source) {
+                                if id == var_name {
+                                    let mut pc = child.walk();
+                                    return child
+                                        .children(&mut pc)
+                                        .find(|c| {
+                                            matches!(
+                                                c.kind(),
+                                                "type_name"
+                                                    | "primitive_type"
+                                                    | "user_defined_type"
+                                                    | "mapping"
+                                            )
+                                        })
+                                        .map(|t| source[t.byte_range()].trim().to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+        scope = node.parent();
+    }
+    None
+}
+
+/// Infer argument types at a call site by examining each `call_argument` child.
+fn infer_call_arg_types(call_node: Node, source: &str) -> Vec<Option<String>> {
+    let mut cursor = call_node.walk();
+    call_node
+        .children(&mut cursor)
+        .filter(|c| c.kind() == "call_argument")
+        .map(|arg| infer_argument_type(arg, source))
+        .collect()
+}
+
+/// Pick the best overload from multiple declarations based on argument types.
+///
+/// Strategy:
+/// 1. If only one declaration, return it.
+/// 2. Filter by argument count first.
+/// 3. Among count-matched declarations, score by how many argument types match.
+/// 4. Return the highest-scoring declaration.
+fn best_overload<'a>(
+    decls: &'a [TsDeclaration],
+    arg_count: Option<usize>,
+    arg_types: &[Option<String>],
+) -> Option<&'a TsDeclaration> {
+    if decls.len() == 1 {
+        return decls.first();
+    }
+    if decls.is_empty() {
+        return None;
+    }
+
+    // Filter to only function declarations (skip parameters, variables, etc.)
+    let func_decls: Vec<&TsDeclaration> =
+        decls.iter().filter(|d| d.param_count.is_some()).collect();
+
+    if func_decls.is_empty() {
+        return decls.first();
+    }
+
+    // If we have arg_count, filter by it
+    let count_matched: Vec<&&TsDeclaration> = if let Some(ac) = arg_count {
+        let matched: Vec<_> = func_decls
+            .iter()
+            .filter(|d| d.param_count == Some(ac))
+            .collect();
+        if matched.len() == 1 {
+            return Some(matched[0]);
+        }
+        if matched.is_empty() {
+            // No count match — fall back to all
+            func_decls.iter().collect()
+        } else {
+            matched
+        }
+    } else {
+        func_decls.iter().collect()
+    };
+
+    // Score each candidate by how many argument types match parameter types
+    if !arg_types.is_empty() {
+        let mut best: Option<(&TsDeclaration, usize)> = None;
+        for &&decl in &count_matched {
+            let score = arg_types
+                .iter()
+                .zip(decl.param_types.iter())
+                .filter(|(arg_ty, param_ty)| {
+                    if let Some(at) = arg_ty {
+                        at == param_ty.as_str()
+                    } else {
+                        false
+                    }
+                })
+                .count();
+            if best.is_none() || score > best.unwrap().1 {
+                best = Some((decl, score));
+            }
+        }
+        if let Some((decl, _)) = best {
+            return Some(decl);
+        }
+    }
+
+    // Fallback: return first count-matched or first overall
+    count_matched.first().map(|d| **d).or(decls.first())
 }
 
 /// Extract cursor context: the identifier under the cursor and its ancestor names.
@@ -655,6 +871,23 @@ pub fn cursor_context(source: &str, position: Position) -> Option<CursorContext>
         }
     });
 
+    // Count arguments and infer types at the call site for overload disambiguation.
+    // Walk up from the identifier to find an enclosing `call_expression`,
+    // then count its `call_argument` children and infer their types.
+    let (arg_count, arg_types) = {
+        let mut node = id_node.parent();
+        let mut result = (None, vec![]);
+        while let Some(n) = node {
+            if n.kind() == "call_expression" {
+                let types = infer_call_arg_types(n, source);
+                result = (Some(types.len()), types);
+                break;
+            }
+            node = n.parent();
+        }
+        result
+    };
+
     // Walk ancestors
     let mut current = id_node.parent();
     while let Some(node) = current {
@@ -680,6 +913,8 @@ pub fn cursor_context(source: &str, position: Position) -> Option<CursorContext>
         function,
         contract,
         object,
+        arg_count,
+        arg_types,
     })
 }
 
@@ -692,6 +927,11 @@ pub struct TsDeclaration {
     pub kind: &'static str,
     /// Container name (contract/struct that owns this declaration).
     pub container: Option<String>,
+    /// Number of parameters (for function/modifier declarations).
+    pub param_count: Option<usize>,
+    /// Parameter type signature (e.g. `["uint160", "uint160", "int128"]`).
+    /// Used for overload disambiguation.
+    pub param_types: Vec<String>,
 }
 
 /// Find all declarations of a name in a source file using tree-sitter.
@@ -728,6 +968,8 @@ fn collect_declarations(
                             range: id_range(child),
                             kind: child.kind(),
                             container: container.map(String::from),
+                            param_count: None,
+                            param_types: vec![],
                         });
                     }
                     // Recurse into contract body
@@ -739,10 +981,13 @@ fn collect_declarations(
             "function_definition" | "modifier_definition" => {
                 if let Some(id_name) = ts_child_id_text(child, source) {
                     if id_name == name {
+                        let types = parameter_type_signature(child, source);
                         out.push(TsDeclaration {
                             range: id_range(child),
                             kind: child.kind(),
                             container: container.map(String::from),
+                            param_count: Some(types.len()),
+                            param_types: types.into_iter().map(String::from).collect(),
                         });
                     }
                     // Check function parameters
@@ -755,10 +1000,13 @@ fn collect_declarations(
             }
             "constructor_definition" => {
                 if name == "constructor" {
+                    let types = parameter_type_signature(child, source);
                     out.push(TsDeclaration {
                         range: ts_range(child),
                         kind: "constructor_definition",
                         container: container.map(String::from),
+                        param_count: Some(types.len()),
+                        param_types: types.into_iter().map(String::from).collect(),
                     });
                 }
                 // Check constructor parameters
@@ -775,6 +1023,8 @@ fn collect_declarations(
                         range: id_range(child),
                         kind: child.kind(),
                         container: container.map(String::from),
+                        param_count: None,
+                        param_types: vec![],
                     });
                 }
             }
@@ -785,6 +1035,8 @@ fn collect_declarations(
                             range: id_range(child),
                             kind: "struct_declaration",
                             container: container.map(String::from),
+                            param_count: None,
+                            param_types: vec![],
                         });
                     }
                     if let Some(body) = ts_find_child(child, "struct_body") {
@@ -799,6 +1051,8 @@ fn collect_declarations(
                             range: id_range(child),
                             kind: "enum_declaration",
                             container: container.map(String::from),
+                            param_count: None,
+                            param_types: vec![],
                         });
                     }
                     // Check enum values
@@ -810,6 +1064,8 @@ fn collect_declarations(
                                     range: ts_range(val),
                                     kind: "enum_value",
                                     container: Some(id_name.to_string()),
+                                    param_count: None,
+                                    param_types: vec![],
                                 });
                             }
                         }
@@ -824,6 +1080,8 @@ fn collect_declarations(
                         range: id_range(child),
                         kind: child.kind(),
                         container: container.map(String::from),
+                        param_count: None,
+                        param_types: vec![],
                     });
                 }
             }
@@ -835,6 +1093,8 @@ fn collect_declarations(
                         range: id_range(child),
                         kind: "user_defined_type_definition",
                         container: container.map(String::from),
+                        param_count: None,
+                        param_types: vec![],
                     });
                 }
             }
@@ -844,6 +1104,30 @@ fn collect_declarations(
             }
         }
     }
+}
+
+/// Extract the type signature from a function's parameters.
+///
+/// Returns a list of type strings, e.g. `["uint160", "uint160", "int128"]`.
+/// For complex types (mappings, arrays, user-defined), returns the full
+/// text of the type node.
+fn parameter_type_signature<'a>(node: Node<'a>, source: &'a str) -> Vec<&'a str> {
+    let mut cursor = node.walk();
+    node.children(&mut cursor)
+        .filter(|c| c.kind() == "parameter")
+        .filter_map(|param| {
+            let mut pc = param.walk();
+            param
+                .children(&mut pc)
+                .find(|c| {
+                    matches!(
+                        c.kind(),
+                        "type_name" | "primitive_type" | "user_defined_type" | "mapping"
+                    )
+                })
+                .map(|t| source[t.byte_range()].trim())
+        })
+        .collect()
 }
 
 /// Collect parameter declarations from a function/constructor node.
@@ -864,6 +1148,8 @@ fn collect_parameters(
                 range: id_range(child),
                 kind: "parameter",
                 container: container.map(String::from),
+                param_count: None,
+                param_types: vec![],
             });
         }
     }
@@ -912,12 +1198,13 @@ pub fn goto_definition_ts(
     // Member access: cursor is on `getAmount0Delta` in `SqrtPriceMath.getAmount0Delta`.
     // Look up the object (SqrtPriceMath) in the completion cache to find its file,
     // then search that file for the member declaration.
+    // When multiple overloads exist, disambiguate by argument count and types.
     if let Some(obj_name) = &ctx.object {
         if let Some(path) = find_file_for_contract(completion_cache, obj_name, file_uri) {
             let target_source = read_target_source(&path, text_cache)?;
             let target_uri = Url::from_file_path(&path).ok()?;
             let decls = find_declarations_by_name(&target_source, &ctx.name);
-            if let Some(d) = decls.first() {
+            if let Some(d) = best_overload(&decls, ctx.arg_count, &ctx.arg_types) {
                 return Some(Location {
                     uri: target_uri,
                     range: d.range,
@@ -926,7 +1213,7 @@ pub fn goto_definition_ts(
         }
         // Object might be in the same file (e.g. a struct or contract in this file)
         let decls = find_declarations_by_name(source, &ctx.name);
-        if let Some(d) = decls.first() {
+        if let Some(d) = best_overload(&decls, ctx.arg_count, &ctx.arg_types) {
             return Some(Location {
                 uri: file_uri.clone(),
                 range: d.range,
@@ -1286,6 +1573,8 @@ contract B { uint256 public x; }
             function: None,
             contract: Some("B".into()),
             object: None,
+            arg_count: None,
+            arg_types: vec![],
         };
         let uri = Url::parse("file:///test.sol").unwrap();
         let loc = find_best_declaration(source, &ctx, &uri).unwrap();

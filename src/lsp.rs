@@ -79,7 +79,7 @@ impl ForgeLsp {
 
         if build_succeeded {
             if let Ok(ast_data) = ast_result {
-                let cached_build = Arc::new(goto::CachedBuild::new(ast_data));
+                let cached_build = Arc::new(goto::CachedBuild::new(ast_data, version));
                 let mut cache = self.ast_cache.write().await;
                 cache.insert(uri.to_string(), cached_build.clone());
                 drop(cache);
@@ -213,7 +213,9 @@ impl ForgeLsp {
         let path_str = file_path.to_str()?;
         match self.compiler.ast(path_str).await {
             Ok(data) => {
-                let build = Arc::new(goto::CachedBuild::new(data));
+                // Built from disk (cache miss) — use version 0; the next
+                // didSave/on_change will stamp the correct version.
+                let build = Arc::new(goto::CachedBuild::new(data, 0));
                 if insert_on_miss {
                     let mut cache = self.ast_cache.write().await;
                     cache.insert(uri_str.clone(), build.clone());
@@ -641,59 +643,118 @@ impl LanguageServer for ForgeLsp {
             None => return Ok(None),
         };
 
-        // Try tree-sitter path first — works correctly with unsaved edits
-        // because it resolves by identifier name, not stale AST byte offsets.
         let source_text = String::from_utf8_lossy(&source_bytes).to_string();
-        let ts_result = {
-            let comp_cache = self.completion_cache.read().await;
-            let text_cache = self.text_cache.read().await;
-            if let Some(cc) = comp_cache.get(&uri.to_string()) {
-                goto::goto_definition_ts(&source_text, position, &uri, cc, &text_cache)
-            } else {
-                None
+
+        // Determine if the file is dirty (unsaved edits since last build).
+        // When dirty, AST byte offsets are stale so we prefer tree-sitter.
+        // When clean, AST has proper semantic resolution (scoping, types).
+        let (is_dirty, cached_build) = {
+            let text_version = self
+                .text_cache
+                .read()
+                .await
+                .get(&uri.to_string())
+                .map(|(v, _)| *v)
+                .unwrap_or(0);
+            let cb = self.get_or_fetch_build(&uri, &file_path, false).await;
+            let build_version = cb.as_ref().map(|b| b.build_version).unwrap_or(0);
+            (text_version > build_version, cb)
+        };
+
+        if is_dirty {
+            self.client
+                .log_message(MessageType::INFO, "file is dirty, trying tree-sitter first")
+                .await;
+
+            // DIRTY: tree-sitter first → AST fallback
+            let ts_result = {
+                let comp_cache = self.completion_cache.read().await;
+                let text_cache = self.text_cache.read().await;
+                if let Some(cc) = comp_cache.get(&uri.to_string()) {
+                    goto::goto_definition_ts(&source_text, position, &uri, cc, &text_cache)
+                } else {
+                    None
+                }
+            };
+
+            if let Some(location) = ts_result {
+                self.client
+                    .log_message(
+                        MessageType::INFO,
+                        format!(
+                            "found definition (tree-sitter) at {}:{}",
+                            location.uri, location.range.start.line
+                        ),
+                    )
+                    .await;
+                return Ok(Some(GotoDefinitionResponse::from(location)));
             }
-        };
 
-        if let Some(location) = ts_result {
-            self.client
-                .log_message(
-                    MessageType::INFO,
-                    format!(
-                        "found definition (tree-sitter) at {}:{}",
-                        location.uri, location.range.start.line
-                    ),
-                )
-                .await;
-            return Ok(Some(GotoDefinitionResponse::from(location)));
-        }
-
-        // Fallback: AST byte-range path (works when tree-sitter can't resolve,
-        // e.g. Yul external references, or when completion cache is empty).
-        let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
-        let cached_build = match cached_build {
-            Some(cb) => cb,
-            None => return Ok(None),
-        };
-
-        if let Some(location) =
-            goto::goto_declaration(&cached_build.ast, &uri, position, &source_bytes)
-        {
-            self.client
-                .log_message(
-                    MessageType::INFO,
-                    format!(
-                        "found definition at {}:{}",
-                        location.uri, location.range.start.line
-                    ),
-                )
-                .await;
-            Ok(Some(GotoDefinitionResponse::from(location)))
+            // Tree-sitter couldn't resolve — try AST as best-effort fallback
+            if let Some(ref cb) = cached_build {
+                if let Some(location) =
+                    goto::goto_declaration(&cb.ast, &uri, position, &source_bytes)
+                {
+                    self.client
+                        .log_message(
+                            MessageType::INFO,
+                            format!(
+                                "found definition (AST fallback) at {}:{}",
+                                location.uri, location.range.start.line
+                            ),
+                        )
+                        .await;
+                    return Ok(Some(GotoDefinitionResponse::from(location)));
+                }
+            }
         } else {
-            self.client
-                .log_message(MessageType::INFO, "no definition found")
-                .await;
-            Ok(None)
+            // CLEAN: AST first → tree-sitter fallback
+            if let Some(ref cb) = cached_build {
+                if let Some(location) =
+                    goto::goto_declaration(&cb.ast, &uri, position, &source_bytes)
+                {
+                    self.client
+                        .log_message(
+                            MessageType::INFO,
+                            format!(
+                                "found definition (AST) at {}:{}",
+                                location.uri, location.range.start.line
+                            ),
+                        )
+                        .await;
+                    return Ok(Some(GotoDefinitionResponse::from(location)));
+                }
+            }
+
+            // AST couldn't resolve — try tree-sitter fallback
+            let ts_result = {
+                let comp_cache = self.completion_cache.read().await;
+                let text_cache = self.text_cache.read().await;
+                if let Some(cc) = comp_cache.get(&uri.to_string()) {
+                    goto::goto_definition_ts(&source_text, position, &uri, cc, &text_cache)
+                } else {
+                    None
+                }
+            };
+
+            if let Some(location) = ts_result {
+                self.client
+                    .log_message(
+                        MessageType::INFO,
+                        format!(
+                            "found definition (tree-sitter fallback) at {}:{}",
+                            location.uri, location.range.start.line
+                        ),
+                    )
+                    .await;
+                return Ok(Some(GotoDefinitionResponse::from(location)));
+            }
         }
+
+        self.client
+            .log_message(MessageType::INFO, "no definition found")
+            .await;
+        Ok(None)
     }
 
     async fn goto_declaration(
