@@ -1,5 +1,6 @@
 use crate::goto::{CachedBuild, bytes_to_pos};
 use crate::references::id_to_location;
+use crate::types::SourceLoc;
 use tower_lsp::lsp_types::{DocumentLink, Range, Url};
 
 /// Extract document links for every node in the current file that
@@ -53,10 +54,11 @@ pub fn document_links(
 
         // Use name_location if available, otherwise fall back to src
         let loc_str = node_info.name_location.as_deref().unwrap_or(&node_info.src);
-        let (start_byte, length) = match parse_src(loc_str) {
-            Some((s, l, _)) => (s, l),
+        let src_loc = match SourceLoc::parse(loc_str) {
+            Some(loc) => loc,
             None => continue,
         };
+        let (start_byte, length) = (src_loc.offset, src_loc.length);
 
         let start_pos = match bytes_to_pos(source_bytes, start_byte) {
             Some(p) => p,
@@ -99,7 +101,8 @@ pub fn document_links(
 /// The link covers the quoted import path and targets the resolved file.
 fn import_link(node_info: &crate::goto::NodeInfo, source_bytes: &[u8]) -> Option<DocumentLink> {
     let absolute_path = node_info.absolute_path.as_deref()?;
-    let (start_byte, length, _) = parse_src(&node_info.src)?;
+    let src_loc = SourceLoc::parse(&node_info.src)?;
+    let (start_byte, length) = (src_loc.offset, src_loc.length);
     let end_byte = start_byte + length;
 
     if end_byte > source_bytes.len() || end_byte < 3 {
@@ -132,15 +135,4 @@ fn import_link(node_info: &crate::goto::NodeInfo, source_bytes: &[u8]) -> Option
         tooltip: Some(absolute_path.to_string()),
         data: None,
     })
-}
-
-/// Parse a `"offset:length:fileId"` src string.
-fn parse_src(src: &str) -> Option<(usize, usize, &str)> {
-    let parts: Vec<&str> = src.split(':').collect();
-    if parts.len() != 3 {
-        return None;
-    }
-    let offset: usize = parts[0].parse().ok()?;
-    let length: usize = parts[1].parse().ok()?;
-    Some((offset, length, parts[2]))
 }

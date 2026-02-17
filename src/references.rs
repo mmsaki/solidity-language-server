@@ -5,9 +5,12 @@ use tower_lsp::lsp_types::{Location, Position, Range, Url};
 use crate::goto::{
     CachedBuild, ExternalRefs, NodeInfo, bytes_to_pos, cache_ids, pos_to_bytes, src_to_location,
 };
+use crate::types::{NodeId, SourceLoc};
 
-pub fn all_references(nodes: &HashMap<String, HashMap<u64, NodeInfo>>) -> HashMap<u64, Vec<u64>> {
-    let mut all_refs: HashMap<u64, Vec<u64>> = HashMap::new();
+pub fn all_references(
+    nodes: &HashMap<String, HashMap<NodeId, NodeInfo>>,
+) -> HashMap<NodeId, Vec<NodeId>> {
+    let mut all_refs: HashMap<NodeId, Vec<NodeId>> = HashMap::new();
     for file_nodes in nodes.values() {
         for (id, node_info) in file_nodes {
             if let Some(ref_id) = node_info.referenced_declaration {
@@ -26,7 +29,7 @@ pub fn byte_to_decl_via_external_refs(
     id_to_path: &HashMap<String, String>,
     abs_path: &str,
     byte_position: usize,
-) -> Option<u64> {
+) -> Option<NodeId> {
     // Build reverse map: file_path -> file_id
     let path_to_file_id: HashMap<&str, &str> = id_to_path
         .iter()
@@ -35,18 +38,14 @@ pub fn byte_to_decl_via_external_refs(
     let current_file_id = path_to_file_id.get(abs_path)?;
 
     for (src_str, decl_id) in external_refs {
-        let parts: Vec<&str> = src_str.split(':').collect();
-        if parts.len() != 3 {
+        let Some(src_loc) = SourceLoc::parse(src_str) else {
             continue;
-        }
+        };
         // Only consider refs in the current file
-        if parts[2] != *current_file_id {
+        if src_loc.file_id_str() != *current_file_id {
             continue;
         }
-        if let (Ok(start), Ok(length)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>())
-            && start <= byte_position
-            && byte_position < start + length
-        {
+        if src_loc.offset <= byte_position && byte_position < src_loc.end() {
             return Some(*decl_id);
         }
     }
@@ -54,23 +53,19 @@ pub fn byte_to_decl_via_external_refs(
 }
 
 pub fn byte_to_id(
-    nodes: &HashMap<String, HashMap<u64, NodeInfo>>,
+    nodes: &HashMap<String, HashMap<NodeId, NodeInfo>>,
     abs_path: &str,
     byte_position: usize,
-) -> Option<u64> {
+) -> Option<NodeId> {
     let file_nodes = nodes.get(abs_path)?;
-    let mut refs: HashMap<usize, u64> = HashMap::new();
+    let mut refs: HashMap<usize, NodeId> = HashMap::new();
     for (id, node_info) in file_nodes {
-        let src_parts: Vec<&str> = node_info.src.split(':').collect();
-        if src_parts.len() != 3 {
+        let Some(src_loc) = SourceLoc::parse(&node_info.src) else {
             continue;
-        }
-        let start: usize = src_parts[0].parse().ok()?;
-        let length: usize = src_parts[1].parse().ok()?;
-        let end = start + length;
+        };
 
-        if start <= byte_position && byte_position < end {
-            let diff = end - start;
+        if src_loc.offset <= byte_position && byte_position < src_loc.end() {
+            let diff = src_loc.length;
             refs.entry(diff).or_insert(*id);
         }
     }
@@ -78,17 +73,17 @@ pub fn byte_to_id(
 }
 
 pub fn id_to_location(
-    nodes: &HashMap<String, HashMap<u64, NodeInfo>>,
+    nodes: &HashMap<String, HashMap<NodeId, NodeInfo>>,
     id_to_path: &HashMap<String, String>,
-    node_id: u64,
+    node_id: NodeId,
 ) -> Option<Location> {
     id_to_location_with_index(nodes, id_to_path, node_id, None)
 }
 
 pub fn id_to_location_with_index(
-    nodes: &HashMap<String, HashMap<u64, NodeInfo>>,
+    nodes: &HashMap<String, HashMap<NodeId, NodeInfo>>,
     id_to_path: &HashMap<String, String>,
-    node_id: u64,
+    node_id: NodeId,
     name_location_index: Option<usize>,
 ) -> Option<Location> {
     let mut target_node: Option<&NodeInfo> = None;
@@ -100,35 +95,19 @@ pub fn id_to_location_with_index(
     }
     let node = target_node?;
 
-    let (byte_str, length_str, file_id) = if let Some(index) = name_location_index
+    let loc_str = if let Some(index) = name_location_index
         && let Some(name_loc) = node.name_locations.get(index)
     {
-        let parts: Vec<&str> = name_loc.split(':').collect();
-        if parts.len() == 3 {
-            (parts[0], parts[1], parts[2])
-        } else {
-            return None;
-        }
+        name_loc.as_str()
     } else if let Some(name_location) = &node.name_location {
-        let parts: Vec<&str> = name_location.split(':').collect();
-        if parts.len() == 3 {
-            (parts[0], parts[1], parts[2])
-        } else {
-            return None;
-        }
+        name_location.as_str()
     } else {
         // Fallback to src location for nodes without nameLocation
-        let parts: Vec<&str> = node.src.split(':').collect();
-        if parts.len() == 3 {
-            (parts[0], parts[1], parts[2])
-        } else {
-            return None;
-        }
+        node.src.as_str()
     };
 
-    let byte_offset: usize = byte_str.parse().ok()?;
-    let length: usize = length_str.parse().ok()?;
-    let file_path = id_to_path.get(file_id)?;
+    let loc = SourceLoc::parse(loc_str)?;
+    let file_path = id_to_path.get(&loc.file_id_str())?;
 
     let absolute_path = if std::path::Path::new(file_path).is_absolute() {
         std::path::PathBuf::from(file_path)
@@ -136,8 +115,8 @@ pub fn id_to_location_with_index(
         std::env::current_dir().ok()?.join(file_path)
     };
     let source_bytes = std::fs::read(&absolute_path).ok()?;
-    let start_pos = bytes_to_pos(&source_bytes, byte_offset)?;
-    let end_pos = bytes_to_pos(&source_bytes, byte_offset + length)?;
+    let start_pos = bytes_to_pos(&source_bytes, loc.offset)?;
+    let end_pos = bytes_to_pos(&source_bytes, loc.end())?;
     let uri = Url::from_file_path(&absolute_path).ok()?;
 
     Some(Location {
@@ -201,12 +180,10 @@ pub fn resolve_target_location(
 
     // Find the definition node and extract its file + byte offset
     for (file_abs_path, file_nodes) in &build.nodes {
-        if let Some(node_info) = file_nodes.get(&target_node_id) {
-            let src_parts: Vec<&str> = node_info.src.split(':').collect();
-            if src_parts.len() == 3 {
-                let byte_offset: usize = src_parts[0].parse().ok()?;
-                return Some((file_abs_path.clone(), byte_offset));
-            }
+        if let Some(node_info) = file_nodes.get(&target_node_id)
+            && let Some(src_loc) = SourceLoc::parse(&node_info.src)
+        {
+            return Some((file_abs_path.clone(), src_loc.offset));
         }
     }
     None
@@ -281,7 +258,7 @@ pub fn goto_references_with_index(
         }
     };
 
-    let mut results = HashSet::new();
+    let mut results: HashSet<NodeId> = HashSet::new();
     if include_declaration {
         results.insert(target_node_id);
     }
@@ -352,7 +329,7 @@ pub fn goto_references_for_target(
     };
 
     // Collect the definition node + all nodes whose referenced_declaration matches
-    let mut results = HashSet::new();
+    let mut results: HashSet<NodeId> = HashSet::new();
     if include_declaration {
         results.insert(target_node_id);
     }

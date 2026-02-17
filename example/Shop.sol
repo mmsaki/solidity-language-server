@@ -15,7 +15,16 @@ pragma solidity 0.8.33;
 //                                                                     ░░░░░
 //
 
+/// @title Transaction Library
+/// @author mmsaki
+/// @notice Utility library for computing tax and refund amounts on orders.
 library Transaction {
+    /// @notice Represents a purchase order in the shop.
+    /// @param buyer The address of the buyer who placed the order.
+    /// @param nonce The buyer's order sequence number.
+    /// @param amount The total amount paid including tax.
+    /// @param date The block timestamp when the order was placed.
+    /// @param confirmed Whether the buyer has confirmed receipt.
     struct Order {
         address buyer;
         uint256 nonce;
@@ -24,15 +33,29 @@ library Transaction {
         bool confirmed;
     }
 
+    /// @notice Calculates the total amount with tax applied.
+    /// @param amount The base amount before tax.
+    /// @param tax The tax numerator.
+    /// @param base The tax denominator.
+    /// @return The total amount including tax.
     function addTax(uint256 amount, uint16 tax, uint16 base) internal pure returns (uint256) {
         return amount + (amount * tax / base);
     }
 
+    /// @notice Calculates the refund amount based on a refund rate.
+    /// @param amount The original order amount.
+    /// @param rate The refund rate numerator.
+    /// @param base The refund rate denominator.
+    /// @return The refund amount.
     function getRefund(uint256 amount, uint16 rate, uint16 base) internal pure returns (uint256) {
         return amount * rate / base;
     }
 }
 
+/// @title Shop
+/// @author mmsaki
+/// @notice A simple e-commerce shop contract with tax, refunds, and two-step ownership transfer.
+/// @dev Uses the Transaction library for tax and refund calculations. Follows CEI pattern.
 contract Shop {
     using Transaction for uint256;
 

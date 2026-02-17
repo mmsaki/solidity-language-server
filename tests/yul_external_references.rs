@@ -1,10 +1,11 @@
 use serde_json::Value;
 use solidity_language_server::goto;
+use solidity_language_server::types::NodeId;
 use std::collections::HashMap;
 use std::fs;
 
 type Type = (
-    HashMap<String, HashMap<u64, goto::NodeInfo>>,
+    HashMap<String, HashMap<NodeId, goto::NodeInfo>>,
     HashMap<String, String>,
     goto::ExternalRefs,
 );
@@ -39,23 +40,23 @@ fn test_external_refs_for_get_sqrt_price_target() {
     //   declaration 7274 (sqrtPriceTargetX96): 1 use  at src "2166:18:34"
 
     // zeroForOne (7267)
-    assert_eq!(external_refs.get("2068:10:34"), Some(&7267u64));
+    assert_eq!(external_refs.get("2068:10:34"), Some(&NodeId(7267)));
 
     // sqrtPriceNextX96 (7269)
-    assert_eq!(external_refs.get("1802:16:34"), Some(&7269u64));
-    assert_eq!(external_refs.get("1826:16:34"), Some(&7269u64));
-    assert_eq!(external_refs.get("2026:16:34"), Some(&7269u64));
-    assert_eq!(external_refs.get("2117:16:34"), Some(&7269u64));
+    assert_eq!(external_refs.get("1802:16:34"), Some(&NodeId(7269)));
+    assert_eq!(external_refs.get("1826:16:34"), Some(&NodeId(7269)));
+    assert_eq!(external_refs.get("2026:16:34"), Some(&NodeId(7269)));
+    assert_eq!(external_refs.get("2117:16:34"), Some(&NodeId(7269)));
 
     // sqrtPriceLimitX96 (7271)
-    assert_eq!(external_refs.get("1900:17:34"), Some(&7271u64));
-    assert_eq!(external_refs.get("1925:17:34"), Some(&7271u64));
-    assert_eq!(external_refs.get("2044:17:34"), Some(&7271u64));
-    assert_eq!(external_refs.get("2135:17:34"), Some(&7271u64));
-    assert_eq!(external_refs.get("2192:17:34"), Some(&7271u64));
+    assert_eq!(external_refs.get("1900:17:34"), Some(&NodeId(7271)));
+    assert_eq!(external_refs.get("1925:17:34"), Some(&NodeId(7271)));
+    assert_eq!(external_refs.get("2044:17:34"), Some(&NodeId(7271)));
+    assert_eq!(external_refs.get("2135:17:34"), Some(&NodeId(7271)));
+    assert_eq!(external_refs.get("2192:17:34"), Some(&NodeId(7271)));
 
     // sqrtPriceTargetX96 (7274)
-    assert_eq!(external_refs.get("2166:18:34"), Some(&7274u64));
+    assert_eq!(external_refs.get("2166:18:34"), Some(&NodeId(7274)));
 }
 
 #[test]
@@ -64,36 +65,36 @@ fn test_external_refs_exact_count_for_each_parameter() {
 
     // Count refs per declaration for the getSqrtPriceTarget parameters
     let count_for =
-        |decl_id: u64| -> usize { external_refs.values().filter(|&&v| v == decl_id).count() };
+        |decl_id: NodeId| -> usize { external_refs.values().filter(|&&v| v == decl_id).count() };
 
     // zeroForOne (7267): used once in assembly across ALL files
     // But other InlineAssembly nodes in other files may also reference a node with id 7267
     // so we check that at least 1 ref maps to 7267
     assert!(
-        count_for(7267) >= 1,
+        count_for(NodeId(7267)) >= 1,
         "zeroForOne (7267) should have at least 1 Yul reference, found {}",
-        count_for(7267)
+        count_for(NodeId(7267))
     );
 
     // sqrtPriceNextX96 (7269): 4 uses in getSqrtPriceTarget assembly
     assert!(
-        count_for(7269) >= 4,
+        count_for(NodeId(7269)) >= 4,
         "sqrtPriceNextX96 (7269) should have at least 4 Yul references, found {}",
-        count_for(7269)
+        count_for(NodeId(7269))
     );
 
     // sqrtPriceLimitX96 (7271): 5 uses in getSqrtPriceTarget assembly
     assert!(
-        count_for(7271) >= 5,
+        count_for(NodeId(7271)) >= 5,
         "sqrtPriceLimitX96 (7271) should have at least 5 Yul references, found {}",
-        count_for(7271)
+        count_for(NodeId(7271))
     );
 
     // sqrtPriceTargetX96 (7274): 1 use in getSqrtPriceTarget assembly
     assert!(
-        count_for(7274) >= 1,
+        count_for(NodeId(7274)) >= 1,
         "sqrtPriceTargetX96 (7274) should have at least 1 Yul reference, found {}",
-        count_for(7274)
+        count_for(NodeId(7274))
     );
 }
 
@@ -110,19 +111,19 @@ fn test_solidity_nodes_unchanged() {
     let mut found_7276 = false; // InlineAssembly node itself
 
     for file_nodes in nodes.values() {
-        if file_nodes.contains_key(&7267) {
+        if file_nodes.contains_key(&NodeId(7267)) {
             found_7267 = true;
         }
-        if file_nodes.contains_key(&7269) {
+        if file_nodes.contains_key(&NodeId(7269)) {
             found_7269 = true;
         }
-        if file_nodes.contains_key(&7271) {
+        if file_nodes.contains_key(&NodeId(7271)) {
             found_7271 = true;
         }
-        if file_nodes.contains_key(&7274) {
+        if file_nodes.contains_key(&NodeId(7274)) {
             found_7274 = true;
         }
-        if file_nodes.contains_key(&7276) {
+        if file_nodes.contains_key(&NodeId(7276)) {
             found_7276 = true;
         }
     }
@@ -147,7 +148,7 @@ fn test_solidity_nodes_unchanged() {
 
     // Verify InlineAssembly node type
     for file_nodes in nodes.values() {
-        if let Some(node) = file_nodes.get(&7276) {
+        if let Some(node) = file_nodes.get(&NodeId(7276)) {
             assert_eq!(
                 node.node_type,
                 Some("InlineAssembly".to_string()),
@@ -234,7 +235,7 @@ fn test_goto_bytes_resolves_yul_identifier() {
     // The declaration node 7269 (sqrtPriceNextX96) should have a nameLocation
     // pointing to the parameter definition
     for file_nodes in nodes.values() {
-        if let Some(node) = file_nodes.get(&7269) {
+        if let Some(node) = file_nodes.get(&NodeId(7269)) {
             if let Some(name_loc) = &node.name_location {
                 let parts: Vec<&str> = name_loc.split(':').collect();
                 let expected_offset: usize = parts[0].parse().unwrap();
@@ -253,7 +254,7 @@ fn test_goto_bytes_resolves_yul_identifier() {
 // =============================================================================
 
 struct SetupGotoResult(
-    HashMap<String, HashMap<u64, goto::NodeInfo>>,
+    HashMap<String, HashMap<NodeId, goto::NodeInfo>>,
     HashMap<String, String>,
     HashMap<String, String>,
     goto::ExternalRefs,
