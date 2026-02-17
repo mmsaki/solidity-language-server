@@ -1,6 +1,7 @@
 use crate::completion;
 use crate::goto;
 use crate::hover;
+use crate::inlay_hints;
 use crate::links;
 use crate::references;
 use crate::rename;
@@ -99,6 +100,14 @@ impl ForgeLsp {
                 self.client
                     .log_message(MessageType::INFO, "Build successful, AST cache updated")
                     .await;
+
+                // Ask the client to re-request inlay hints with the updated AST.
+                // Spawned as a background task so it doesn't block diagnostics
+                // publishing if the client doesn't support this request.
+                let client = self.client.clone();
+                tokio::spawn(async move {
+                    let _ = client.inlay_hint_refresh().await;
+                });
             } else if let Err(e) = ast_result {
                 self.client
                     .log_message(
@@ -287,6 +296,14 @@ impl LanguageServer for ForgeLsp {
                     },
                 }),
                 document_formatting_provider: Some(OneOf::Left(true)),
+                inlay_hint_provider: Some(OneOf::Right(InlayHintServerCapabilities::Options(
+                    InlayHintOptions {
+                        resolve_provider: Some(false),
+                        work_done_progress_options: WorkDoneProgressOptions {
+                            work_done_progress: None,
+                        },
+                    },
+                ))),
                 semantic_tokens_provider: Some(
                     SemanticTokensServerCapabilities::SemanticTokensOptions(
                         SemanticTokensOptions {
@@ -1200,5 +1217,55 @@ impl LanguageServer for ForgeLsp {
         let tokens = semantic_tokens::semantic_tokens_full(&source);
 
         Ok(Some(SemanticTokensResult::Tokens(tokens)))
+    }
+
+    async fn inlay_hint(
+        &self,
+        params: InlayHintParams,
+    ) -> tower_lsp::jsonrpc::Result<Option<Vec<InlayHint>>> {
+        self.client
+            .log_message(MessageType::INFO, "got textDocument/inlayHint request")
+            .await;
+
+        let uri = params.text_document.uri;
+        let range = params.range;
+
+        let file_path = match uri.to_file_path() {
+            Ok(path) => path,
+            Err(_) => {
+                self.client
+                    .log_message(MessageType::ERROR, "invalid file uri")
+                    .await;
+                return Ok(None);
+            }
+        };
+
+        let source_bytes = match self.get_source_bytes(&uri, &file_path).await {
+            Some(bytes) => bytes,
+            None => return Ok(None),
+        };
+
+        let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
+        let cached_build = match cached_build {
+            Some(cb) => cb,
+            None => return Ok(None),
+        };
+
+        let hints = inlay_hints::inlay_hints(&cached_build, &uri, range, &source_bytes);
+
+        if hints.is_empty() {
+            self.client
+                .log_message(MessageType::INFO, "no inlay hints found")
+                .await;
+            Ok(None)
+        } else {
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    format!("found {} inlay hints", hints.len()),
+                )
+                .await;
+            Ok(Some(hints))
+        }
     }
 }

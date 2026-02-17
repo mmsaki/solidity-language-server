@@ -590,10 +590,11 @@ fn ts_node_at_byte(node: Node, byte: usize) -> Option<Node> {
     }
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        if child.start_byte() <= byte && byte < child.end_byte() {
-            if let Some(deeper) = ts_node_at_byte(child, byte) {
-                return Some(deeper);
-            }
+        if child.start_byte() <= byte
+            && byte < child.end_byte()
+            && let Some(deeper) = ts_node_at_byte(child, byte)
+        {
+            return Some(deeper);
         }
     }
     Some(node)
@@ -744,14 +745,14 @@ fn collect_declarations(
                 }
             }
             "state_variable_declaration" | "variable_declaration" => {
-                if let Some(id_name) = ts_child_id_text(child, source) {
-                    if id_name == name {
-                        out.push(TsDeclaration {
-                            range: id_range(child),
-                            kind: child.kind(),
-                            container: container.map(String::from),
-                        });
-                    }
+                if let Some(id_name) = ts_child_id_text(child, source)
+                    && id_name == name
+                {
+                    out.push(TsDeclaration {
+                        range: id_range(child),
+                        kind: child.kind(),
+                        container: container.map(String::from),
+                    });
                 }
             }
             "struct_declaration" => {
@@ -793,25 +794,25 @@ fn collect_declarations(
                 }
             }
             "event_definition" | "error_declaration" => {
-                if let Some(id_name) = ts_child_id_text(child, source) {
-                    if id_name == name {
-                        out.push(TsDeclaration {
-                            range: id_range(child),
-                            kind: child.kind(),
-                            container: container.map(String::from),
-                        });
-                    }
+                if let Some(id_name) = ts_child_id_text(child, source)
+                    && id_name == name
+                {
+                    out.push(TsDeclaration {
+                        range: id_range(child),
+                        kind: child.kind(),
+                        container: container.map(String::from),
+                    });
                 }
             }
             "user_defined_type_definition" => {
-                if let Some(id_name) = ts_child_id_text(child, source) {
-                    if id_name == name {
-                        out.push(TsDeclaration {
-                            range: id_range(child),
-                            kind: "user_defined_type_definition",
-                            container: container.map(String::from),
-                        });
-                    }
+                if let Some(id_name) = ts_child_id_text(child, source)
+                    && id_name == name
+                {
+                    out.push(TsDeclaration {
+                        range: id_range(child),
+                        kind: "user_defined_type_definition",
+                        container: container.map(String::from),
+                    });
                 }
             }
             // Recurse into blocks, if-else, loops, etc.
@@ -832,16 +833,15 @@ fn collect_parameters(
 ) {
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        if child.kind() == "parameter" {
-            if let Some(id_name) = ts_child_id_text(child, source) {
-                if id_name == name {
-                    out.push(TsDeclaration {
-                        range: id_range(child),
-                        kind: "parameter",
-                        container: container.map(String::from),
-                    });
-                }
-            }
+        if child.kind() == "parameter"
+            && let Some(id_name) = ts_child_id_text(child, source)
+            && id_name == name
+        {
+            out.push(TsDeclaration {
+                range: id_range(child),
+                kind: "parameter",
+                container: container.map(String::from),
+            });
         }
     }
 }
@@ -946,46 +946,45 @@ fn resolve_via_cache(
             // and which has a declaration for this function name
             if let Some(func_scope_id) = find_function_scope(cache, contract_id, func_name) {
                 // Check declarations in this function scope first
-                if let Some(decls) = cache.scope_declarations.get(&func_scope_id) {
-                    if decls.iter().any(|d| d.name == ctx.name) {
-                        return Some(ResolvedTarget::SameFile);
-                    }
+                if let Some(decls) = cache.scope_declarations.get(&func_scope_id)
+                    && decls.iter().any(|d| d.name == ctx.name)
+                {
+                    return Some(ResolvedTarget::SameFile);
                 }
             }
         }
 
         // Check contract scope declarations (state variables, functions)
-        if let Some(decls) = cache.scope_declarations.get(&contract_id) {
-            if decls.iter().any(|d| d.name == ctx.name) {
-                return Some(ResolvedTarget::SameFile);
-            }
+        if let Some(decls) = cache.scope_declarations.get(&contract_id)
+            && decls.iter().any(|d| d.name == ctx.name)
+        {
+            return Some(ResolvedTarget::SameFile);
         }
 
         // Check inherited contracts (C3 linearization)
         if let Some(bases) = cache.linearized_base_contracts.get(&contract_id) {
             for &base_id in bases.iter().skip(1) {
-                if let Some(decls) = cache.scope_declarations.get(&base_id) {
-                    if decls.iter().any(|d| d.name == ctx.name) {
-                        // Found in a base contract — find which file it's in
-                        // Reverse lookup: base_id → contract name → file
-                        let base_name = cache
-                            .name_to_node_id
-                            .iter()
-                            .find(|&(_, &id)| id == base_id)
-                            .map(|(name, _)| name.clone());
+                if let Some(decls) = cache.scope_declarations.get(&base_id)
+                    && decls.iter().any(|d| d.name == ctx.name)
+                {
+                    // Found in a base contract — find which file it's in
+                    // Reverse lookup: base_id → contract name → file
+                    let base_name = cache
+                        .name_to_node_id
+                        .iter()
+                        .find(|&(_, &id)| id == base_id)
+                        .map(|(name, _)| name.clone());
 
-                        if let Some(base_name) = base_name {
-                            if let Some(path) = find_file_for_contract(cache, &base_name, file_uri)
-                            {
-                                return Some(ResolvedTarget::OtherFile {
-                                    path,
-                                    name: ctx.name.clone(),
-                                });
-                            }
-                        }
-                        // Base contract might be in the same file
-                        return Some(ResolvedTarget::SameFile);
+                    if let Some(base_name) = base_name
+                        && let Some(path) = find_file_for_contract(cache, &base_name, file_uri)
+                    {
+                        return Some(ResolvedTarget::OtherFile {
+                            path,
+                            name: ctx.name.clone(),
+                        });
                     }
+                    // Base contract might be in the same file
+                    return Some(ResolvedTarget::SameFile);
                 }
             }
         }
@@ -1030,16 +1029,16 @@ fn find_function_scope(
             // This scope's parent is our contract — it might be a function scope.
             // Check if this scope has declarations (functions/blocks do).
             // We also check if the contract declares a function with this name.
-            if let Some(contract_decls) = cache.scope_declarations.get(&contract_id) {
-                if contract_decls.iter().any(|d| d.name == func_name) {
-                    // Found a child scope of the contract — could be the function.
-                    // Check if this scope_id has child scopes or declarations
-                    // that match what we'd expect for a function body.
-                    if cache.scope_declarations.contains_key(&scope_id)
-                        || cache.scope_parent.values().any(|&p| p == scope_id)
-                    {
-                        return Some(scope_id);
-                    }
+            if let Some(contract_decls) = cache.scope_declarations.get(&contract_id)
+                && contract_decls.iter().any(|d| d.name == func_name)
+            {
+                // Found a child scope of the contract — could be the function.
+                // Check if this scope_id has child scopes or declarations
+                // that match what we'd expect for a function body.
+                if cache.scope_declarations.contains_key(&scope_id)
+                    || cache.scope_parent.values().any(|&p| p == scope_id)
+                {
+                    return Some(scope_id);
                 }
             }
         }
@@ -1096,16 +1095,15 @@ fn find_best_declaration(source: &str, ctx: &CursorContext, file_uri: &Url) -> O
     }
 
     // Multiple declarations — prefer the one in the same contract
-    if let Some(contract_name) = &ctx.contract {
-        if let Some(d) = decls
+    if let Some(contract_name) = &ctx.contract
+        && let Some(d) = decls
             .iter()
             .find(|d| d.container.as_deref() == Some(contract_name))
-        {
-            return Some(Location {
-                uri: file_uri.clone(),
-                range: d.range,
-            });
-        }
+    {
+        return Some(Location {
+            uri: file_uri.clone(),
+            range: d.range,
+        });
     }
 
     // Fallback: return first declaration
