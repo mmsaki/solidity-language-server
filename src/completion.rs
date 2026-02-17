@@ -958,23 +958,23 @@ fn classify_type_arg(arg: &str, cache: Option<&CompletionCache>) -> TypeMetaKind
     if arg == "int" || arg == "uint" {
         return TypeMetaKind::IntegerType;
     }
-    if let Some(suffix) = arg.strip_prefix("uint").or_else(|| arg.strip_prefix("int")) {
-        if let Ok(n) = suffix.parse::<u16>() {
-            if (8..=256).contains(&n) && n % 8 == 0 {
-                return TypeMetaKind::IntegerType;
-            }
-        }
+    if let Some(suffix) = arg.strip_prefix("uint").or_else(|| arg.strip_prefix("int"))
+        && let Ok(n) = suffix.parse::<u16>()
+        && (8..=256).contains(&n)
+        && n % 8 == 0
+    {
+        return TypeMetaKind::IntegerType;
     }
 
     // With a cache, look up the name to determine contract vs interface
-    if let Some(c) = cache {
-        if let Some(&node_id) = c.name_to_node_id.get(arg) {
-            return match c.contract_kinds.get(&node_id).map(|s| s.as_str()) {
-                Some("interface") => TypeMetaKind::Interface,
-                Some("library") => TypeMetaKind::Contract, // libraries have name/creationCode/runtimeCode
-                _ => TypeMetaKind::Contract,
-            };
-        }
+    if let Some(c) = cache
+        && let Some(&node_id) = c.name_to_node_id.get(arg)
+    {
+        return match c.contract_kinds.get(&node_id).map(|s| s.as_str()) {
+            Some("interface") => TypeMetaKind::Interface,
+            Some("library") => TypeMetaKind::Contract, // libraries have name/creationCode/runtimeCode
+            _ => TypeMetaKind::Contract,
+        };
     }
 
     TypeMetaKind::Unknown

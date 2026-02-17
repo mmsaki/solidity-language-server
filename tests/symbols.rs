@@ -1,31 +1,29 @@
-use solidity_language_server::symbols::{extract_document_symbols, extract_symbols};
-use std::process::Command;
-use tower_lsp::lsp_types::SymbolKind;
-
-fn get_test_ast_data() -> Option<serde_json::Value> {
-    let output = Command::new("forge")
-        .args(["build", "--ast", "--silent", "--build-info"])
-        .current_dir("testdata")
-        .output()
-        .ok()?;
-
-    let stdout_str = String::from_utf8(output.stdout).ok()?;
-    serde_json::from_str(&stdout_str).ok()
-}
+use solidity_language_server::symbols::{extract_document_symbols, extract_workspace_symbols};
+use tower_lsp::lsp_types::{SymbolKind, Url};
 
 #[test]
 fn test_extract_symbols_basic() {
-    let ast_data = match get_test_ast_data() {
-        Some(data) => data,
-        None => return,
-    };
+    let source = r#"
+pragma solidity ^0.8.0;
 
-    let symbols = extract_symbols(&ast_data);
+contract Counter {
+    uint256 public count;
 
-    // Should find some symbols
+    function increment() public {
+        count += 1;
+    }
+
+    function getCount() public view returns (uint256) {
+        return count;
+    }
+}
+"#;
+    let uri = Url::parse("file:///test/Counter.sol").unwrap();
+    let symbols = extract_workspace_symbols(&[(uri, source.to_string())]);
+
     assert!(!symbols.is_empty());
 
-    // Check that no symbols have empty names in completions (allow empty names for return params in symbol list)
+    // Check that no symbols have empty names
     let symbols_with_names: Vec<_> = symbols.iter().filter(|s| !s.name.is_empty()).collect();
     assert!(
         !symbols_with_names.is_empty(),
@@ -35,7 +33,7 @@ fn test_extract_symbols_basic() {
     // Check that function symbols exist
     let function_symbols: Vec<_> = symbols
         .iter()
-        .filter(|s| s.kind == tower_lsp::lsp_types::SymbolKind::FUNCTION)
+        .filter(|s| s.kind == SymbolKind::FUNCTION)
         .collect();
     assert!(!function_symbols.is_empty(), "Should have function symbols");
 
@@ -48,49 +46,50 @@ fn test_extract_symbols_basic() {
         !contract_symbols.is_empty(),
         "Should find at least one contract"
     );
-
-    // Check that we have functions
-    let function_symbols: Vec<_> = symbols
-        .iter()
-        .filter(|s| s.kind == SymbolKind::FUNCTION)
-        .collect();
-    assert!(
-        !function_symbols.is_empty(),
-        "Should find at least one function"
-    );
 }
 
 #[test]
 fn test_symbol_kinds() {
-    let ast_data = match get_test_ast_data() {
-        Some(data) => data,
-        None => return,
-    };
+    let source = r#"
+pragma solidity ^0.8.0;
 
-    let symbols = extract_symbols(&ast_data);
+contract Token {
+    uint256 public totalSupply;
+    event Transfer(address from, address to, uint256 amount);
+    function transfer(address to, uint256 amount) external {}
+}
+"#;
+    let uri = Url::parse("file:///test/Token.sol").unwrap();
+    let symbols = extract_workspace_symbols(&[(uri, source.to_string())]);
 
-    // Check that we have various symbol kinds
     let has_class = symbols.iter().any(|s| s.kind == SymbolKind::CLASS);
     let has_function = symbols.iter().any(|s| s.kind == SymbolKind::FUNCTION);
 
-    // Should have at least contracts and functions
     assert!(has_class, "Should have contract symbols");
     assert!(has_function, "Should have function symbols");
 }
 
 #[test]
 fn test_extract_document_symbols_basic() {
-    let ast_data = match get_test_ast_data() {
-        Some(data) => data,
-        None => return,
-    };
+    let source = r#"
+pragma solidity ^0.8.0;
 
-    let symbols = extract_document_symbols(&ast_data, "testdata/Simple.sol");
+contract Simple {
+    uint256 public value;
 
-    // Should find some symbols
+    function setValue(uint256 _value) public {
+        value = _value;
+    }
+
+    function getValue() public view returns (uint256) {
+        return value;
+    }
+}
+"#;
+    let symbols = extract_document_symbols(source);
+
     assert!(!symbols.is_empty());
 
-    // Check that we have contracts
     let contract_symbols: Vec<_> = symbols
         .iter()
         .filter(|s| s.kind == SymbolKind::CLASS)
@@ -100,108 +99,127 @@ fn test_extract_document_symbols_basic() {
         "Should find at least one contract"
     );
 
-    // Check that we have functions
-    let function_symbols: Vec<_> = symbols
+    let contract = &contract_symbols[0];
+    let children = contract
+        .children
+        .as_ref()
+        .expect("contract should have children");
+
+    let function_children: Vec<_> = children
         .iter()
-        .filter(|s| s.kind == SymbolKind::FUNCTION)
+        .filter(|c| c.kind == SymbolKind::FUNCTION)
         .collect();
     assert!(
-        !function_symbols.is_empty(),
+        !function_children.is_empty(),
         "Should find at least one function"
     );
 }
 
 #[test]
 fn test_document_symbol_kinds() {
-    let ast_data = match get_test_ast_data() {
-        Some(data) => data,
-        None => return,
-    };
+    let source = r#"
+pragma solidity ^0.8.0;
 
-    let symbols = extract_document_symbols(&ast_data, "testdata/Simple.sol");
+contract Mixed {
+    uint256 public x;
+    event Logged(uint256 val);
+    error BadValue();
+    struct Info { string name; uint256 id; }
+    enum Status { Active, Paused }
 
-    // Check that we have various symbol kinds
-    let has_class = symbols.iter().any(|s| s.kind == SymbolKind::CLASS);
-    let has_function = symbols.iter().any(|s| s.kind == SymbolKind::FUNCTION);
-    let _has_variable = symbols
+    function doSomething() public {}
+}
+"#;
+    let symbols = extract_document_symbols(source);
+
+    let contract = symbols
         .iter()
-        .any(|s| s.kind == SymbolKind::VARIABLE || s.kind == SymbolKind::FIELD);
-    let _has_event = symbols.iter().any(|s| s.kind == SymbolKind::EVENT);
-    let _has_struct = symbols.iter().any(|s| s.kind == SymbolKind::STRUCT);
-    let _has_enum = symbols.iter().any(|s| s.kind == SymbolKind::ENUM);
+        .find(|s| s.kind == SymbolKind::CLASS)
+        .expect("Should have contract");
+    let children = contract.children.as_ref().unwrap();
 
-    // Should have at least contracts and functions
-    assert!(has_class, "Should have contract symbols");
+    let has_function = children.iter().any(|c| c.kind == SymbolKind::FUNCTION);
+    let has_field = children.iter().any(|c| c.kind == SymbolKind::FIELD);
+    let has_event = children.iter().any(|c| c.kind == SymbolKind::EVENT);
+    let has_struct = children.iter().any(|c| c.kind == SymbolKind::STRUCT);
+    let has_enum = children.iter().any(|c| c.kind == SymbolKind::ENUM);
+
     assert!(has_function, "Should have function symbols");
-    // Other types may or may not be present depending on the test file
+    assert!(has_field, "Should have field symbols");
+    assert!(has_event, "Should have event symbols");
+    assert!(has_struct, "Should have struct symbols");
+    assert!(has_enum, "Should have enum symbols");
 }
 
 #[test]
 fn test_enum_members_in_document_symbols() {
-    // Test with a file that has enums - we'll check if enum members are extracted
-    // This test will pass even if no enums exist, but verifies the logic works
-    let ast_data = match get_test_ast_data() {
-        Some(data) => data,
-        None => return,
-    };
+    let source = r#"
+contract Foo {
+    enum Color { Red, Green, Blue }
+}
+"#;
+    let symbols = extract_document_symbols(source);
+    let contract = &symbols[0];
+    let children = contract.children.as_ref().unwrap();
 
-    // Check all files for enum symbols with children
-    let mut found_enum_with_members = false;
-    if let Some(sources) = ast_data.get("sources").and_then(|v| v.as_object()) {
-        for (path, _) in sources {
-            let symbols = extract_document_symbols(&ast_data, path);
-            for symbol in symbols {
-                if symbol.kind == SymbolKind::STRUCT
-                    && let Some(children) = &symbol.children
-                    && !children.is_empty()
-                {
-                    // Verify all children are enum values (shown as enums)
-                    let all_enum_values = children.iter().all(|c| c.kind == SymbolKind::ENUM);
-                    assert!(all_enum_values, "Enum children should all be enum values");
-                    found_enum_with_members = true;
-                }
-            }
-        }
-    }
+    let enum_sym = children
+        .iter()
+        .find(|c| c.kind == SymbolKind::ENUM)
+        .expect("Should have enum");
+    assert_eq!(enum_sym.name, "Color");
 
-    // If we found enums with members, the test passes
-    // If no enums exist in test data, this is also fine
-    if found_enum_with_members {
-        println!("Found enum with members in test data");
-    }
+    let members = enum_sym
+        .children
+        .as_ref()
+        .expect("Enum should have members");
+    assert_eq!(members.len(), 3);
+    assert!(members.iter().all(|m| m.kind == SymbolKind::ENUM_MEMBER));
+    assert!(members.iter().any(|m| m.name == "Red"));
+    assert!(members.iter().any(|m| m.name == "Green"));
+    assert!(members.iter().any(|m| m.name == "Blue"));
 }
 
 #[test]
 fn test_container_names() {
-    let ast_data = match get_test_ast_data() {
-        Some(data) => data,
-        None => return,
-    };
+    let source = r#"
+contract MyContract {
+    uint256 public x;
+    function foo() public {}
+    struct Bar { uint256 val; }
+}
+"#;
+    let uri = Url::parse("file:///test.sol").unwrap();
+    let symbols = extract_workspace_symbols(&[(uri, source.to_string())]);
 
-    let symbols = extract_symbols(&ast_data);
-
-    // Check that some symbols have container_name set
     let symbols_with_container: Vec<_> = symbols
         .iter()
         .filter(|s| s.container_name.is_some())
         .collect();
 
-    // Should have some symbols with container names (functions in contracts, struct members, etc.)
     assert!(
         !symbols_with_container.is_empty(),
         "Should find symbols with container_name set"
     );
 
-    // Check that struct members have container_name
+    // Function and field should have MyContract as container
+    assert!(
+        symbols
+            .iter()
+            .any(|s| s.name == "foo" && s.container_name.as_deref() == Some("MyContract"))
+    );
+    assert!(
+        symbols
+            .iter()
+            .any(|s| s.name == "x" && s.container_name.as_deref() == Some("MyContract"))
+    );
+
+    // Struct members should have Bar as container
     let struct_members: Vec<_> = symbols
         .iter()
-        .filter(|s| s.kind == SymbolKind::FIELD && s.container_name.is_some())
+        .filter(|s| s.kind == SymbolKind::FIELD && s.container_name.as_deref() == Some("Bar"))
         .collect();
-
-    if !struct_members.is_empty() {
-        println!(
-            "Found {} struct/field members with container names",
-            struct_members.len()
-        );
-    }
+    assert!(
+        !struct_members.is_empty(),
+        "Struct members should have container name"
+    );
 }

@@ -3,14 +3,14 @@
 project: example
 file: Shop.sol
 line: 105
-col: 27
+col: 28
 
-iterations: 1
-warmup: 0
-timeout: 5
-index_timeout: 5
+iterations: 10
+warmup: 2
+timeout: 10
+index_timeout: 15
 output: benchmarks
-report: benchmarks/v0.1.17.md
+report: benchmarks/v0.1.18.md
 
 benchmarks:
   - initialize
@@ -25,15 +25,17 @@ benchmarks:
   - textDocument/documentSymbol
   - textDocument/documentLink
   - textDocument/formatting
+  - textDocument/semanticTokens/full
   - workspace/symbol
 
-servers:
-  - label: 0.1.16
-    description: Published crates.io release
-    link: https://github.com/mmsaki/solidity-language-server
-    cmd: solidity-language-server
+method:
+  textDocument/completion:
+    line: 111
+    col: 38
+    trigger: "."
 
-  - label: 0.1.17
+servers:
+  - label: 0.1.18
     description: Local branch build
     cmd: ./target/release/solidity-language-server
 

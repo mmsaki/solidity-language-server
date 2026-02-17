@@ -1995,10 +1995,10 @@ fn count_unique_scope_targets(
 ) -> usize {
     let mut scope_ids: std::collections::HashSet<u64> = std::collections::HashSet::new();
     for n in nodes.iter() {
-        if let Some(scope_id) = n.get("scope").and_then(|v| v.as_u64()) {
-            if id_to_type.get(&scope_id).map(|s| s.as_str()) == Some(target_type) {
-                scope_ids.insert(scope_id);
-            }
+        if let Some(scope_id) = n.get("scope").and_then(|v| v.as_u64())
+            && id_to_type.get(&scope_id).map(|s| s.as_str()) == Some(target_type)
+        {
+            scope_ids.insert(scope_id);
         }
     }
     scope_ids.len()
@@ -2178,7 +2178,7 @@ fn test_ast_scope_nodes_without_scope_field() {
     let nodes = collect_all_nodes(&ast);
     let missing = |t: &str| {
         count_nodes(&nodes, |n| {
-            n.get("nodeType").and_then(|v| v.as_str()) == Some(t) && !n.get("scope").is_some()
+            n.get("nodeType").and_then(|v| v.as_str()) == Some(t) && n.get("scope").is_none()
         })
     };
     assert_eq!(missing("Block"), 277, "all Blocks lack scope field");
