@@ -12,6 +12,22 @@ struct ParamInfo {
     skip: usize,
 }
 
+/// Call-site info extracted from the AST, keyed by source byte offset.
+struct CallSite {
+    /// The resolved parameter info for this specific call.
+    info: ParamInfo,
+    /// Function/event name (for matching with tree-sitter).
+    name: String,
+}
+
+/// Both lookup strategies: exact byte-offset match and (name, arg_count) fallback.
+struct HintLookup {
+    /// Primary: byte_offset → CallSite (exact match when AST offsets are fresh).
+    by_offset: HashMap<usize, CallSite>,
+    /// Fallback: (name, arg_count) → ParamInfo (works even with stale offsets).
+    by_name: HashMap<(String, usize), ParamInfo>,
+}
+
 /// Generate inlay hints for a given range of source.
 ///
 /// Uses tree-sitter on the **live buffer** for argument positions (so hints
@@ -47,8 +63,8 @@ pub fn inlay_hints(
         None => return vec![],
     };
 
-    // Phase 1: Build lookup table from AST — (func_name, arg_count) → ParamInfo
-    let lookup = build_param_lookup(file_ast, sources);
+    // Phase 1: Build lookup from AST
+    let lookup = build_hint_lookup(file_ast, sources);
 
     // Phase 2: Walk tree-sitter on the live buffer for real-time positions
     let source_str = String::from_utf8_lossy(live_source);
@@ -71,20 +87,24 @@ fn ts_parse(source: &str) -> Option<tree_sitter::Tree> {
     parser.parse(source, None)
 }
 
-/// Walk AST FunctionCall/EmitStatement nodes and build a lookup table
-/// keyed by (function_name, arg_count) → ParamInfo.
-fn build_param_lookup(file_ast: &Value, sources: &Value) -> HashMap<(String, usize), ParamInfo> {
-    let mut lookup = HashMap::new();
+/// Build both lookup strategies from the AST.
+fn build_hint_lookup(file_ast: &Value, sources: &Value) -> HintLookup {
+    let mut lookup = HintLookup {
+        by_offset: HashMap::new(),
+        by_name: HashMap::new(),
+    };
     collect_ast_calls(file_ast, sources, &mut lookup);
     lookup
 }
 
-/// Recursively walk AST nodes collecting function call parameter info.
-fn collect_ast_calls(
-    node: &Value,
-    sources: &Value,
-    lookup: &mut HashMap<(String, usize), ParamInfo>,
-) {
+/// Parse the `src` field ("offset:length:fileId") and return the byte offset.
+fn parse_src_offset(node: &Value) -> Option<usize> {
+    let src = node.get("src").and_then(|v| v.as_str())?;
+    src.split(':').next()?.parse().ok()
+}
+
+/// Recursively walk AST nodes collecting call site info.
+fn collect_ast_calls(node: &Value, sources: &Value, lookup: &mut HintLookup) {
     let node_type = node.get("nodeType").and_then(|v| v.as_str()).unwrap_or("");
 
     match node_type {
@@ -95,7 +115,19 @@ fn collect_ast_calls(
                     .and_then(|v| v.as_array())
                     .map(|a| a.len())
                     .unwrap_or(0);
-                lookup.entry((name, arg_count)).or_insert(info);
+                if let Some(offset) = parse_src_offset(node) {
+                    lookup.by_offset.insert(
+                        offset,
+                        CallSite {
+                            info: ParamInfo {
+                                names: info.names.clone(),
+                                skip: info.skip,
+                            },
+                            name: name.clone(),
+                        },
+                    );
+                }
+                lookup.by_name.entry((name, arg_count)).or_insert(info);
             }
         }
         "EmitStatement" => {
@@ -106,7 +138,19 @@ fn collect_ast_calls(
                         .and_then(|v| v.as_array())
                         .map(|a| a.len())
                         .unwrap_or(0);
-                    lookup.entry((name, arg_count)).or_insert(info);
+                    if let Some(offset) = parse_src_offset(node) {
+                        lookup.by_offset.insert(
+                            offset,
+                            CallSite {
+                                info: ParamInfo {
+                                    names: info.names.clone(),
+                                    skip: info.skip,
+                                },
+                                name: name.clone(),
+                            },
+                        );
+                    }
+                    lookup.by_name.entry((name, arg_count)).or_insert(info);
                 }
             }
         }
@@ -197,12 +241,29 @@ fn is_member_access(expr: &Value) -> bool {
 
 // ── Tree-sitter walk ──────────────────────────────────────────────────────
 
+/// Look up param info: try exact byte-offset match first, fall back to (name, arg_count).
+fn lookup_info<'a>(
+    lookup: &'a HintLookup,
+    offset: usize,
+    name: &str,
+    arg_count: usize,
+) -> Option<&'a ParamInfo> {
+    // Exact match by byte offset (works when AST is fresh)
+    if let Some(site) = lookup.by_offset.get(&offset) {
+        if site.name == name {
+            return Some(&site.info);
+        }
+    }
+    // Fallback by (name, arg_count) (works with stale offsets after edits)
+    lookup.by_name.get(&(name.to_string(), arg_count))
+}
+
 /// Recursively walk tree-sitter nodes, emitting hints for calls in the visible range.
 fn collect_ts_hints(
     node: Node,
     source: &str,
     range: &Range,
-    lookup: &HashMap<(String, usize), ParamInfo>,
+    lookup: &HintLookup,
     hints: &mut Vec<InlayHint>,
 ) {
     // Quick range check — skip nodes entirely outside the visible range
@@ -230,14 +291,8 @@ fn collect_ts_hints(
 }
 
 /// Emit parameter hints for a `call_expression` node.
-fn emit_call_hints(
-    node: Node,
-    source: &str,
-    lookup: &HashMap<(String, usize), ParamInfo>,
-    hints: &mut Vec<InlayHint>,
-) {
-    let func_name = ts_call_function_name(node, source);
-    let func_name = match func_name {
+fn emit_call_hints(node: Node, source: &str, lookup: &HintLookup, hints: &mut Vec<InlayHint>) {
+    let func_name = match ts_call_function_name(node, source) {
         Some(n) => n,
         None => return,
     };
@@ -247,7 +302,7 @@ fn emit_call_hints(
         return;
     }
 
-    let info = match lookup.get(&(func_name.to_string(), args.len())) {
+    let info = match lookup_info(lookup, node.start_byte(), func_name, args.len()) {
         Some(i) => i,
         None => return,
     };
@@ -256,14 +311,8 @@ fn emit_call_hints(
 }
 
 /// Emit parameter hints for an `emit_statement` node.
-fn emit_emit_hints(
-    node: Node,
-    source: &str,
-    lookup: &HashMap<(String, usize), ParamInfo>,
-    hints: &mut Vec<InlayHint>,
-) {
-    let event_name = ts_emit_event_name(node, source);
-    let event_name = match event_name {
+fn emit_emit_hints(node: Node, source: &str, lookup: &HintLookup, hints: &mut Vec<InlayHint>) {
+    let event_name = match ts_emit_event_name(node, source) {
         Some(n) => n,
         None => return,
     };
@@ -273,7 +322,7 @@ fn emit_emit_hints(
         return;
     }
 
-    let info = match lookup.get(&(event_name.to_string(), args.len())) {
+    let info = match lookup_info(lookup, node.start_byte(), event_name, args.len()) {
         Some(i) => i,
         None => return,
     };

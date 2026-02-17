@@ -100,14 +100,6 @@ impl ForgeLsp {
                 self.client
                     .log_message(MessageType::INFO, "Build successful, AST cache updated")
                     .await;
-
-                // Ask the client to re-request inlay hints with the updated AST.
-                // Spawned as a background task so it doesn't block diagnostics
-                // publishing if the client doesn't support this request.
-                let client = self.client.clone();
-                tokio::spawn(async move {
-                    let _ = client.inlay_hint_refresh().await;
-                });
             } else if let Err(e) = ast_result {
                 self.client
                     .log_message(
@@ -182,6 +174,14 @@ impl ForgeLsp {
         self.client
             .publish_diagnostics(uri, all_diagnostics, None)
             .await;
+
+        // Refresh inlay hints after everything is updated
+        if build_succeeded {
+            let client = self.client.clone();
+            tokio::spawn(async move {
+                let _ = client.inlay_hint_refresh().await;
+            });
+        }
     }
 
     /// Get a CachedBuild from the cache, or fetch and build one on demand.
@@ -641,31 +641,6 @@ impl LanguageServer for ForgeLsp {
             None => return Ok(None),
         };
 
-        let source = String::from_utf8_lossy(&source_bytes).into_owned();
-
-        // Try tree-sitter enhanced goto first (works with stale AST)
-        {
-            let cc_cache = self.completion_cache.read().await;
-            let tc_cache = self.text_cache.read().await;
-            if let Some(cc) = cc_cache.values().next() {
-                if let Some(location) =
-                    goto::goto_definition_ts(&source, position, &uri, cc, &tc_cache)
-                {
-                    self.client
-                        .log_message(
-                            MessageType::INFO,
-                            format!(
-                                "found definition (tree-sitter) at {}:{}",
-                                location.uri, location.range.start.line
-                            ),
-                        )
-                        .await;
-                    return Ok(Some(GotoDefinitionResponse::from(location)));
-                }
-            }
-        }
-
-        // Fallback: existing AST-based goto
         let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
         let cached_build = match cached_build {
             Some(cb) => cb,
