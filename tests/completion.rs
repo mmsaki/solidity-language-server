@@ -1995,10 +1995,10 @@ fn count_unique_scope_targets(
 ) -> usize {
     let mut scope_ids: std::collections::HashSet<u64> = std::collections::HashSet::new();
     for n in nodes.iter() {
-        if let Some(scope_id) = n.get("scope").and_then(|v| v.as_u64()) {
-            if id_to_type.get(&scope_id).map(|s| s.as_str()) == Some(target_type) {
-                scope_ids.insert(scope_id);
-            }
+        if let Some(scope_id) = n.get("scope").and_then(|v| v.as_u64())
+            && id_to_type.get(&scope_id).map(|s| s.as_str()) == Some(target_type)
+        {
+            scope_ids.insert(scope_id);
         }
     }
     scope_ids.len()
