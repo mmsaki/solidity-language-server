@@ -10,6 +10,9 @@
 
 ### Fixes
 
+- Skip using-for completions on contract/library/interface names (#71, #72)
+  - `Lock.` no longer returns Pool and SafeCast library functions from `using Pool for *` and `using SafeCast for *`
+  - Using-for completions now only appear when completing on a value of a matching type, not on a contract/library/interface name
 - Fix SIMD chunk selection skipping past target column in `position_to_byte_offset` (#73, #74)
   - The SIMD-accelerated position calculation introduced in #68 could pick a chunk boundary past the target column on long lines, returning the wrong byte offset
   - Go-to-definition on `AlreadyUnlocked` in PoolManager.sol resolved to `revertWith` in CustomRevert.sol instead of the correct `error AlreadyUnlocked()` in IPoolManager.sol
