@@ -728,42 +728,39 @@ impl LanguageServer for ForgeLsp {
             // Instead of matching by byte offset (which is stale on dirty files),
             // search cached AST nodes whose source text matches the cursor name
             // and follow their referencedDeclaration.
-            if let Some(ref cb) = cached_build {
-                if let Some(ref name) = cursor_name {
-                    let byte_hint = goto::pos_to_bytes(&source_bytes, position);
-                    if let Some(location) =
-                        goto::goto_declaration_by_name(cb, &uri, name, byte_hint)
-                    {
-                        self.client
-                            .log_message(
-                                MessageType::INFO,
-                                format!(
-                                    "found definition (AST by name) at {}:{}",
-                                    location.uri, location.range.start.line
-                                ),
-                            )
-                            .await;
-                        return Ok(Some(GotoDefinitionResponse::from(location)));
-                    }
-                }
-            }
-        } else {
-            // CLEAN: AST first → tree-sitter fallback (validated)
-            if let Some(ref cb) = cached_build {
-                if let Some(location) =
-                    goto::goto_declaration(&cb.ast, &uri, position, &source_bytes)
-                {
+            if let Some(ref cb) = cached_build
+                && let Some(ref name) = cursor_name
+            {
+                let byte_hint = goto::pos_to_bytes(&source_bytes, position);
+                if let Some(location) = goto::goto_declaration_by_name(cb, &uri, name, byte_hint) {
                     self.client
                         .log_message(
                             MessageType::INFO,
                             format!(
-                                "found definition (AST) at {}:{}",
+                                "found definition (AST by name) at {}:{}",
                                 location.uri, location.range.start.line
                             ),
                         )
                         .await;
                     return Ok(Some(GotoDefinitionResponse::from(location)));
                 }
+            }
+        } else {
+            // CLEAN: AST first → tree-sitter fallback (validated)
+            if let Some(ref cb) = cached_build
+                && let Some(location) =
+                    goto::goto_declaration(&cb.ast, &uri, position, &source_bytes)
+            {
+                self.client
+                    .log_message(
+                        MessageType::INFO,
+                        format!(
+                            "found definition (AST) at {}:{}",
+                            location.uri, location.range.start.line
+                        ),
+                    )
+                    .await;
+                return Ok(Some(GotoDefinitionResponse::from(location)));
             }
 
             // AST couldn't resolve — try tree-sitter fallback (validated)

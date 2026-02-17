@@ -3,12 +3,14 @@ use std::collections::HashMap;
 use tower_lsp::lsp_types::{Location, Position, Range, Url};
 use tree_sitter::{Node, Parser};
 
+use crate::types::{NodeId, SourceLoc};
+
 #[derive(Debug, Clone)]
 pub struct NodeInfo {
     pub src: String,
     pub name_location: Option<String>,
     pub name_locations: Vec<String>,
-    pub referenced_declaration: Option<u64>,
+    pub referenced_declaration: Option<NodeId>,
     pub node_type: Option<String>,
     pub member_location: Option<String>,
     pub absolute_path: Option<String>,
@@ -93,14 +95,14 @@ fn push_if_node_or_array<'a>(tree: &'a Value, key: &str, stack: &mut Vec<&'a Val
 
 /// Maps `"offset:length:fileId"` src strings from Yul externalReferences
 /// to the Solidity declaration node id they refer to.
-pub type ExternalRefs = HashMap<String, u64>;
+pub type ExternalRefs = HashMap<String, NodeId>;
 
 /// Pre-computed AST index. Built once when an AST enters the cache,
 /// then reused on every goto/references/rename/hover request.
 #[derive(Debug, Clone)]
 pub struct CachedBuild {
     pub ast: Value,
-    pub nodes: HashMap<String, HashMap<u64, NodeInfo>>,
+    pub nodes: HashMap<String, HashMap<NodeId, NodeInfo>>,
     pub path_to_abs: HashMap<String, String>,
     pub external_refs: ExternalRefs,
     pub id_to_path_map: HashMap<String, String>,
@@ -143,13 +145,13 @@ impl CachedBuild {
 }
 
 type Type = (
-    HashMap<String, HashMap<u64, NodeInfo>>,
+    HashMap<String, HashMap<NodeId, NodeInfo>>,
     HashMap<String, String>,
     ExternalRefs,
 );
 
 pub fn cache_ids(sources: &Value) -> Type {
-    let mut nodes: HashMap<String, HashMap<u64, NodeInfo>> = HashMap::new();
+    let mut nodes: HashMap<String, HashMap<NodeId, NodeInfo>> = HashMap::new();
     let mut path_to_abs: HashMap<String, String> = HashMap::new();
     let mut external_refs: ExternalRefs = HashMap::new();
 
@@ -178,7 +180,7 @@ pub fn cache_ids(sources: &Value) -> Type {
                     && let Some(src) = ast.get("src").and_then(|v| v.as_str())
                 {
                     nodes.get_mut(&abs_path).unwrap().insert(
-                        id,
+                        NodeId(id),
                         NodeInfo {
                             src: src.to_string(),
                             name_location: None,
@@ -200,9 +202,10 @@ pub fn cache_ids(sources: &Value) -> Type {
                 let mut stack = vec![ast];
 
                 while let Some(tree) = stack.pop() {
-                    if let Some(id) = tree.get("id").and_then(|v| v.as_u64())
+                    if let Some(raw_id) = tree.get("id").and_then(|v| v.as_u64())
                         && let Some(src) = tree.get("src").and_then(|v| v.as_str())
                     {
+                        let id = NodeId(raw_id);
                         // Check for nameLocation first
                         let mut name_location = tree
                             .get("nameLocation")
@@ -253,7 +256,8 @@ pub fn cache_ids(sources: &Value) -> Type {
                             name_locations,
                             referenced_declaration: tree
                                 .get("referencedDeclaration")
-                                .and_then(|v| v.as_u64()),
+                                .and_then(|v| v.as_u64())
+                                .map(NodeId),
                             node_type: tree
                                 .get("nodeType")
                                 .and_then(|v| v.as_str())
@@ -280,7 +284,7 @@ pub fn cache_ids(sources: &Value) -> Type {
                                     && let Some(decl_id) =
                                         ext_ref.get("declaration").and_then(|v| v.as_u64())
                                 {
-                                    external_refs.insert(src_str.to_string(), decl_id);
+                                    external_refs.insert(src_str.to_string(), NodeId(decl_id));
                                 }
                             }
                         }
@@ -310,14 +314,8 @@ pub fn bytes_to_pos(source_bytes: &[u8], byte_offset: usize) -> Option<Position>
 
 /// Convert a `"offset:length:fileId"` src string to an LSP Location.
 pub fn src_to_location(src: &str, id_to_path: &HashMap<String, String>) -> Option<Location> {
-    let parts: Vec<&str> = src.split(':').collect();
-    if parts.len() != 3 {
-        return None;
-    }
-    let byte_offset: usize = parts[0].parse().ok()?;
-    let length: usize = parts[1].parse().ok()?;
-    let file_id = parts[2];
-    let file_path = id_to_path.get(file_id)?;
+    let loc = SourceLoc::parse(src)?;
+    let file_path = id_to_path.get(&loc.file_id_str())?;
 
     let absolute_path = if std::path::Path::new(file_path).is_absolute() {
         std::path::PathBuf::from(file_path)
@@ -326,8 +324,8 @@ pub fn src_to_location(src: &str, id_to_path: &HashMap<String, String>) -> Optio
     };
 
     let source_bytes = std::fs::read(&absolute_path).ok()?;
-    let start_pos = bytes_to_pos(&source_bytes, byte_offset)?;
-    let end_pos = bytes_to_pos(&source_bytes, byte_offset + length)?;
+    let start_pos = bytes_to_pos(&source_bytes, loc.offset)?;
+    let end_pos = bytes_to_pos(&source_bytes, loc.end())?;
     let uri = Url::from_file_path(&absolute_path).ok()?;
 
     Some(Location {
@@ -340,7 +338,7 @@ pub fn src_to_location(src: &str, id_to_path: &HashMap<String, String>) -> Optio
 }
 
 pub fn goto_bytes(
-    nodes: &HashMap<String, HashMap<u64, NodeInfo>>,
+    nodes: &HashMap<String, HashMap<NodeId, NodeInfo>>,
     path_to_abs: &HashMap<String, String>,
     id_to_path: &HashMap<String, String>,
     external_refs: &ExternalRefs,
@@ -371,25 +369,20 @@ pub fn goto_bytes(
 
     // Check if cursor is on a Yul external reference first
     for (src_str, decl_id) in external_refs {
-        let src_parts: Vec<&str> = src_str.split(':').collect();
-        if src_parts.len() != 3 {
+        let Some(src_loc) = SourceLoc::parse(src_str) else {
             continue;
-        }
+        };
 
         // Only consider external refs in the current file
         if let Some(file_id) = current_file_id {
-            if src_parts[2] != *file_id {
+            if src_loc.file_id_str() != *file_id {
                 continue;
             }
         } else {
             continue;
         }
 
-        let start_b: usize = src_parts[0].parse().ok()?;
-        let length: usize = src_parts[1].parse().ok()?;
-        let end_b = start_b + length;
-
-        if start_b <= position && position < end_b {
+        if src_loc.offset <= position && position < src_loc.end() {
             // Found a Yul external reference — resolve to the declaration target
             let mut target_node: Option<&NodeInfo> = None;
             for file_nodes in nodes.values() {
@@ -399,26 +392,10 @@ pub fn goto_bytes(
                 }
             }
             let node = target_node?;
-            let (location_str, length_str, file_id) =
-                if let Some(name_location) = &node.name_location {
-                    let parts: Vec<&str> = name_location.split(':').collect();
-                    if parts.len() == 3 {
-                        (parts[0], parts[1], parts[2])
-                    } else {
-                        return None;
-                    }
-                } else {
-                    let parts: Vec<&str> = node.src.split(':').collect();
-                    if parts.len() == 3 {
-                        (parts[0], parts[1], parts[2])
-                    } else {
-                        return None;
-                    }
-                };
-            let location: usize = location_str.parse().ok()?;
-            let len: usize = length_str.parse().ok()?;
-            let file_path = id_to_path.get(file_id)?.clone();
-            return Some((file_path, location, len));
+            let loc_str = node.name_location.as_deref().unwrap_or(&node.src);
+            let loc = SourceLoc::parse(loc_str)?;
+            let file_path = id_to_path.get(&loc.file_id_str())?.clone();
+            return Some((file_path, loc.offset, loc.length));
         }
     }
 
@@ -430,17 +407,12 @@ pub fn goto_bytes(
             continue;
         }
 
-        let src_parts: Vec<&str> = content.src.split(':').collect();
-        if src_parts.len() != 3 {
+        let Some(src_loc) = SourceLoc::parse(&content.src) else {
             continue;
-        }
+        };
 
-        let start_b: usize = src_parts[0].parse().ok()?;
-        let length: usize = src_parts[1].parse().ok()?;
-        let end_b = start_b + length;
-
-        if start_b <= position && position < end_b {
-            let diff = end_b - start_b;
+        if src_loc.offset <= position && position < src_loc.end() {
+            let diff = src_loc.length;
             if !refs.contains_key(&diff) || refs[&diff] <= *id {
                 refs.insert(diff, *id);
             }
@@ -453,17 +425,12 @@ pub fn goto_bytes(
         let tmp = current_file_nodes.iter();
         for (_id, content) in tmp {
             if content.node_type == Some("ImportDirective".to_string()) {
-                let src_parts: Vec<&str> = content.src.split(':').collect();
-                if src_parts.len() != 3 {
+                let Some(src_loc) = SourceLoc::parse(&content.src) else {
                     continue;
-                }
+                };
 
-                let start_b: usize = src_parts[0].parse().ok()?;
-                let length: usize = src_parts[1].parse().ok()?;
-                let end_b = start_b + length;
-
-                if start_b <= position
-                    && position < end_b
+                if src_loc.offset <= position
+                    && position < src_loc.end()
                     && let Some(import_path) = &content.absolute_path
                 {
                     return Some((import_path.clone(), 0, 0));
@@ -490,27 +457,11 @@ pub fn goto_bytes(
     let node = target_node?;
 
     // Get location from nameLocation or src
-    let (location_str, length_str, file_id) = if let Some(name_location) = &node.name_location {
-        let parts: Vec<&str> = name_location.split(':').collect();
-        if parts.len() == 3 {
-            (parts[0], parts[1], parts[2])
-        } else {
-            return None;
-        }
-    } else {
-        let parts: Vec<&str> = node.src.split(':').collect();
-        if parts.len() == 3 {
-            (parts[0], parts[1], parts[2])
-        } else {
-            return None;
-        }
-    };
+    let loc_str = node.name_location.as_deref().unwrap_or(&node.src);
+    let loc = SourceLoc::parse(loc_str)?;
+    let file_path = id_to_path.get(&loc.file_id_str())?.clone();
 
-    let location: usize = location_str.parse().ok()?;
-    let len: usize = length_str.parse().ok()?;
-    let file_path = id_to_path.get(file_id)?.clone();
-
-    Some((file_path, location, len))
+    Some((file_path, loc.offset, loc.length))
 }
 
 pub fn goto_declaration(
@@ -586,33 +537,28 @@ pub fn goto_declaration_by_name(
         false => file_uri.as_ref(),
     };
     let abs_path = cached_build.path_to_abs.get(path)?;
-    let current_file_nodes = cached_build.nodes.get(abs_path)?;
-
     // Read the built source from disk to extract identifier text at src ranges
     let built_source = std::fs::read_to_string(abs_path).ok()?;
 
     // Collect all matching nodes: (distance_to_hint, span_size, ref_id)
-    let mut candidates: Vec<(usize, usize, u64)> = Vec::new();
+    let mut candidates: Vec<(usize, usize, NodeId)> = Vec::new();
 
-    for (_id, node) in current_file_nodes {
+    let mut tmp = {
+        let this = cached_build.nodes.get(abs_path)?;
+        this.iter()
+    };
+    while let Some((_id, node)) = tmp.next() {
         let ref_id = match node.referenced_declaration {
             Some(id) => id,
             None => continue,
         };
 
         // Parse the node's src to get the byte range in the built source
-        let src_parts: Vec<&str> = node.src.split(':').collect();
-        if src_parts.len() != 3 {
+        let Some(src_loc) = SourceLoc::parse(&node.src) else {
             continue;
-        }
-        let start: usize = match src_parts[0].parse() {
-            Ok(v) => v,
-            Err(_) => continue,
         };
-        let length: usize = match src_parts[1].parse() {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
+        let start = src_loc.offset;
+        let length = src_loc.length;
 
         if start + length > built_source.len() {
             continue;
@@ -660,15 +606,11 @@ pub fn goto_declaration_by_name(
 
     // Parse the target's nameLocation or src
     let loc_str = node.name_location.as_deref().unwrap_or(&node.src);
-    let parts: Vec<&str> = loc_str.split(':').collect();
-    if parts.len() != 3 {
-        return None;
-    }
-    let location_bytes: usize = parts[0].parse().ok()?;
-    let length: usize = parts[1].parse().ok()?;
-    let file_id = parts[2];
+    let loc = SourceLoc::parse(loc_str)?;
 
-    let file_path = cached_build.id_to_path_map.get(file_id)?;
+    let file_path = cached_build.id_to_path_map.get(&loc.file_id_str())?;
+    let location_bytes = loc.offset;
+    let length = loc.length;
 
     let target_file_path = std::path::Path::new(file_path);
     let absolute_path = if target_file_path.is_absolute() {
@@ -733,10 +675,10 @@ pub fn validate_goto_target(target_source: &str, location: &Location, expected_n
     let start_col = location.range.start.character as usize;
     let end_col = location.range.end.character as usize;
 
-    if let Some(line_text) = target_source.lines().nth(line) {
-        if end_col <= line_text.len() {
-            return &line_text[start_col..end_col] == expected_name;
-        }
+    if let Some(line_text) = target_source.lines().nth(line)
+        && end_col <= line_text.len()
+    {
+        return &line_text[start_col..end_col] == expected_name;
     }
     // Can't read target — assume valid
     true
@@ -806,25 +748,24 @@ fn find_variable_type(from: Node, source: &str, var_name: &str) -> Option<String
                 // Check parameters
                 let mut c = node.walk();
                 for child in node.children(&mut c) {
-                    if child.kind() == "parameter" {
-                        if let Some(id) = ts_child_id_text(child, source) {
-                            if id == var_name {
-                                // Extract the type from this parameter
-                                let mut pc = child.walk();
-                                return child
-                                    .children(&mut pc)
-                                    .find(|c| {
-                                        matches!(
-                                            c.kind(),
-                                            "type_name"
-                                                | "primitive_type"
-                                                | "user_defined_type"
-                                                | "mapping"
-                                        )
-                                    })
-                                    .map(|t| source[t.byte_range()].trim().to_string());
-                            }
-                        }
+                    if child.kind() == "parameter"
+                        && let Some(id) = ts_child_id_text(child, source)
+                        && id == var_name
+                    {
+                        // Extract the type from this parameter
+                        let mut pc = child.walk();
+                        return child
+                            .children(&mut pc)
+                            .find(|c| {
+                                matches!(
+                                    c.kind(),
+                                    "type_name"
+                                        | "primitive_type"
+                                        | "user_defined_type"
+                                        | "mapping"
+                                )
+                            })
+                            .map(|t| source[t.byte_range()].trim().to_string());
                     }
                 }
             }
@@ -835,22 +776,22 @@ fn find_variable_type(from: Node, source: &str, var_name: &str) -> Option<String
                     if child.kind() == "variable_declaration_statement"
                         || child.kind() == "variable_declaration"
                     {
-                        if let Some(id) = ts_child_id_text(child, source) {
-                            if id == var_name {
-                                let mut pc = child.walk();
-                                return child
-                                    .children(&mut pc)
-                                    .find(|c| {
-                                        matches!(
-                                            c.kind(),
-                                            "type_name"
-                                                | "primitive_type"
-                                                | "user_defined_type"
-                                                | "mapping"
-                                        )
-                                    })
-                                    .map(|t| source[t.byte_range()].trim().to_string());
-                            }
+                        if let Some(id) = ts_child_id_text(child, source)
+                            && id == var_name
+                        {
+                            let mut pc = child.walk();
+                            return child
+                                .children(&mut pc)
+                                .find(|c| {
+                                    matches!(
+                                        c.kind(),
+                                        "type_name"
+                                            | "primitive_type"
+                                            | "user_defined_type"
+                                            | "mapping"
+                                    )
+                                })
+                                .map(|t| source[t.byte_range()].trim().to_string());
                         }
                     }
                 }
@@ -860,24 +801,23 @@ fn find_variable_type(from: Node, source: &str, var_name: &str) -> Option<String
                 if let Some(body) = ts_find_child(node, "contract_body") {
                     let mut c = body.walk();
                     for child in body.children(&mut c) {
-                        if child.kind() == "state_variable_declaration" {
-                            if let Some(id) = ts_child_id_text(child, source) {
-                                if id == var_name {
-                                    let mut pc = child.walk();
-                                    return child
-                                        .children(&mut pc)
-                                        .find(|c| {
-                                            matches!(
-                                                c.kind(),
-                                                "type_name"
-                                                    | "primitive_type"
-                                                    | "user_defined_type"
-                                                    | "mapping"
-                                            )
-                                        })
-                                        .map(|t| source[t.byte_range()].trim().to_string());
-                                }
-                            }
+                        if child.kind() == "state_variable_declaration"
+                            && let Some(id) = ts_child_id_text(child, source)
+                            && id == var_name
+                        {
+                            let mut pc = child.walk();
+                            return child
+                                .children(&mut pc)
+                                .find(|c| {
+                                    matches!(
+                                        c.kind(),
+                                        "type_name"
+                                            | "primitive_type"
+                                            | "user_defined_type"
+                                            | "mapping"
+                                    )
+                                })
+                                .map(|t| source[t.byte_range()].trim().to_string());
                         }
                     }
                 }
@@ -1498,9 +1438,9 @@ fn resolve_via_cache(
 /// Find the scope node_id for a function within a contract.
 fn find_function_scope(
     cache: &crate::completion::CompletionCache,
-    contract_id: u64,
+    contract_id: NodeId,
     func_name: &str,
-) -> Option<u64> {
+) -> Option<NodeId> {
     // Look for a scope whose parent is the contract and which is a function scope.
     // The function name should appear as a declaration in the contract scope,
     // and the function's own scope is the one whose parent is the contract.

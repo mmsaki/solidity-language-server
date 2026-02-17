@@ -12,4 +12,5 @@ pub mod runner;
 pub mod semantic_tokens;
 pub mod solar_runner;
 pub mod symbols;
+pub mod types;
 pub mod utils;

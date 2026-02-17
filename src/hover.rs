@@ -4,9 +4,10 @@ use tower_lsp::lsp_types::{Hover, HoverContents, MarkupContent, MarkupKind, Posi
 
 use crate::goto::{CHILD_KEYS, cache_ids, pos_to_bytes};
 use crate::references::{byte_to_decl_via_external_refs, byte_to_id};
+use crate::types::NodeId;
 
 /// Find the raw AST node with the given id by walking all sources.
-pub fn find_node_by_id(sources: &Value, target_id: u64) -> Option<&Value> {
+pub fn find_node_by_id(sources: &Value, target_id: NodeId) -> Option<&Value> {
     let sources_obj = sources.as_object()?;
     for (_path, contents) in sources_obj {
         let contents_array = contents.as_array()?;
@@ -15,13 +16,13 @@ pub fn find_node_by_id(sources: &Value, target_id: u64) -> Option<&Value> {
         let ast = source_file.get("ast")?;
 
         // Check root
-        if ast.get("id").and_then(|v| v.as_u64()) == Some(target_id) {
+        if ast.get("id").and_then(|v| v.as_u64()) == Some(target_id.0) {
             return Some(ast);
         }
 
         let mut stack = vec![ast];
         while let Some(node) = stack.pop() {
-            if node.get("id").and_then(|v| v.as_u64()) == Some(target_id) {
+            if node.get("id").and_then(|v| v.as_u64()) == Some(target_id.0) {
                 return Some(node);
             }
             for key in CHILD_KEYS {
@@ -105,7 +106,7 @@ pub fn resolve_inheritdoc<'a>(
     let scope_id = decl_node.get("scope").and_then(|v| v.as_u64())?;
 
     // Find the scope contract
-    let scope_contract = find_node_by_id(sources, scope_id)?;
+    let scope_contract = find_node_by_id(sources, NodeId(scope_id))?;
 
     // Find the parent contract in baseContracts by name
     let base_contracts = scope_contract
@@ -126,7 +127,7 @@ pub fn resolve_inheritdoc<'a>(
     })?;
 
     // Find the parent contract node
-    let parent_contract = find_node_by_id(sources, parent_id)?;
+    let parent_contract = find_node_by_id(sources, NodeId(parent_id))?;
 
     // Search parent's children for matching selector
     let parent_nodes = parent_contract.get("nodes").and_then(|v| v.as_array())?;
@@ -155,7 +156,12 @@ pub fn format_natspec(text: &str, inherited_doc: Option<&str>) -> String {
             continue;
         }
 
-        if let Some(rest) = line.strip_prefix("@notice ") {
+        if let Some(rest) = line.strip_prefix("@title ") {
+            in_params = false;
+            in_returns = false;
+            lines.push(format!("**{rest}**"));
+            lines.push(String::new());
+        } else if let Some(rest) = line.strip_prefix("@notice ") {
             in_params = false;
             in_returns = false;
             lines.push(rest.to_string());
@@ -188,8 +194,10 @@ pub fn format_natspec(text: &str, inherited_doc: Option<&str>) -> String {
             } else {
                 lines.push(format!("- `{rest}`"));
             }
-        } else if line.starts_with("@author ") {
-            // skip author for hover
+        } else if let Some(rest) = line.strip_prefix("@author ") {
+            in_params = false;
+            in_returns = false;
+            lines.push(format!("*@author {rest}*"));
         } else if line.starts_with("@inheritdoc ") {
             // Resolve inherited docs if available
             if let Some(inherited) = inherited_doc {
@@ -505,7 +513,7 @@ mod tests {
     fn test_find_node_by_id_pool_manager() {
         let ast = load_test_ast();
         let sources = ast.get("sources").unwrap();
-        let node = find_node_by_id(sources, 1767).unwrap();
+        let node = find_node_by_id(sources, NodeId(1767)).unwrap();
         assert_eq!(
             node.get("name").and_then(|v| v.as_str()),
             Some("PoolManager")
@@ -521,7 +529,7 @@ mod tests {
         let ast = load_test_ast();
         let sources = ast.get("sources").unwrap();
         // IPoolManager.initialize has the full docs
-        let node = find_node_by_id(sources, 2411).unwrap();
+        let node = find_node_by_id(sources, NodeId(2411)).unwrap();
         assert_eq!(
             node.get("name").and_then(|v| v.as_str()),
             Some("initialize")
@@ -533,7 +541,7 @@ mod tests {
         let ast = load_test_ast();
         let sources = ast.get("sources").unwrap();
         // IPoolManager.initialize (id=2411) has full NatSpec
-        let node = find_node_by_id(sources, 2411).unwrap();
+        let node = find_node_by_id(sources, NodeId(2411)).unwrap();
         let doc = extract_documentation(node).unwrap();
         assert!(doc.contains("@notice"));
         assert!(doc.contains("@param key"));
@@ -544,7 +552,7 @@ mod tests {
         let ast = load_test_ast();
         let sources = ast.get("sources").unwrap();
         // PoolKey struct (id=8887) — check if it has docs
-        let node = find_node_by_id(sources, 8887).unwrap();
+        let node = find_node_by_id(sources, NodeId(8887)).unwrap();
         // PoolKey may or may not have docs, just verify no crash
         let _ = extract_documentation(node);
     }
@@ -579,7 +587,7 @@ mod tests {
     fn test_build_function_signature_initialize() {
         let ast = load_test_ast();
         let sources = ast.get("sources").unwrap();
-        let node = find_node_by_id(sources, 2411).unwrap();
+        let node = find_node_by_id(sources, NodeId(2411)).unwrap();
         let sig = build_function_signature(node).unwrap();
         assert!(sig.starts_with("function initialize("));
         assert!(sig.contains("returns"));
@@ -589,7 +597,7 @@ mod tests {
     fn test_build_signature_contract() {
         let ast = load_test_ast();
         let sources = ast.get("sources").unwrap();
-        let node = find_node_by_id(sources, 1767).unwrap();
+        let node = find_node_by_id(sources, NodeId(1767)).unwrap();
         let sig = build_function_signature(node).unwrap();
         assert!(sig.contains("contract PoolManager"));
         assert!(sig.contains(" is "));
@@ -599,7 +607,7 @@ mod tests {
     fn test_build_signature_struct() {
         let ast = load_test_ast();
         let sources = ast.get("sources").unwrap();
-        let node = find_node_by_id(sources, 8887).unwrap();
+        let node = find_node_by_id(sources, NodeId(8887)).unwrap();
         let sig = build_function_signature(node).unwrap();
         assert!(sig.starts_with("struct PoolKey"));
         assert!(sig.contains('{'));
@@ -610,7 +618,7 @@ mod tests {
         let ast = load_test_ast();
         let sources = ast.get("sources").unwrap();
         // Find an ErrorDefinition
-        let node = find_node_by_id(sources, 508).unwrap();
+        let node = find_node_by_id(sources, NodeId(508)).unwrap();
         assert_eq!(
             node.get("nodeType").and_then(|v| v.as_str()),
             Some("ErrorDefinition")
@@ -624,7 +632,7 @@ mod tests {
         let ast = load_test_ast();
         let sources = ast.get("sources").unwrap();
         // Find an EventDefinition
-        let node = find_node_by_id(sources, 8).unwrap();
+        let node = find_node_by_id(sources, NodeId(8)).unwrap();
         assert_eq!(
             node.get("nodeType").and_then(|v| v.as_str()),
             Some("EventDefinition")
@@ -639,7 +647,7 @@ mod tests {
         let sources = ast.get("sources").unwrap();
         // Find a VariableDeclaration with documentation — check a state var
         // PoolManager has state variables, find one
-        let pm = find_node_by_id(sources, 1767).unwrap();
+        let pm = find_node_by_id(sources, NodeId(1767)).unwrap();
         if let Some(nodes) = pm.get("nodes").and_then(|v| v.as_array()) {
             for node in nodes {
                 if node.get("nodeType").and_then(|v| v.as_str()) == Some("VariableDeclaration") {
@@ -656,7 +664,7 @@ mod tests {
         let ast = load_test_ast();
         let sources = ast.get("sources").unwrap();
         // Owned contract (id=59) has NatSpec
-        let node = find_node_by_id(sources, 59).unwrap();
+        let node = find_node_by_id(sources, NodeId(59)).unwrap();
         let doc = extract_documentation(node).unwrap();
         assert!(doc.contains("@notice"));
     }
@@ -695,7 +703,7 @@ mod tests {
         let ast = load_test_ast();
         let sources = ast.get("sources").unwrap();
         // PoolManager.swap (id=1167) has functionSelector "f3cd914c"
-        let node = find_node_by_id(sources, 1167).unwrap();
+        let node = find_node_by_id(sources, NodeId(1167)).unwrap();
         let (selector, kind) = extract_selector(node).unwrap();
         assert_eq!(selector, "f3cd914c");
         assert_eq!(kind, "function");
@@ -706,7 +714,7 @@ mod tests {
         let ast = load_test_ast();
         let sources = ast.get("sources").unwrap();
         // DelegateCallNotAllowed (id=508) has errorSelector
-        let node = find_node_by_id(sources, 508).unwrap();
+        let node = find_node_by_id(sources, NodeId(508)).unwrap();
         let (selector, kind) = extract_selector(node).unwrap();
         assert_eq!(selector, "0d89438e");
         assert_eq!(kind, "error");
@@ -717,7 +725,7 @@ mod tests {
         let ast = load_test_ast();
         let sources = ast.get("sources").unwrap();
         // OwnershipTransferred (id=8) has eventSelector
-        let node = find_node_by_id(sources, 8).unwrap();
+        let node = find_node_by_id(sources, NodeId(8)).unwrap();
         let (selector, kind) = extract_selector(node).unwrap();
         assert!(selector.len() == 64); // 32-byte keccak hash
         assert_eq!(kind, "event");
@@ -728,7 +736,7 @@ mod tests {
         let ast = load_test_ast();
         let sources = ast.get("sources").unwrap();
         // owner (id=10) is public, has functionSelector
-        let node = find_node_by_id(sources, 10).unwrap();
+        let node = find_node_by_id(sources, NodeId(10)).unwrap();
         let (selector, kind) = extract_selector(node).unwrap();
         assert_eq!(selector, "8da5cb5b");
         assert_eq!(kind, "function");
@@ -739,7 +747,7 @@ mod tests {
         let ast = load_test_ast();
         let sources = ast.get("sources").unwrap();
         // Pool.swap (id=5960) is internal, no selector
-        let node = find_node_by_id(sources, 5960).unwrap();
+        let node = find_node_by_id(sources, NodeId(5960)).unwrap();
         assert!(extract_selector(node).is_none());
     }
 
@@ -750,7 +758,7 @@ mod tests {
         let ast = load_test_ast();
         let sources = ast.get("sources").unwrap();
         // PoolManager.swap (id=1167) has "@inheritdoc IPoolManager"
-        let decl = find_node_by_id(sources, 1167).unwrap();
+        let decl = find_node_by_id(sources, NodeId(1167)).unwrap();
         let doc_text = extract_documentation(decl).unwrap();
         assert!(doc_text.contains("@inheritdoc"));
 
@@ -764,7 +772,7 @@ mod tests {
         let ast = load_test_ast();
         let sources = ast.get("sources").unwrap();
         // PoolManager.initialize (id=881) has "@inheritdoc IPoolManager"
-        let decl = find_node_by_id(sources, 881).unwrap();
+        let decl = find_node_by_id(sources, NodeId(881)).unwrap();
         let doc_text = extract_documentation(decl).unwrap();
 
         let resolved = resolve_inheritdoc(sources, decl, &doc_text).unwrap();
@@ -778,7 +786,7 @@ mod tests {
         let sources = ast.get("sources").unwrap();
 
         // extsload(bytes32) — id=442, selector "1e2eaeaf"
-        let decl = find_node_by_id(sources, 442).unwrap();
+        let decl = find_node_by_id(sources, NodeId(442)).unwrap();
         let doc_text = extract_documentation(decl).unwrap();
         let resolved = resolve_inheritdoc(sources, decl, &doc_text).unwrap();
         assert!(resolved.contains("granular pool state"));
@@ -786,13 +794,13 @@ mod tests {
         assert!(resolved.contains("@param slot"));
 
         // extsload(bytes32, uint256) — id=455, selector "35fd631a"
-        let decl2 = find_node_by_id(sources, 455).unwrap();
+        let decl2 = find_node_by_id(sources, NodeId(455)).unwrap();
         let doc_text2 = extract_documentation(decl2).unwrap();
         let resolved2 = resolve_inheritdoc(sources, decl2, &doc_text2).unwrap();
         assert!(resolved2.contains("@param startSlot"));
 
         // extsload(bytes32[]) — id=467, selector "dbd035ff"
-        let decl3 = find_node_by_id(sources, 467).unwrap();
+        let decl3 = find_node_by_id(sources, NodeId(467)).unwrap();
         let doc_text3 = extract_documentation(decl3).unwrap();
         let resolved3 = resolve_inheritdoc(sources, decl3, &doc_text3).unwrap();
         assert!(resolved3.contains("sparse pool state"));
@@ -803,7 +811,7 @@ mod tests {
         let ast = load_test_ast();
         let sources = ast.get("sources").unwrap();
         // PoolManager.swap with @inheritdoc — verify format_natspec resolves it
-        let decl = find_node_by_id(sources, 1167).unwrap();
+        let decl = find_node_by_id(sources, NodeId(1167)).unwrap();
         let doc_text = extract_documentation(decl).unwrap();
         let inherited = resolve_inheritdoc(sources, decl, &doc_text);
         let formatted = format_natspec(&doc_text, inherited.as_deref());

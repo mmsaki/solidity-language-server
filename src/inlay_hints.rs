@@ -1,4 +1,5 @@
 use crate::goto::CachedBuild;
+use crate::types::SourceLoc;
 use serde_json::Value;
 use std::collections::HashMap;
 use tower_lsp::lsp_types::*;
@@ -100,7 +101,7 @@ fn build_hint_lookup(file_ast: &Value, sources: &Value) -> HintLookup {
 /// Parse the `src` field ("offset:length:fileId") and return the byte offset.
 fn parse_src_offset(node: &Value) -> Option<usize> {
     let src = node.get("src").and_then(|v| v.as_str())?;
-    src.split(':').next()?.parse().ok()
+    SourceLoc::parse(src).map(|loc| loc.offset)
 }
 
 /// Recursively walk AST nodes collecting call site info.
@@ -131,27 +132,27 @@ fn collect_ast_calls(node: &Value, sources: &Value, lookup: &mut HintLookup) {
             }
         }
         "EmitStatement" => {
-            if let Some(event_call) = node.get("eventCall") {
-                if let Some((name, info)) = extract_call_info(event_call, sources) {
-                    let arg_count = event_call
-                        .get("arguments")
-                        .and_then(|v| v.as_array())
-                        .map(|a| a.len())
-                        .unwrap_or(0);
-                    if let Some(offset) = parse_src_offset(node) {
-                        lookup.by_offset.insert(
-                            offset,
-                            CallSite {
-                                info: ParamInfo {
-                                    names: info.names.clone(),
-                                    skip: info.skip,
-                                },
-                                name: name.clone(),
+            if let Some(event_call) = node.get("eventCall")
+                && let Some((name, info)) = extract_call_info(event_call, sources)
+            {
+                let arg_count = event_call
+                    .get("arguments")
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.len())
+                    .unwrap_or(0);
+                if let Some(offset) = parse_src_offset(node) {
+                    lookup.by_offset.insert(
+                        offset,
+                        CallSite {
+                            info: ParamInfo {
+                                names: info.names.clone(),
+                                skip: info.skip,
                             },
-                        );
-                    }
-                    lookup.by_name.entry((name, arg_count)).or_insert(info);
+                            name: name.clone(),
+                        },
+                    );
                 }
+                lookup.by_name.entry((name, arg_count)).or_insert(info);
             }
         }
         _ => {}
@@ -182,14 +183,13 @@ fn extract_call_info(node: &Value, sources: &Value) -> Option<(String, ParamInfo
 
     // Skip struct constructors with named args
     let kind = node.get("kind").and_then(|v| v.as_str()).unwrap_or("");
-    if kind == "structConstructorCall" {
-        if node
+    if kind == "structConstructorCall"
+        && node
             .get("names")
             .and_then(|v| v.as_array())
             .is_some_and(|n| !n.is_empty())
-        {
-            return None;
-        }
+    {
+        return None;
     }
 
     let expr = node.get("expression")?;
@@ -249,10 +249,10 @@ fn lookup_info<'a>(
     arg_count: usize,
 ) -> Option<&'a ParamInfo> {
     // Exact match by byte offset (works when AST is fresh)
-    if let Some(site) = lookup.by_offset.get(&offset) {
-        if site.name == name {
-            return Some(&site.info);
-        }
+    if let Some(site) = lookup.by_offset.get(&offset)
+        && site.name == name
+    {
+        return Some(&site.info);
     }
     // Fallback by (name, arg_count) (works with stale offsets after edits)
     lookup.by_name.get(&(name.to_string(), arg_count))
@@ -439,10 +439,10 @@ fn find_node_by_id(node: &Value, id: u64) -> Option<&Value> {
                         }
                     }
                 }
-            } else if child.is_object() {
-                if let Some(found) = find_node_by_id(child, id) {
-                    return Some(found);
-                }
+            } else if child.is_object()
+                && let Some(found) = find_node_by_id(child, id)
+            {
+                return Some(found);
             }
         }
     }
@@ -603,10 +603,10 @@ contract Foo {
     // Test helpers
 
     fn find_calls<'a>(node: Node<'a>, source: &'a str, out: &mut Vec<&'a str>) {
-        if node.kind() == "call_expression" {
-            if let Some(name) = ts_call_function_name(node, source) {
-                out.push(name);
-            }
+        if node.kind() == "call_expression"
+            && let Some(name) = ts_call_function_name(node, source)
+        {
+            out.push(name);
         }
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
@@ -615,10 +615,10 @@ contract Foo {
     }
 
     fn find_emits<'a>(node: Node<'a>, source: &'a str, out: &mut Vec<&'a str>) {
-        if node.kind() == "emit_statement" {
-            if let Some(name) = ts_emit_event_name(node, source) {
-                out.push(name);
-            }
+        if node.kind() == "emit_statement"
+            && let Some(name) = ts_emit_event_name(node, source)
+        {
+            out.push(name);
         }
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {

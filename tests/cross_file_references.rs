@@ -1,6 +1,7 @@
 use serde_json::Value;
 use solidity_language_server::goto::CachedBuild;
 use solidity_language_server::references;
+use solidity_language_server::types::NodeId;
 use std::collections::HashSet;
 use std::fs;
 
@@ -125,14 +126,14 @@ fn test_resolve_hooks_reference_from_pool_manager_node() {
         .expect("PoolManager.sol should be in nodes");
 
     // Verify node 553 exists and points to 4422
-    let ref_node = pm_nodes.get(&553).expect("node 553 should exist");
-    assert_eq!(ref_node.referenced_declaration, Some(4422));
+    let ref_node = pm_nodes.get(&NodeId(553)).expect("node 553 should exist");
+    assert_eq!(ref_node.referenced_declaration, Some(NodeId(4422)));
     assert_eq!(ref_node.src, "70:5:6");
 
     // Resolve the definition: find node 4422 across all files
     let mut def_location = None;
     for (file_path, file_nodes) in &build.nodes {
-        if let Some(def_node) = file_nodes.get(&4422) {
+        if let Some(def_node) = file_nodes.get(&NodeId(4422)) {
             let parts: Vec<&str> = def_node.src.split(':').collect();
             if parts.len() == 3 {
                 let byte_offset: usize = parts[0].parse().unwrap();
@@ -164,7 +165,7 @@ fn test_cross_file_scan_finds_pool_manager_references_to_hooks() {
     let final_target = node_info.referenced_declaration.unwrap_or(target_id);
 
     // Scan all files for references
-    let mut refs_by_file: std::collections::HashMap<String, Vec<u64>> =
+    let mut refs_by_file: std::collections::HashMap<String, Vec<NodeId>> =
         std::collections::HashMap::new();
     for (file_path, file_nodes) in &build.nodes {
         for (id, info) in file_nodes {
@@ -187,15 +188,15 @@ fn test_cross_file_scan_finds_pool_manager_references_to_hooks() {
 
     // Known node IDs from the AST
     assert!(
-        pm_refs.contains(&553),
+        pm_refs.contains(&NodeId(553)),
         "should contain Identifier at byte 70"
     );
     assert!(
-        pm_refs.contains(&623),
+        pm_refs.contains(&NodeId(623)),
         "should contain IdentifierPath at byte 4953"
     );
     assert!(
-        pm_refs.contains(&806),
+        pm_refs.contains(&NodeId(806)),
         "should contain Identifier at byte 6804"
     );
 }
@@ -244,7 +245,7 @@ fn test_end_to_end_cross_file_flow() {
 
     // Step 1-2: Start at node 553 (Hooks usage in PoolManager.sol), follow to definition
     let pm_nodes = build.nodes.get("src/PoolManager.sol").unwrap();
-    let usage_node = pm_nodes.get(&553).unwrap();
+    let usage_node = pm_nodes.get(&NodeId(553)).unwrap();
     let def_id = usage_node
         .referenced_declaration
         .expect("usage should have referencedDeclaration");

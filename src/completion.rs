@@ -5,6 +5,7 @@ use tower_lsp::lsp_types::{
 };
 
 use crate::goto::CHILD_KEYS;
+use crate::types::{FileId, NodeId, SourceLoc};
 
 /// A declaration found within a specific scope.
 #[derive(Debug, Clone)]
@@ -19,13 +20,13 @@ pub struct ScopedDeclaration {
 #[derive(Debug, Clone)]
 pub struct ScopeRange {
     /// AST node id of this scope.
-    pub node_id: u64,
+    pub node_id: NodeId,
     /// Byte offset where this scope starts (from `src` field).
     pub start: usize,
     /// Byte offset where this scope ends (start + length).
     pub end: usize,
     /// Source file id (from `src` field).
-    pub file_id: u64,
+    pub file_id: FileId,
 }
 
 /// Completion cache built from the AST.
@@ -37,21 +38,21 @@ pub struct CompletionCache {
     pub name_to_type: HashMap<String, String>,
 
     /// node id → Vec<CompletionItem> (members of structs, contracts, enums, libraries).
-    pub node_members: HashMap<u64, Vec<CompletionItem>>,
+    pub node_members: HashMap<NodeId, Vec<CompletionItem>>,
 
     /// typeIdentifier → node id (resolve a type string to its definition).
-    pub type_to_node: HashMap<String, u64>,
+    pub type_to_node: HashMap<String, NodeId>,
 
     /// contract/library/interface name → node id (for direct name dot-completion like `FullMath.`).
-    pub name_to_node_id: HashMap<String, u64>,
+    pub name_to_node_id: HashMap<String, NodeId>,
 
     /// node id → Vec<CompletionItem> from methodIdentifiers in .contracts section.
     /// Full function signatures with 4-byte selectors for contracts/interfaces.
-    pub method_identifiers: HashMap<u64, Vec<CompletionItem>>,
+    pub method_identifiers: HashMap<NodeId, Vec<CompletionItem>>,
 
     /// (contract_node_id, fn_name) → return typeIdentifier.
     /// For resolving `foo().` — look up what `foo` returns.
-    pub function_return_types: HashMap<(u64, String), String>,
+    pub function_return_types: HashMap<(NodeId, String), String>,
 
     /// typeIdentifier → Vec<CompletionItem> from UsingForDirective.
     /// Library functions available on a type via `using X for Y`.
@@ -67,11 +68,11 @@ pub struct CompletionCache {
     /// scope node_id → declarations in that scope.
     /// Each scope (Block, FunctionDefinition, ContractDefinition, SourceUnit)
     /// has the variables/functions/types declared directly within it.
-    pub scope_declarations: HashMap<u64, Vec<ScopedDeclaration>>,
+    pub scope_declarations: HashMap<NodeId, Vec<ScopedDeclaration>>,
 
     /// node_id → parent scope node_id.
     /// Walk this chain upward to widen the search scope.
-    pub scope_parent: HashMap<u64, u64>,
+    pub scope_parent: HashMap<NodeId, NodeId>,
 
     /// All scope ranges, for finding which scope a byte position falls in.
     /// Sorted by span size ascending (smallest first) for efficient innermost-scope lookup.
@@ -79,17 +80,17 @@ pub struct CompletionCache {
 
     /// absolute file path → AST source file id.
     /// Used to map a URI to the file_id needed for scope resolution.
-    pub path_to_file_id: HashMap<String, u64>,
+    pub path_to_file_id: HashMap<String, FileId>,
 
     /// contract node_id → linearized base contracts (C3 linearization order).
     /// First element is the contract itself, followed by parents in resolution order.
     /// Used to search inherited state variables and functions during scope resolution.
-    pub linearized_base_contracts: HashMap<u64, Vec<u64>>,
+    pub linearized_base_contracts: HashMap<NodeId, Vec<NodeId>>,
 
     /// contract/interface/library node_id → contractKind string.
     /// Values are `"contract"`, `"interface"`, or `"library"`.
     /// Used to determine which `type(X).` members to offer.
-    pub contract_kinds: HashMap<u64, String>,
+    pub contract_kinds: HashMap<NodeId, String>,
 }
 
 fn push_if_node_or_array<'a>(tree: &'a Value, key: &str, stack: &mut Vec<&'a Value>) {
@@ -120,21 +121,17 @@ fn node_type_to_completion_kind(node_type: &str) -> CompletionItemKind {
 }
 
 /// Parse the `src` field of an AST node: "offset:length:fileId".
-/// Returns (offset, length, file_id) or None if the format is invalid.
-fn parse_src(node: &Value) -> Option<(usize, usize, u64)> {
+/// Returns the parsed SourceLoc or None if the format is invalid.
+fn parse_src(node: &Value) -> Option<SourceLoc> {
     let src = node.get("src").and_then(|v| v.as_str())?;
-    let mut parts = src.split(':');
-    let offset = parts.next()?.parse::<usize>().ok()?;
-    let length = parts.next()?.parse::<usize>().ok()?;
-    let file_id = parts.next()?.parse::<u64>().ok()?;
-    Some((offset, length, file_id))
+    SourceLoc::parse(src)
 }
 
 /// Extract the trailing node id from a typeIdentifier string.
 /// e.g. `t_struct$_PoolKey_$8887_storage_ptr` → Some(8887)
 ///      `t_contract$_IHooks_$2248` → Some(2248)
 ///      `t_uint256` → None
-pub fn extract_node_id_from_type(type_id: &str) -> Option<u64> {
+pub fn extract_node_id_from_type(type_id: &str) -> Option<NodeId> {
     // Pattern: ..._$<digits>... where digits follow the last _$
     // We find all _$<digits> groups and take the last one that's part of the type name
     let mut last_id = None;
@@ -150,7 +147,7 @@ pub fn extract_node_id_from_type(type_id: &str) -> Option<u64> {
             if i > start
                 && let Ok(id) = type_id[start..i].parse::<u64>()
             {
-                last_id = Some(id);
+                last_id = Some(NodeId(id));
             }
         } else {
             i += 1;
@@ -346,34 +343,34 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
     let mut names: Vec<CompletionItem> = Vec::new();
     let mut seen_names: HashMap<String, usize> = HashMap::new(); // name → index in names vec
     let mut name_to_type: HashMap<String, String> = HashMap::new();
-    let mut node_members: HashMap<u64, Vec<CompletionItem>> = HashMap::new();
-    let mut type_to_node: HashMap<String, u64> = HashMap::new();
-    let mut method_identifiers: HashMap<u64, Vec<CompletionItem>> = HashMap::new();
-    let mut name_to_node_id: HashMap<String, u64> = HashMap::new();
-    let mut contract_kinds: HashMap<u64, String> = HashMap::new();
+    let mut node_members: HashMap<NodeId, Vec<CompletionItem>> = HashMap::new();
+    let mut type_to_node: HashMap<String, NodeId> = HashMap::new();
+    let mut method_identifiers: HashMap<NodeId, Vec<CompletionItem>> = HashMap::new();
+    let mut name_to_node_id: HashMap<String, NodeId> = HashMap::new();
+    let mut contract_kinds: HashMap<NodeId, String> = HashMap::new();
 
     // Collect (path, contract_name, node_id) during AST walk for methodIdentifiers lookup after.
-    let mut contract_locations: Vec<(String, String, u64)> = Vec::new();
+    let mut contract_locations: Vec<(String, String, NodeId)> = Vec::new();
 
     // contract_node_id → fn_name → Vec<signature> (for matching method_identifiers to AST signatures)
-    let mut function_signatures: HashMap<u64, HashMap<String, Vec<String>>> = HashMap::new();
+    let mut function_signatures: HashMap<NodeId, HashMap<String, Vec<String>>> = HashMap::new();
 
     // (contract_node_id, fn_name) → return typeIdentifier
-    let mut function_return_types: HashMap<(u64, String), String> = HashMap::new();
+    let mut function_return_types: HashMap<(NodeId, String), String> = HashMap::new();
 
     // typeIdentifier → Vec<CompletionItem> from UsingForDirective
     let mut using_for: HashMap<String, Vec<CompletionItem>> = HashMap::new();
     let mut using_for_wildcard: Vec<CompletionItem> = Vec::new();
 
     // Temp: (library_node_id, target_type_id_or_none) for resolving after walk
-    let mut using_for_directives: Vec<(u64, Option<String>)> = Vec::new();
+    let mut using_for_directives: Vec<(NodeId, Option<String>)> = Vec::new();
 
     // Scope-aware completion data
-    let mut scope_declarations: HashMap<u64, Vec<ScopedDeclaration>> = HashMap::new();
-    let mut scope_parent: HashMap<u64, u64> = HashMap::new();
+    let mut scope_declarations: HashMap<NodeId, Vec<ScopedDeclaration>> = HashMap::new();
+    let mut scope_parent: HashMap<NodeId, NodeId> = HashMap::new();
     let mut scope_ranges: Vec<ScopeRange> = Vec::new();
-    let mut path_to_file_id: HashMap<String, u64> = HashMap::new();
-    let mut linearized_base_contracts: HashMap<u64, Vec<u64>> = HashMap::new();
+    let mut path_to_file_id: HashMap<String, FileId> = HashMap::new();
+    let mut linearized_base_contracts: HashMap<NodeId, Vec<NodeId>> = HashMap::new();
 
     if let Some(sources_obj) = sources.as_object() {
         for (path, contents) in sources_obj {
@@ -384,14 +381,14 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
             {
                 // Map file path → source file id for scope resolution
                 if let Some(fid) = source_file.get("id").and_then(|v| v.as_u64()) {
-                    path_to_file_id.insert(path.clone(), fid);
+                    path_to_file_id.insert(path.clone(), FileId(fid));
                 }
                 let mut stack: Vec<&Value> = vec![ast];
 
                 while let Some(tree) = stack.pop() {
                     let node_type = tree.get("nodeType").and_then(|v| v.as_str()).unwrap_or("");
                     let name = tree.get("name").and_then(|v| v.as_str()).unwrap_or("");
-                    let node_id = tree.get("id").and_then(|v| v.as_u64());
+                    let node_id = tree.get("id").and_then(|v| v.as_u64()).map(NodeId);
 
                     // --- Scope-aware data collection ---
 
@@ -407,17 +404,17 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
                             | "UncheckedBlock"
                     );
                     if is_scope_node && let Some(nid) = node_id {
-                        if let Some((start, len, file_id)) = parse_src(tree) {
+                        if let Some(src_loc) = parse_src(tree) {
                             scope_ranges.push(ScopeRange {
                                 node_id: nid,
-                                start,
-                                end: start + len,
-                                file_id,
+                                start: src_loc.offset,
+                                end: src_loc.end(),
+                                file_id: src_loc.file_id,
                             });
                         }
                         // Record parent link: this node's scope → its parent
                         if let Some(parent_id) = tree.get("scope").and_then(|v| v.as_u64()) {
-                            scope_parent.insert(nid, parent_id);
+                            scope_parent.insert(nid, NodeId(parent_id));
                         }
                     }
 
@@ -428,7 +425,11 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
                             .get("linearizedBaseContracts")
                             .and_then(|v| v.as_array())
                     {
-                        let base_ids: Vec<u64> = bases.iter().filter_map(|b| b.as_u64()).collect();
+                        let base_ids: Vec<NodeId> = bases
+                            .iter()
+                            .filter_map(|b| b.as_u64())
+                            .map(NodeId)
+                            .collect();
                         if !base_ids.is_empty() {
                             linearized_base_contracts.insert(nid, base_ids);
                         }
@@ -437,14 +438,14 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
                     // For VariableDeclarations, record the declaration in its scope
                     if node_type == "VariableDeclaration"
                         && !name.is_empty()
-                        && let Some(scope_id) = tree.get("scope").and_then(|v| v.as_u64())
+                        && let Some(scope_raw) = tree.get("scope").and_then(|v| v.as_u64())
                         && let Some(tid) = tree
                             .get("typeDescriptions")
                             .and_then(|td| td.get("typeIdentifier"))
                             .and_then(|v| v.as_str())
                     {
                         scope_declarations
-                            .entry(scope_id)
+                            .entry(NodeId(scope_raw))
                             .or_default()
                             .push(ScopedDeclaration {
                                 name: name.to_string(),
@@ -455,14 +456,14 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
                     // For FunctionDefinitions, record them in their parent scope (the contract)
                     if node_type == "FunctionDefinition"
                         && !name.is_empty()
-                        && let Some(scope_id) = tree.get("scope").and_then(|v| v.as_u64())
+                        && let Some(scope_raw) = tree.get("scope").and_then(|v| v.as_u64())
                         && let Some(tid) = tree
                             .get("typeDescriptions")
                             .and_then(|td| td.get("typeIdentifier"))
                             .and_then(|v| v.as_str())
                     {
                         scope_declarations
-                            .entry(scope_id)
+                            .entry(NodeId(scope_raw))
                             .or_default()
                             .push(ScopedDeclaration {
                                 name: name.to_string(),
@@ -694,7 +695,7 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
                             if let Some(lib_id) =
                                 lib.get("referencedDeclaration").and_then(|v| v.as_u64())
                             {
-                                using_for_directives.push((lib_id, target_type));
+                                using_for_directives.push((NodeId(lib_id), target_type));
                             }
                         }
                         // Form 2: functionList array — individual function references
@@ -830,13 +831,13 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
     // For each orphan, find the next-larger enclosing scope range in the same file.
     // scope_ranges is sorted smallest-first, so we scan forward from each orphan's
     // position to find the first range that strictly contains it.
-    let orphan_ids: Vec<u64> = scope_ranges
+    let orphan_ids: Vec<NodeId> = scope_ranges
         .iter()
         .filter(|r| !scope_parent.contains_key(&r.node_id))
         .map(|r| r.node_id)
         .collect();
     // Build a lookup from node_id → (start, end, file_id) for quick access
-    let range_by_id: HashMap<u64, (usize, usize, u64)> = scope_ranges
+    let range_by_id: HashMap<NodeId, (usize, usize, FileId)> = scope_ranges
         .iter()
         .map(|r| (r.node_id, (r.start, r.end, r.file_id)))
         .collect();
@@ -1246,6 +1247,7 @@ fn completions_for_type(cache: &CompletionCache, type_id: &str) -> Vec<Completio
             type_id
                 .strip_prefix("__node_id_")
                 .and_then(|s| s.parse::<u64>().ok())
+                .map(NodeId)
         });
 
     let mut items = Vec::new();
@@ -1323,7 +1325,11 @@ fn resolve_name_to_type_id(cache: &CompletionCache, name: &str) -> Option<String
 /// Find the innermost scope node that contains the given byte position and file.
 /// `scope_ranges` must be sorted by span size ascending (smallest first).
 /// Returns the node_id of the smallest scope enclosing the position.
-pub fn find_innermost_scope(cache: &CompletionCache, byte_pos: usize, file_id: u64) -> Option<u64> {
+pub fn find_innermost_scope(
+    cache: &CompletionCache,
+    byte_pos: usize,
+    file_id: FileId,
+) -> Option<NodeId> {
     // scope_ranges is sorted smallest-first, so the first match is the innermost scope
     cache
         .scope_ranges
@@ -1344,7 +1350,7 @@ pub fn resolve_name_in_scope(
     cache: &CompletionCache,
     name: &str,
     byte_pos: usize,
-    file_id: u64,
+    file_id: FileId,
 ) -> Option<String> {
     let mut current_scope = find_innermost_scope(cache, byte_pos, file_id)?;
 
@@ -1403,6 +1409,7 @@ fn resolve_member_type(
             context_type_id
                 .strip_prefix("__node_id_")
                 .and_then(|s| s.parse::<u64>().ok())
+                .map(NodeId)
         });
 
     let node_id = resolved_node_id?;
@@ -1452,7 +1459,7 @@ pub struct ScopeContext {
     /// Byte offset of the cursor in the source file.
     pub byte_pos: usize,
     /// Source file id (from the AST `src` field).
-    pub file_id: u64,
+    pub file_id: FileId,
 }
 
 /// Resolve a name to a type, using scope context if available.
@@ -1664,7 +1671,7 @@ pub fn handle_completion(
     source_text: &str,
     position: Position,
     trigger_char: Option<&str>,
-    file_id: Option<u64>,
+    file_id: Option<FileId>,
 ) -> Option<CompletionResponse> {
     let lines: Vec<&str> = source_text.lines().collect();
     let line = lines.get(position.line as usize)?;

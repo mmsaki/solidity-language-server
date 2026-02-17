@@ -1,6 +1,7 @@
 use crate::goto;
 use crate::goto::CachedBuild;
 use crate::references;
+use crate::types::SourceLoc;
 use serde_json::Value;
 use std::collections::HashMap;
 use tower_lsp::lsp_types::{Position, Range, TextEdit, Url, WorkspaceEdit};
@@ -71,15 +72,11 @@ fn get_name_location_index(
 
     if !node_info.name_locations.is_empty() {
         for (i, name_loc) in node_info.name_locations.iter().enumerate() {
-            let parts: Vec<&str> = name_loc.split(':').collect();
-            if parts.len() == 3
-                && let (Ok(start), Ok(length)) =
-                    (parts[0].parse::<usize>(), parts[1].parse::<usize>())
+            if let Some(loc) = SourceLoc::parse(name_loc)
+                && loc.offset <= byte_position
+                && byte_position < loc.end()
             {
-                let end = start + length;
-                if start <= byte_position && byte_position < end {
-                    return Some(i);
-                }
+                return Some(i);
             }
         }
     }

@@ -4,6 +4,7 @@ use solidity_language_server::completion::{
     extract_mapping_value_type, extract_node_id_from_type, get_dot_completions,
     get_general_completions, parse_dot_chain,
 };
+use solidity_language_server::types::{FileId, NodeId};
 use std::fs;
 use tower_lsp::lsp_types::CompletionItemKind;
 
@@ -24,7 +25,7 @@ fn load_cache() -> solidity_language_server::completion::CompletionCache {
 fn test_extract_node_id_from_struct_type() {
     assert_eq!(
         extract_node_id_from_type("t_struct$_PoolKey_$8887_storage_ptr"),
-        Some(8887)
+        Some(NodeId(8887))
     );
 }
 
@@ -32,7 +33,7 @@ fn test_extract_node_id_from_struct_type() {
 fn test_extract_node_id_from_contract_type() {
     assert_eq!(
         extract_node_id_from_type("t_contract$_IHooks_$2248"),
-        Some(2248)
+        Some(NodeId(2248))
     );
 }
 
@@ -40,7 +41,7 @@ fn test_extract_node_id_from_contract_type() {
 fn test_extract_node_id_from_user_defined_value_type() {
     assert_eq!(
         extract_node_id_from_type("t_userDefinedValueType$_Currency_$8541"),
-        Some(8541)
+        Some(NodeId(8541))
     );
 }
 
@@ -286,7 +287,10 @@ fn test_mapping_value_struct_with_node_id() {
         extract_mapping_value_type("t_mapping$_t_int24_$_t_struct$_TickInfo_$4784_storage_$");
     assert_eq!(result, Some("t_struct$_TickInfo_$4784_storage".to_string()));
     // Can extract node id from the result
-    assert_eq!(extract_node_id_from_type(&result.unwrap()), Some(4784));
+    assert_eq!(
+        extract_node_id_from_type(&result.unwrap()),
+        Some(NodeId(4784))
+    );
 }
 
 // --- general completions ---
@@ -476,11 +480,11 @@ fn test_node_members_populated() {
 
     // PoolKey struct (id 8887) should have members
     assert!(
-        cache.node_members.contains_key(&8887),
+        cache.node_members.contains_key(&NodeId(8887)),
         "Should have members for PoolKey (8887)"
     );
 
-    let pool_key_members = &cache.node_members[&8887];
+    let pool_key_members = &cache.node_members[&NodeId(8887)];
     let member_names: Vec<&str> = pool_key_members.iter().map(|c| c.label.as_str()).collect();
     assert_eq!(
         member_names.len(),
@@ -530,7 +534,7 @@ fn test_dot_completion_fullmath_library() {
 fn test_method_identifier_swap_has_description_with_param_names() {
     let cache = load_cache();
     // IPoolManager (2531) has swap
-    let ipm_methods = &cache.method_identifiers[&2531];
+    let ipm_methods = &cache.method_identifiers[&NodeId(2531)];
     let swap_item = ipm_methods.iter().find(|c| c.label == "swap").unwrap();
     let desc = swap_item
         .label_details
@@ -574,7 +578,7 @@ fn test_method_identifier_swap_has_description_with_param_names() {
 #[test]
 fn test_method_identifier_settle_has_description_no_params() {
     let cache = load_cache();
-    let pm_methods = &cache.method_identifiers[&1767];
+    let pm_methods = &cache.method_identifiers[&NodeId(1767)];
     let settle_item = pm_methods.iter().find(|c| c.label == "settle").unwrap();
     let desc = settle_item
         .label_details
@@ -596,7 +600,7 @@ fn test_method_identifier_settle_has_description_no_params() {
 #[test]
 fn test_method_identifier_initialize_has_return_type() {
     let cache = load_cache();
-    let ipm_methods = &cache.method_identifiers[&2531];
+    let ipm_methods = &cache.method_identifiers[&NodeId(2531)];
     let init_item = ipm_methods
         .iter()
         .find(|c| c.label == "initialize")
@@ -633,7 +637,7 @@ fn test_method_identifier_initialize_has_return_type() {
 fn test_node_members_function_has_signature_as_detail() {
     let cache = load_cache();
     // FullMath (3250) — its node_members should have function signatures as detail
-    let fm_members = &cache.node_members[&3250];
+    let fm_members = &cache.node_members[&NodeId(3250)];
     let mul_div = fm_members.iter().find(|c| c.label == "mulDiv").unwrap();
 
     eprintln!("mulDiv detail: {:?}", mul_div.detail);
@@ -668,14 +672,14 @@ fn test_method_identifiers_populated() {
 
     // PoolManager (id 1767) should have method identifiers
     assert!(
-        cache.method_identifiers.contains_key(&1767),
+        cache.method_identifiers.contains_key(&NodeId(1767)),
         "Should have method identifiers for PoolManager (1767), keys: {:?}",
         cache.method_identifiers.keys().collect::<Vec<_>>()
     );
 
     // IPoolManager (id 2531) should also have them
     assert!(
-        cache.method_identifiers.contains_key(&2531),
+        cache.method_identifiers.contains_key(&NodeId(2531)),
         "Should have method identifiers for IPoolManager (2531)"
     );
 }
@@ -685,7 +689,7 @@ fn test_overloaded_extsload_on_extsload_contract() {
     let cache = load_cache();
     // extsload is defined on Extsload contract (468), not PoolManager directly
     // So Extsload's method_identifiers should have descriptions
-    let ext_methods = &cache.method_identifiers[&468];
+    let ext_methods = &cache.method_identifiers[&NodeId(468)];
     let extsload_items: Vec<_> = ext_methods
         .iter()
         .filter(|c| c.label == "extsload")
@@ -717,7 +721,7 @@ fn test_overloaded_extsload_on_extsload_contract() {
 fn test_inherited_functions_have_no_description() {
     let cache = load_cache();
     // PoolManager (1767) inherits extsload from Extsload — no AST signature available
-    let pm_methods = &cache.method_identifiers[&1767];
+    let pm_methods = &cache.method_identifiers[&NodeId(1767)];
     let extsload_items: Vec<_> = pm_methods
         .iter()
         .filter(|c| c.label == "extsload")
@@ -748,7 +752,7 @@ fn test_inherited_functions_have_no_description() {
 #[test]
 fn test_method_identifiers_have_function_names() {
     let cache = load_cache();
-    let pm_methods = &cache.method_identifiers[&1767];
+    let pm_methods = &cache.method_identifiers[&NodeId(1767)];
     let labels: Vec<&str> = pm_methods.iter().map(|c| c.label.as_str()).collect();
 
     assert!(
@@ -767,7 +771,7 @@ fn test_method_identifiers_have_function_names() {
 #[test]
 fn test_method_identifiers_have_full_signatures_as_detail() {
     let cache = load_cache();
-    let pm_methods = &cache.method_identifiers[&1767];
+    let pm_methods = &cache.method_identifiers[&NodeId(1767)];
 
     let swap_item = pm_methods.iter().find(|c| c.label == "swap").unwrap();
     assert_eq!(
@@ -787,7 +791,7 @@ fn test_method_identifiers_have_full_signatures_as_detail() {
 #[test]
 fn test_method_identifiers_have_selectors() {
     let cache = load_cache();
-    let pm_methods = &cache.method_identifiers[&1767];
+    let pm_methods = &cache.method_identifiers[&NodeId(1767)];
 
     let swap_item = pm_methods.iter().find(|c| c.label == "swap").unwrap();
     let label_details = swap_item.label_details.as_ref().unwrap();
@@ -809,7 +813,7 @@ fn test_method_identifiers_have_selectors() {
 #[test]
 fn test_method_identifiers_are_function_kind() {
     let cache = load_cache();
-    let pm_methods = &cache.method_identifiers[&1767];
+    let pm_methods = &cache.method_identifiers[&NodeId(1767)];
 
     for item in pm_methods {
         assert_eq!(
@@ -824,7 +828,7 @@ fn test_method_identifiers_are_function_kind() {
 #[test]
 fn test_method_identifiers_handles_overloads() {
     let cache = load_cache();
-    let pm_methods = &cache.method_identifiers[&1767];
+    let pm_methods = &cache.method_identifiers[&NodeId(1767)];
 
     // extsload has 3 overloads: extsload(bytes32), extsload(bytes32,uint256), extsload(bytes32[])
     let extsload_items: Vec<_> = pm_methods
@@ -851,7 +855,7 @@ fn test_method_identifiers_handles_overloads() {
 #[test]
 fn test_method_identifiers_ipool_manager_interface() {
     let cache = load_cache();
-    let ipm_methods = &cache.method_identifiers[&2531];
+    let ipm_methods = &cache.method_identifiers[&NodeId(2531)];
     let labels: Vec<&str> = ipm_methods.iter().map(|c| c.label.as_str()).collect();
 
     assert_eq!(ipm_methods.len(), 30, "IPoolManager should have 30 methods");
@@ -868,18 +872,18 @@ fn test_dot_completion_supplements_method_identifiers_with_node_members() {
 
     // PoolManager (1767) should have both method_identifiers AND node_members
     // node_members includes events, errors, state variables — things not in methodIdentifiers
-    let has_methods = cache.method_identifiers.contains_key(&1767);
-    let has_members = cache.node_members.contains_key(&1767);
+    let has_methods = cache.method_identifiers.contains_key(&NodeId(1767));
+    let has_members = cache.node_members.contains_key(&NodeId(1767));
 
     assert!(has_methods, "PoolManager should have method_identifiers");
     assert!(has_members, "PoolManager should have node_members");
 
     // Check that node_members has things that method_identifiers doesn't
-    let method_labels: std::collections::HashSet<&str> = cache.method_identifiers[&1767]
+    let method_labels: std::collections::HashSet<&str> = cache.method_identifiers[&NodeId(1767)]
         .iter()
         .map(|c| c.label.as_str())
         .collect();
-    let member_only: Vec<&str> = cache.node_members[&1767]
+    let member_only: Vec<&str> = cache.node_members[&NodeId(1767)]
         .iter()
         .map(|c| c.label.as_str())
         .filter(|l| !method_labels.contains(l))
@@ -916,7 +920,9 @@ fn test_cache_without_contracts_has_empty_method_identifiers() {
 fn test_function_return_types_pool_manager_swap() {
     let cache = load_cache();
     // PoolManager.swap returns BalanceDelta (single return, so it's in the map)
-    let ret = cache.function_return_types.get(&(1767, "swap".to_string()));
+    let ret = cache
+        .function_return_types
+        .get(&(NodeId(1767), "swap".to_string()));
     assert_eq!(
         ret,
         Some(&"t_userDefinedValueType$_BalanceDelta_$8327".to_string()),
@@ -930,7 +936,7 @@ fn test_function_return_types_pool_manager_internal_swap() {
     // _swap is the internal implementation, also returns BalanceDelta
     let ret = cache
         .function_return_types
-        .get(&(1767, "_swap".to_string()));
+        .get(&(NodeId(1767), "_swap".to_string()));
     assert_eq!(
         ret,
         Some(&"t_userDefinedValueType$_BalanceDelta_$8327".to_string()),
@@ -942,7 +948,9 @@ fn test_function_return_types_pool_manager_internal_swap() {
 fn test_function_return_types_ipool_manager_interface() {
     let cache = load_cache();
     // IPoolManager interface also defines swap → BalanceDelta
-    let ret = cache.function_return_types.get(&(2531, "swap".to_string()));
+    let ret = cache
+        .function_return_types
+        .get(&(NodeId(2531), "swap".to_string()));
     assert_eq!(
         ret,
         Some(&"t_userDefinedValueType$_BalanceDelta_$8327".to_string()),
@@ -956,7 +964,7 @@ fn test_function_return_types_pool_manager_initialize() {
     // initialize returns int24 (tick)
     let ret = cache
         .function_return_types
-        .get(&(2531, "initialize".to_string()));
+        .get(&(NodeId(2531), "initialize".to_string()));
     assert_eq!(
         ret,
         Some(&"t_int24".to_string()),
@@ -970,7 +978,7 @@ fn test_function_return_types_get_pool() {
     // PoolManager._getPool returns Pool.State storage
     let ret = cache
         .function_return_types
-        .get(&(1767, "_getPool".to_string()));
+        .get(&(NodeId(1767), "_getPool".to_string()));
     assert_eq!(
         ret,
         Some(&"t_struct$_State_$4809_storage_ptr".to_string()),
@@ -1699,7 +1707,7 @@ fn test_scope_resolve_self_in_pool_swap_is_pool_state() {
     // Pool.swap is in file 29, at bytes 12231..21851
     // "self" inside Pool.swap should resolve to Pool.State storage
     // Position cursor inside the function body (byte 12300)
-    let result = resolve_name_in_scope(&cache, "self", 12300, 29);
+    let result = resolve_name_in_scope(&cache, "self", 12300, FileId(29));
     assert_eq!(
         result,
         Some("t_struct$_State_$4809_storage_ptr".to_string()),
@@ -1717,7 +1725,7 @@ fn test_scope_resolve_self_in_hooks_is_ihooks() {
     // We need a byte position inside a Hooks library function in file 23.
     // src for self decl is "3643:11:23", meaning function starts around there.
     // Let's use byte 3650 in file 23.
-    let result = resolve_name_in_scope(&cache, "self", 3650, 23);
+    let result = resolve_name_in_scope(&cache, "self", 3650, FileId(23));
     assert_eq!(
         result,
         Some("t_contract$_IHooks_$2248".to_string()),
@@ -1730,7 +1738,7 @@ fn test_scope_resolve_key_in_pool_manager_swap_is_pool_key() {
     let cache = load_cache();
     // PoolManager.swap (id=1167) is in file 6, bytes 9385..11071
     // "key" parameter has type PoolKey memory
-    let result = resolve_name_in_scope(&cache, "key", 9500, 6);
+    let result = resolve_name_in_scope(&cache, "key", 9500, FileId(6));
     assert_eq!(
         result,
         Some("t_struct$_PoolKey_$8887_memory_ptr".to_string()),
@@ -1744,7 +1752,7 @@ fn test_scope_resolve_walks_up_to_contract_state_var() {
     // Inside Owned contract constructor (file 0, bytes 1007..1122),
     // "owner" is not a local or parameter — it's a state variable on Owned (scope=59).
     // Cursor at byte 1050 (inside constructor body).
-    let result = resolve_name_in_scope(&cache, "owner", 1050, 0);
+    let result = resolve_name_in_scope(&cache, "owner", 1050, FileId(0));
     assert_eq!(
         result,
         Some("t_address".to_string()),
@@ -1758,7 +1766,7 @@ fn test_scope_resolve_unknown_name_falls_back() {
     // A name that doesn't exist in any scope should return None from scope walk,
     // then fall back to resolve_name_to_type_id (flat lookup).
     // "PoolManager" is a contract name, not a variable — it should be resolved via fallback.
-    let result = resolve_name_in_scope(&cache, "PoolManager", 9500, 6);
+    let result = resolve_name_in_scope(&cache, "PoolManager", 9500, FileId(6));
     assert!(
         result.is_some(),
         "Contract names should be resolved via fallback"
@@ -1777,7 +1785,7 @@ fn test_scope_chain_completions_with_context() {
     }];
     let ctx = ScopeContext {
         byte_pos: 12300,
-        file_id: 29,
+        file_id: FileId(29),
     };
     let items = get_chain_completions(&cache, &chain, Some(&ctx));
     let names: Vec<&str> = items.iter().map(|c| c.label.as_str()).collect();
@@ -1817,7 +1825,7 @@ fn test_linearized_base_contracts_populated() {
         "linearized_base_contracts should be populated"
     );
     // PoolManager (id=1767) should have multiple base contracts
-    let pm_bases = cache.linearized_base_contracts.get(&1767);
+    let pm_bases = cache.linearized_base_contracts.get(&NodeId(1767));
     assert!(
         pm_bases.is_some(),
         "PoolManager should have linearized base contracts"
@@ -1827,10 +1835,14 @@ fn test_linearized_base_contracts_populated() {
         bases.len() > 1,
         "PoolManager should inherit from multiple contracts"
     );
-    assert_eq!(bases[0], 1767, "First base should be the contract itself");
+    assert_eq!(
+        bases[0],
+        NodeId(1767),
+        "First base should be the contract itself"
+    );
     // Owned (id=59) should be in the list
     assert!(
-        bases.contains(&59),
+        bases.contains(&NodeId(59)),
         "PoolManager should inherit from Owned (id=59), got: {:?}",
         bases
     );
@@ -1845,7 +1857,7 @@ fn test_scope_resolve_inherited_state_var_owner_in_pool_manager() {
     //   2. Check the FunctionDefinition scope (swap params) — no "owner"
     //   3. Check ContractDefinition (PoolManager, id=1767) — no "owner"
     //   4. Walk linearizedBaseContracts → find "owner" in Owned (id=59)
-    let result = resolve_name_in_scope(&cache, "owner", 9500, 6);
+    let result = resolve_name_in_scope(&cache, "owner", 9500, FileId(6));
     assert_eq!(
         result,
         Some("t_address".to_string()),
@@ -1858,7 +1870,7 @@ fn test_scope_resolve_inherited_protocol_fee_controller() {
     let cache = load_cache();
     // Inside PoolManager.swap (file 6, bytes 9385..11071), "protocolFeeController"
     // is a state variable inherited from ProtocolFees (id=1994).
-    let result = resolve_name_in_scope(&cache, "protocolFeeController", 9500, 6);
+    let result = resolve_name_in_scope(&cache, "protocolFeeController", 9500, FileId(6));
     assert_eq!(
         result,
         Some("t_address".to_string()),
@@ -1872,7 +1884,7 @@ fn test_scope_resolve_own_state_var_still_works() {
     // Inside PoolManager.swap (file 6), "_pools" is PoolManager's own state variable
     // (scope=1767). It should still resolve correctly — the contract's own declarations
     // are checked before walking base contracts.
-    let result = resolve_name_in_scope(&cache, "_pools", 9500, 6);
+    let result = resolve_name_in_scope(&cache, "_pools", 9500, FileId(6));
     assert!(
         result.is_some(),
         "_pools inside PoolManager.swap should resolve to PoolManager's own state variable"
@@ -2466,7 +2478,7 @@ fn test_cache_scope_declarations_has_block_scoped_vars() {
     let id_map = build_id_to_node_type(&nodes);
 
     for (scope_id, decls) in &cache.scope_declarations {
-        if id_map.get(scope_id).map(|s| s.as_str()) == Some("Block") {
+        if id_map.get(&scope_id.0).map(|s| s.as_str()) == Some("Block") {
             block_scoped_count += decls.len();
         }
     }
@@ -2490,7 +2502,7 @@ fn test_cache_scope_declarations_has_function_params() {
     let id_map = build_id_to_node_type(&nodes);
     let mut fn_scoped_count = 0;
     for (scope_id, decls) in &cache.scope_declarations {
-        if id_map.get(scope_id).map(|s| s.as_str()) == Some("FunctionDefinition") {
+        if id_map.get(&scope_id.0).map(|s| s.as_str()) == Some("FunctionDefinition") {
             fn_scoped_count += decls.len();
         }
     }
@@ -2512,7 +2524,7 @@ fn test_cache_scope_declarations_has_state_vars() {
     let id_map = build_id_to_node_type(&nodes);
     let mut contract_scoped_count = 0;
     for (scope_id, decls) in &cache.scope_declarations {
-        if id_map.get(scope_id).map(|s| s.as_str()) == Some("ContractDefinition") {
+        if id_map.get(&scope_id.0).map(|s| s.as_str()) == Some("ContractDefinition") {
             contract_scoped_count += decls.len();
         }
     }
@@ -2576,7 +2588,7 @@ fn test_cache_blocks_have_no_parent_link() {
 
     let blocks_with_parent = block_ids
         .iter()
-        .filter(|id| cache.scope_parent.contains_key(id))
+        .filter(|id| cache.scope_parent.contains_key(&NodeId(**id)))
         .count();
 
     assert_eq!(
@@ -2606,7 +2618,7 @@ fn test_cache_unchecked_blocks_have_no_parent_link() {
 
     let with_parent = ub_ids
         .iter()
-        .filter(|id| cache.scope_parent.contains_key(id))
+        .filter(|id| cache.scope_parent.contains_key(&NodeId(**id)))
         .count();
 
     assert_eq!(
@@ -2625,7 +2637,7 @@ fn test_scope_chain_lpfee_in_initialize() {
     let cache = load_cache();
     // lpFee (id=822) is declared in Block 880 (body of initialize, fn id=881)
     // Block 880 should be in scope_declarations
-    let block_880_decls = cache.scope_declarations.get(&880);
+    let block_880_decls = cache.scope_declarations.get(&NodeId(880));
     assert!(
         block_880_decls.is_some(),
         "Block 880 should have declarations"
@@ -2648,22 +2660,22 @@ fn test_scope_chain_lpfee_in_initialize() {
 
     // FunctionDefinition 881 (initialize) should have scope -> 1767 (PoolManager)
     assert_eq!(
-        cache.scope_parent.get(&881),
-        Some(&1767),
+        cache.scope_parent.get(&NodeId(881)),
+        Some(&NodeId(1767)),
         "initialize (881) should have parent PoolManager (1767)"
     );
 
     // PoolManager 1767 should have scope -> 1768 (SourceUnit)
     assert_eq!(
-        cache.scope_parent.get(&1767),
-        Some(&1768),
+        cache.scope_parent.get(&NodeId(1767)),
+        Some(&NodeId(1768)),
         "PoolManager (1767) should have parent SourceUnit (1768)"
     );
 
     // Block 880 now has an inferred parent link to FunctionDefinition 881
     assert_eq!(
-        cache.scope_parent.get(&880),
-        Some(&881),
+        cache.scope_parent.get(&NodeId(880)),
+        Some(&NodeId(881)),
         "Block 880 should have inferred parent link to FunctionDefinition 881"
     );
 }
@@ -2728,11 +2740,23 @@ fn test_ast_pool_state_struct_fields() {
 #[test]
 fn test_cache_linearized_base_contracts_pool_manager() {
     let cache = load_cache();
-    let bases = cache.linearized_base_contracts.get(&1767).unwrap();
+    let bases = cache.linearized_base_contracts.get(&NodeId(1767)).unwrap();
     assert_eq!(
         bases,
         &vec![
-            1767, 498, 468, 425, 352, 550, 1994, 59, 2531, 2049, 2027, 2806, 2608
+            NodeId(1767),
+            NodeId(498),
+            NodeId(468),
+            NodeId(425),
+            NodeId(352),
+            NodeId(550),
+            NodeId(1994),
+            NodeId(59),
+            NodeId(2531),
+            NodeId(2049),
+            NodeId(2027),
+            NodeId(2806),
+            NodeId(2608)
         ]
     );
 }
@@ -2740,17 +2764,17 @@ fn test_cache_linearized_base_contracts_pool_manager() {
 #[test]
 fn test_cache_linearized_base_contracts_erc6909_claims() {
     let cache = load_cache();
-    let bases = cache.linearized_base_contracts.get(&425).unwrap();
+    let bases = cache.linearized_base_contracts.get(&NodeId(425)).unwrap();
     // ERC6909Claims inherits ERC6909 inherits IERC6909Claims
-    assert_eq!(bases, &vec![425, 352, 2806]);
+    assert_eq!(bases, &vec![NodeId(425), NodeId(352), NodeId(2806)]);
 }
 
 #[test]
 fn test_cache_linearized_base_contracts_simple_contract() {
     let cache = load_cache();
     // Owned has no parents — just itself
-    let bases = cache.linearized_base_contracts.get(&59).unwrap();
-    assert_eq!(bases, &vec![59]);
+    let bases = cache.linearized_base_contracts.get(&NodeId(59)).unwrap();
+    assert_eq!(bases, &vec![NodeId(59)]);
 }
 
 // =============================================================================
@@ -2766,8 +2790,8 @@ use solidity_language_server::completion::find_innermost_scope;
 /// Walk scope_parent chain from a given scope, collecting all scope IDs visited.
 fn walk_scope_chain(
     cache: &solidity_language_server::completion::CompletionCache,
-    start: u64,
-) -> Vec<u64> {
+    start: NodeId,
+) -> Vec<NodeId> {
     let mut chain = vec![start];
     let mut current = start;
     loop {
@@ -2794,10 +2818,10 @@ fn walk_scope_chain(
 fn test_innermost_scope_in_swap_body() {
     let cache = load_cache();
     // Byte 9600 is inside swap body block (9580..11071, file 6)
-    let scope = find_innermost_scope(&cache, 9600, 6);
+    let scope = find_innermost_scope(&cache, 9600, FileId(6));
     assert_eq!(
         scope,
-        Some(1166),
+        Some(NodeId(1166)),
         "innermost scope at byte 9600/file 6 should be Block 1166 (swap body)"
     );
 }
@@ -2806,18 +2830,21 @@ fn test_innermost_scope_in_swap_body() {
 fn test_scope_chain_from_swap_body_block() {
     let cache = load_cache();
     // Block 1166 → FnDef 1167 → Contract 1767 → SourceUnit 1768
-    let chain = walk_scope_chain(&cache, 1166);
-    assert_eq!(chain, vec![1166, 1167, 1767, 1768]);
+    let chain = walk_scope_chain(&cache, NodeId(1166));
+    assert_eq!(
+        chain,
+        vec![NodeId(1166), NodeId(1167), NodeId(1767), NodeId(1768)]
+    );
 }
 
 #[test]
 fn test_scope_chain_from_swap_fn() {
     let cache = load_cache();
     // FunctionDefinition 1167 has scope=1767 (PoolManager), which has scope=1768 (SourceUnit)
-    let chain = walk_scope_chain(&cache, 1167);
+    let chain = walk_scope_chain(&cache, NodeId(1167));
     assert_eq!(
         chain,
-        vec![1167, 1767, 1768],
+        vec![NodeId(1167), NodeId(1767), NodeId(1768)],
         "swap fn → PoolManager → SourceUnit"
     );
 }
@@ -2826,7 +2853,7 @@ fn test_scope_chain_from_swap_fn() {
 fn test_swap_body_declarations() {
     let cache = load_cache();
     // Block 1166 (swap body) declares: id, pool, beforeSwapDelta, hookDelta
-    let decls = cache.scope_declarations.get(&1166).unwrap();
+    let decls = cache.scope_declarations.get(&NodeId(1166)).unwrap();
     let names: Vec<&str> = decls.iter().map(|d| d.name.as_str()).collect();
     assert!(names.contains(&"id"), "swap body should declare 'id'");
     assert!(names.contains(&"pool"), "swap body should declare 'pool'");
@@ -2844,7 +2871,7 @@ fn test_swap_body_declarations() {
 fn test_swap_fn_declarations() {
     let cache = load_cache();
     // FunctionDefinition 1167 (swap) has params: key, params, hookData
-    let decls = cache.scope_declarations.get(&1167).unwrap();
+    let decls = cache.scope_declarations.get(&NodeId(1167)).unwrap();
     let names: Vec<&str> = decls.iter().map(|d| d.name.as_str()).collect();
     assert!(names.contains(&"key"), "swap fn should declare param 'key'");
     assert!(
@@ -2860,7 +2887,7 @@ fn test_swap_fn_declarations() {
 #[test]
 fn test_swap_body_local_var_types() {
     let cache = load_cache();
-    let decls = cache.scope_declarations.get(&1166).unwrap();
+    let decls = cache.scope_declarations.get(&NodeId(1166)).unwrap();
     let type_of = |name: &str| {
         decls
             .iter()
@@ -2883,7 +2910,7 @@ fn test_swap_body_local_var_types() {
 #[test]
 fn test_swap_fn_param_types() {
     let cache = load_cache();
-    let decls = cache.scope_declarations.get(&1167).unwrap();
+    let decls = cache.scope_declarations.get(&NodeId(1167)).unwrap();
     let type_of = |name: &str| {
         decls
             .iter()
@@ -2908,10 +2935,10 @@ fn test_swap_fn_param_types() {
 fn test_innermost_scope_in_nested_block() {
     let cache = load_cache();
     // Byte 9900 is inside nested block 1125 (9836..10643) which is inside swap body 1166 (9580..11071)
-    let scope = find_innermost_scope(&cache, 9900, 6);
+    let scope = find_innermost_scope(&cache, 9900, FileId(6));
     assert_eq!(
         scope,
-        Some(1125),
+        Some(NodeId(1125)),
         "innermost scope at byte 9900/file 6 should be nested Block 1125"
     );
 }
@@ -2919,7 +2946,7 @@ fn test_innermost_scope_in_nested_block() {
 #[test]
 fn test_nested_block_declarations() {
     let cache = load_cache();
-    let decls = cache.scope_declarations.get(&1125).unwrap();
+    let decls = cache.scope_declarations.get(&NodeId(1125)).unwrap();
     let names: Vec<&str> = decls.iter().map(|d| d.name.as_str()).collect();
     assert!(names.contains(&"amountToSwap"));
     assert!(names.contains(&"lpFeeOverride"));
@@ -2928,7 +2955,7 @@ fn test_nested_block_declarations() {
 #[test]
 fn test_nested_block_declaration_types() {
     let cache = load_cache();
-    let decls = cache.scope_declarations.get(&1125).unwrap();
+    let decls = cache.scope_declarations.get(&NodeId(1125)).unwrap();
     let type_of = |name: &str| {
         decls
             .iter()
@@ -2943,8 +2970,17 @@ fn test_nested_block_declaration_types() {
 fn test_scope_chain_from_nested_block() {
     let cache = load_cache();
     // Nested Block 1125 → Block 1166 → FnDef 1167 → Contract 1767 → SourceUnit 1768
-    let chain = walk_scope_chain(&cache, 1125);
-    assert_eq!(chain, vec![1125, 1166, 1167, 1767, 1768]);
+    let chain = walk_scope_chain(&cache, NodeId(1125));
+    assert_eq!(
+        chain,
+        vec![
+            NodeId(1125),
+            NodeId(1166),
+            NodeId(1167),
+            NodeId(1767),
+            NodeId(1768)
+        ]
+    );
 }
 
 // --- PoolManager.initialize: byte 6300 in file 6 ---
@@ -2954,10 +2990,10 @@ fn test_scope_chain_from_nested_block() {
 #[test]
 fn test_innermost_scope_in_initialize_body() {
     let cache = load_cache();
-    let scope = find_innermost_scope(&cache, 6300, 6);
+    let scope = find_innermost_scope(&cache, 6300, FileId(6));
     assert_eq!(
         scope,
-        Some(880),
+        Some(NodeId(880)),
         "innermost scope at byte 6300/file 6 should be Block 880 (initialize body)"
     );
 }
@@ -2965,7 +3001,7 @@ fn test_innermost_scope_in_initialize_body() {
 #[test]
 fn test_initialize_body_declarations() {
     let cache = load_cache();
-    let decls = cache.scope_declarations.get(&880).unwrap();
+    let decls = cache.scope_declarations.get(&NodeId(880)).unwrap();
     let names: Vec<&str> = decls.iter().map(|d| d.name.as_str()).collect();
     assert!(names.contains(&"lpFee"));
     assert!(names.contains(&"id"));
@@ -2974,7 +3010,7 @@ fn test_initialize_body_declarations() {
 #[test]
 fn test_initialize_body_declaration_types() {
     let cache = load_cache();
-    let decls = cache.scope_declarations.get(&880).unwrap();
+    let decls = cache.scope_declarations.get(&NodeId(880)).unwrap();
     let type_of = |name: &str| {
         decls
             .iter()
@@ -2988,7 +3024,7 @@ fn test_initialize_body_declaration_types() {
 #[test]
 fn test_initialize_fn_params() {
     let cache = load_cache();
-    let decls = cache.scope_declarations.get(&881).unwrap();
+    let decls = cache.scope_declarations.get(&NodeId(881)).unwrap();
     let type_of = |name: &str| {
         decls
             .iter()
@@ -3006,7 +3042,7 @@ fn test_initialize_fn_params() {
 fn test_resolve_local_var_pool_in_swap_body() {
     let cache = load_cache();
     // "pool" at byte 9600 (swap body, Block 1166) → declared in same block
-    let result = resolve_name_in_scope(&cache, "pool", 9600, 6);
+    let result = resolve_name_in_scope(&cache, "pool", 9600, FileId(6));
     assert_eq!(
         result,
         Some("t_struct$_State_$4809_storage_ptr".to_string())
@@ -3018,7 +3054,7 @@ fn test_resolve_param_key_in_swap_body() {
     let cache = load_cache();
     // "key" at byte 9600 (swap body, Block 1166)
     // Not in Block 1166 declarations. Walks up to FnDef 1167 where "key" is a param.
-    let result = resolve_name_in_scope(&cache, "key", 9600, 6);
+    let result = resolve_name_in_scope(&cache, "key", 9600, FileId(6));
     assert_eq!(
         result,
         Some("t_struct$_PoolKey_$8887_memory_ptr".to_string()),
@@ -3031,7 +3067,7 @@ fn test_resolve_nested_block_sees_own_vars() {
     let cache = load_cache();
     // "amountToSwap" at byte 9900 (nested Block 1125 inside swap)
     // Declared in Block 1125 → found immediately
-    let result = resolve_name_in_scope(&cache, "amountToSwap", 9900, 6);
+    let result = resolve_name_in_scope(&cache, "amountToSwap", 9900, FileId(6));
     assert_eq!(result, Some("t_int256".to_string()));
 }
 
@@ -3040,7 +3076,7 @@ fn test_resolve_nested_block_outer_local_walks_up() {
     let cache = load_cache();
     // "pool" at byte 9900 (nested Block 1125)
     // Not in Block 1125. Walks up to Block 1166 where "pool" is a local var.
-    let result = resolve_name_in_scope(&cache, "pool", 9900, 6);
+    let result = resolve_name_in_scope(&cache, "pool", 9900, FileId(6));
     assert_eq!(
         result,
         Some("t_struct$_State_$4809_storage_ptr".to_string()),
@@ -3053,7 +3089,7 @@ fn test_resolve_state_var_in_function_body() {
     let cache = load_cache();
     // "_pools" at byte 9600 (swap body)
     // Not in Block 1166. Not in FnDef 1167 params. Walks up to ContractDef 1767 state vars.
-    let result = resolve_name_in_scope(&cache, "_pools", 9600, 6);
+    let result = resolve_name_in_scope(&cache, "_pools", 9600, FileId(6));
     assert!(
         result.is_some(),
         "_pools should walk up to contract scope and resolve"
@@ -3068,12 +3104,12 @@ fn test_resolve_state_var_in_function_body() {
 fn test_innermost_scope_in_fn_header() {
     let cache = load_cache();
     // Byte 9500 is after swap fn start (9385) but before body block start (9580)
-    let scope = find_innermost_scope(&cache, 9500, 6);
+    let scope = find_innermost_scope(&cache, 9500, FileId(6));
     // This should find FnDef 1167 as innermost (its range 9385..11071 contains 9500,
     // and Block 1166 range 9580..11071 does NOT contain 9500)
     assert_eq!(
         scope,
-        Some(1167),
+        Some(NodeId(1167)),
         "byte 9500 in fn header should resolve to FnDef 1167, not Block"
     );
 }
@@ -3084,7 +3120,7 @@ fn test_resolve_param_in_fn_header_uses_scope_walk() {
     // At byte 9500, innermost scope is FnDef 1167 (not a Block!)
     // FnDef 1167 has scope_parent → 1767 → 1768. Full chain works.
     // "key" is declared at scope 1167 → found in first scope check.
-    let result = resolve_name_in_scope(&cache, "key", 9500, 6);
+    let result = resolve_name_in_scope(&cache, "key", 9500, FileId(6));
     assert_eq!(
         result,
         Some("t_struct$_PoolKey_$8887_memory_ptr".to_string()),
@@ -3099,7 +3135,7 @@ fn test_resolve_inherited_var_in_fn_header() {
     // "owner" is not in FnDef 1167 or Contract 1767 scope_declarations.
     // But Contract 1767 has linearizedBaseContracts including Owned (59).
     // Owned (59) has "owner" in scope_declarations.
-    let result = resolve_name_in_scope(&cache, "owner", 9500, 6);
+    let result = resolve_name_in_scope(&cache, "owner", 9500, FileId(6));
     assert_eq!(
         result,
         Some("t_address".to_string()),
@@ -3112,7 +3148,7 @@ fn test_resolve_inherited_var_in_fn_header() {
 #[test]
 fn test_pool_manager_state_vars_in_scope_declarations() {
     let cache = load_cache();
-    let decls = cache.scope_declarations.get(&1767).unwrap();
+    let decls = cache.scope_declarations.get(&NodeId(1767)).unwrap();
     let names: Vec<&str> = decls.iter().map(|d| d.name.as_str()).collect();
     assert!(names.contains(&"MAX_TICK_SPACING"));
     assert!(names.contains(&"MIN_TICK_SPACING"));
@@ -3122,7 +3158,7 @@ fn test_pool_manager_state_vars_in_scope_declarations() {
 #[test]
 fn test_owned_state_var_in_scope_declarations() {
     let cache = load_cache();
-    let decls = cache.scope_declarations.get(&59).unwrap();
+    let decls = cache.scope_declarations.get(&NodeId(59)).unwrap();
     let names: Vec<&str> = decls.iter().map(|d| d.name.as_str()).collect();
     assert!(names.contains(&"owner"));
 }
@@ -3130,7 +3166,7 @@ fn test_owned_state_var_in_scope_declarations() {
 #[test]
 fn test_protocol_fees_state_vars_in_scope_declarations() {
     let cache = load_cache();
-    let decls = cache.scope_declarations.get(&1994).unwrap();
+    let decls = cache.scope_declarations.get(&NodeId(1994)).unwrap();
     let names: Vec<&str> = decls.iter().map(|d| d.name.as_str()).collect();
     assert!(names.contains(&"protocolFeesAccrued"));
     assert!(names.contains(&"protocolFeeController"));
@@ -3177,19 +3213,19 @@ fn test_contract_kinds_populated() {
     let cache = load_cache();
     // PoolManager (1767) should be "contract"
     assert_eq!(
-        cache.contract_kinds.get(&1767).map(|s| s.as_str()),
+        cache.contract_kinds.get(&NodeId(1767)).map(|s| s.as_str()),
         Some("contract"),
         "PoolManager should be classified as contract"
     );
     // IHooks (2248) should be "interface"
     assert_eq!(
-        cache.contract_kinds.get(&2248).map(|s| s.as_str()),
+        cache.contract_kinds.get(&NodeId(2248)).map(|s| s.as_str()),
         Some("interface"),
         "IHooks should be classified as interface"
     );
     // FullMath (3250) should be "library"
     assert_eq!(
-        cache.contract_kinds.get(&3250).map(|s| s.as_str()),
+        cache.contract_kinds.get(&NodeId(3250)).map(|s| s.as_str()),
         Some("library"),
         "FullMath should be classified as library"
     );
