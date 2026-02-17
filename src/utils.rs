@@ -117,11 +117,24 @@ pub fn position_to_byte_offset(source: &str, pos: Position) -> usize {
     // 2. Single SIMD-accelerated pass — compute TextIndex for every chunk.
     let chunk_indices = compute_indices(source, &chunk_offsets);
 
-    // 3. Find the last chunk whose line is still before the target line.
-    //    Everything up to that chunk is guaranteed to be before our target.
+    // 3. Find the last chunk that is still at or before the target position.
+    //    Multiple chunks can fall on the same line, so we must also check
+    //    the column to avoid starting past the target.
     let start = chunk_indices
         .iter()
-        .take_while(|ti| ti.line <= pos.line)
+        .take_while(|ti| {
+            if ti.line < pos.line {
+                return true;
+            }
+            if ti.line == pos.line {
+                let col = match enc {
+                    PositionEncoding::Utf8 => ti.col_utf8,
+                    PositionEncoding::Utf16 => ti.col_utf16,
+                };
+                return col <= pos.character;
+            }
+            false
+        })
         .last()
         .copied()
         .unwrap_or(TextIndex::ZERO);
