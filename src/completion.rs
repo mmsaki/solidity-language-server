@@ -1271,21 +1271,29 @@ fn completions_for_type(cache: &CompletionCache, type_id: &str) -> Vec<Completio
         }
     }
 
-    // Add using-for library functions for this type
-    // Try exact match first, then try normalized variants (storage_ptr vs storage vs memory_ptr etc.)
-    let uf_items = lookup_using_for(cache, type_id);
-    for item in &uf_items {
-        if !seen_labels.contains(&item.label) {
-            seen_labels.insert(item.label.clone());
-            items.push(item.clone());
-        }
-    }
+    // Add using-for library functions, but only for value types — not for
+    // contract/library/interface names. When you type `Lock.`, you want Lock's
+    // own members, not functions from `using Pool for *` or `using SafeCast for *`.
+    let is_contract_name = resolved_node_id
+        .map(|nid| cache.contract_kinds.contains_key(&nid))
+        .unwrap_or(false);
 
-    // Add wildcard using-for (using X for *)
-    for item in &cache.using_for_wildcard {
-        if !seen_labels.contains(&item.label) {
-            seen_labels.insert(item.label.clone());
-            items.push(item.clone());
+    if !is_contract_name {
+        // Try exact match first, then try normalized variants (storage_ptr vs storage vs memory_ptr etc.)
+        let uf_items = lookup_using_for(cache, type_id);
+        for item in &uf_items {
+            if !seen_labels.contains(&item.label) {
+                seen_labels.insert(item.label.clone());
+                items.push(item.clone());
+            }
+        }
+
+        // Add wildcard using-for (using X for *)
+        for item in &cache.using_for_wildcard {
+            if !seen_labels.contains(&item.label) {
+                seen_labels.insert(item.label.clone());
+                items.push(item.clone());
+            }
         }
     }
 
