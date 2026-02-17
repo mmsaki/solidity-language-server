@@ -573,10 +573,13 @@ pub fn goto_declaration(
 /// `src` range and compares it to the cursor name. Works on dirty files because the
 /// AST node relationships (referencedDeclaration) are still valid — only the byte
 /// offsets in the current buffer are stale.
+/// `byte_hint` is the cursor's byte offset in the dirty buffer, used to pick
+/// the closest matching node when multiple nodes share the same name (overloads).
 pub fn goto_declaration_by_name(
     cached_build: &CachedBuild,
     file_uri: &Url,
     name: &str,
+    byte_hint: usize,
 ) -> Option<Location> {
     let path = match file_uri.as_ref().starts_with("file://") {
         true => &file_uri.as_ref()[7..],
@@ -588,9 +591,8 @@ pub fn goto_declaration_by_name(
     // Read the built source from disk to extract identifier text at src ranges
     let built_source = std::fs::read_to_string(abs_path).ok()?;
 
-    // Collect all nodes in this file whose source text matches `name` and have
-    // a referencedDeclaration. Pick the narrowest (most specific) match.
-    let mut best: Option<(usize, u64)> = None; // (span_size, ref_id)
+    // Collect all matching nodes: (distance_to_hint, span_size, ref_id)
+    let mut candidates: Vec<(usize, usize, u64)> = Vec::new();
 
     for (_id, node) in current_file_nodes {
         let ref_id = match node.referenced_declaration {
@@ -627,13 +629,23 @@ pub fn goto_declaration_by_name(
             || node_text.ends_with(&format!(".{name}"));
 
         if matches {
-            if best.is_none() || length < best.unwrap().0 {
-                best = Some((length, ref_id));
-            }
+            // Distance from the byte_hint (cursor in dirty buffer) to the
+            // node's src range. The closest node is most likely the one the
+            // cursor is on, even if byte offsets shifted slightly.
+            let distance = if byte_hint >= start && byte_hint < start + length {
+                0 // cursor is inside this node's range
+            } else if byte_hint < start {
+                start - byte_hint
+            } else {
+                byte_hint - (start + length)
+            };
+            candidates.push((distance, length, ref_id));
         }
     }
 
-    let (_span, ref_id) = best?;
+    // Sort by distance (closest to cursor hint), then by span size (narrowest)
+    candidates.sort_by_key(|&(dist, span, _)| (dist, span));
+    let ref_id = candidates.first()?.2;
 
     // Find the declaration node across all files
     let mut target_node: Option<&NodeInfo> = None;

@@ -730,7 +730,10 @@ impl LanguageServer for ForgeLsp {
             // and follow their referencedDeclaration.
             if let Some(ref cb) = cached_build {
                 if let Some(ref name) = cursor_name {
-                    if let Some(location) = goto::goto_declaration_by_name(cb, &uri, name) {
+                    let byte_hint = goto::pos_to_bytes(&source_bytes, position);
+                    if let Some(location) =
+                        goto::goto_declaration_by_name(cb, &uri, name, byte_hint)
+                    {
                         self.client
                             .log_message(
                                 MessageType::INFO,
