@@ -12,11 +12,13 @@ Both methods use tree-sitter to parse Solidity source directly. No `forge build`
 ## Data Source
 
 Previous versions used the Forge combined JSON AST (`forge build --ast --build-info`), which required:
+
 - A valid Foundry project with `foundry.toml`
 - Successful compilation (no symbols if code has errors)
 - Reading files from disk to resolve byte ranges
 
 The tree-sitter approach parses source text directly from the editor's text_cache (or disk fallback for `documentSymbol`). This gives us:
+
 - Instant results — no compilation step
 - Works on broken/incomplete code
 - Consistent with the buffer the user is editing
@@ -142,7 +144,7 @@ For `fallback_receive_definition`, we check the node text for "receive" vs "fall
 
 ## Performance
 
-Benchmarked on `Shop.sol` (v4-core, 10 iterations):
+Benchmarked on `Shop.sol` (10 iterations):
 
 | Method | Forge AST (v0.1.18) | Tree-sitter (v0.1.19) | Improvement |
 |--------|---------------------|----------------------|-------------|
