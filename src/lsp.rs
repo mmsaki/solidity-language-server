@@ -117,10 +117,14 @@ impl ForgeLsp {
                 .await;
         }
 
-        // cache text
+        // cache text — only if no newer version exists (e.g. from formatting/did_change)
         {
             let mut text_cache = self.text_cache.write().await;
-            text_cache.insert(uri.to_string(), (version, params.text));
+            let uri_str = uri.to_string();
+            let existing_version = text_cache.get(&uri_str).map(|(v, _)| *v).unwrap_or(-1);
+            if version >= existing_version {
+                text_cache.insert(uri_str, (version, params.text));
+            }
         }
 
         let mut all_diagnostics = vec![];
@@ -467,9 +471,20 @@ impl LanguageServer for ForgeLsp {
             }
         };
 
-        // If changed, return edit to replace whole document
+        // If changed, update text_cache with formatted content and return edit
         if original_content != formatted_content {
             let end = utils::byte_offset_to_position(&original_content, original_content.len());
+
+            // Update text_cache immediately so goto/hover use the formatted text
+            {
+                let mut text_cache = self.text_cache.write().await;
+                let version = text_cache
+                    .get(&uri.to_string())
+                    .map(|(v, _)| *v)
+                    .unwrap_or(0);
+                text_cache.insert(uri.to_string(), (version, formatted_content.clone()));
+            }
+
             let edit = TextEdit {
                 range: Range {
                     start: Position::default(),
@@ -609,6 +624,31 @@ impl LanguageServer for ForgeLsp {
             None => return Ok(None),
         };
 
+        let source = String::from_utf8_lossy(&source_bytes).into_owned();
+
+        // Try tree-sitter enhanced goto first (works with stale AST)
+        {
+            let cc_cache = self.completion_cache.read().await;
+            let tc_cache = self.text_cache.read().await;
+            if let Some(cc) = cc_cache.values().next() {
+                if let Some(location) =
+                    goto::goto_definition_ts(&source, position, &uri, cc, &tc_cache)
+                {
+                    self.client
+                        .log_message(
+                            MessageType::INFO,
+                            format!(
+                                "found definition (tree-sitter) at {}:{}",
+                                location.uri, location.range.start.line
+                            ),
+                        )
+                        .await;
+                    return Ok(Some(GotoDefinitionResponse::from(location)));
+                }
+            }
+        }
+
+        // Fallback: existing AST-based goto
         let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
         let cached_build = match cached_build {
             Some(cb) => cb,
