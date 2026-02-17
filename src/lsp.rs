@@ -5,6 +5,7 @@ use crate::links;
 use crate::references;
 use crate::rename;
 use crate::runner::{ForgeRunner, Runner};
+use crate::semantic_tokens;
 use crate::symbols;
 use crate::utils;
 use std::collections::HashMap;
@@ -282,6 +283,18 @@ impl LanguageServer for ForgeLsp {
                     },
                 }),
                 document_formatting_provider: Some(OneOf::Left(true)),
+                semantic_tokens_provider: Some(
+                    SemanticTokensServerCapabilities::SemanticTokensOptions(
+                        SemanticTokensOptions {
+                            legend: semantic_tokens::legend(),
+                            full: Some(SemanticTokensFullOptions::Bool(true)),
+                            range: None,
+                            work_done_progress_options: WorkDoneProgressOptions {
+                                work_done_progress: None,
+                            },
+                        },
+                    ),
+                ),
                 text_document_sync: Some(TextDocumentSyncCapability::Options(
                     TextDocumentSyncOptions {
                         will_save: Some(true),
@@ -1131,5 +1144,42 @@ impl LanguageServer for ForgeLsp {
                 .await;
             Ok(Some(result))
         }
+    }
+
+    async fn semantic_tokens_full(
+        &self,
+        params: SemanticTokensParams,
+    ) -> tower_lsp::jsonrpc::Result<Option<SemanticTokensResult>> {
+        self.client
+            .log_message(
+                MessageType::INFO,
+                "got textDocument/semanticTokens/full request",
+            )
+            .await;
+
+        let uri = params.text_document.uri;
+        let source = {
+            let cache = self.text_cache.read().await;
+            cache.get(&uri.to_string()).map(|(_, s)| s.clone())
+        };
+
+        let source = match source {
+            Some(s) => s,
+            None => {
+                // File not open in editor — try reading from disk
+                let file_path = match uri.to_file_path() {
+                    Ok(p) => p,
+                    Err(_) => return Ok(None),
+                };
+                match std::fs::read_to_string(&file_path) {
+                    Ok(s) => s,
+                    Err(_) => return Ok(None),
+                }
+            }
+        };
+
+        let tokens = semantic_tokens::semantic_tokens_full(&source);
+
+        Ok(Some(SemanticTokensResult::Tokens(tokens)))
     }
 }
