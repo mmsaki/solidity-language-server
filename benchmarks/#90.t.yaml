@@ -1,0 +1,27 @@
+# PR #90 — PoolManager.t.sol benchmark (solc vs installed)
+# Only init + diagnostics — other methods timeout on forge-only baseline
+# Usage: cargo build --release && lsp-bench -c benchmarks/#90.t.yaml
+project: v4-core
+file: test/PoolManager.t.sol
+line: 3
+col: 8
+
+iterations: 1
+warmup: 0
+timeout: 30
+index_timeout: 60
+output: benchmarks/#90
+report: benchmarks/#90/report.t.md
+
+benchmarks:
+  - initialize
+  - textDocument/diagnostic
+
+servers:
+  - label: "#90"
+    description: PR #90 — solc AST + diagnostics (default)
+    cmd: ./target/release/solidity-language-server
+
+  - label: v0.1.20
+    description: Installed release (forge-only)
+    cmd: solidity-language-server

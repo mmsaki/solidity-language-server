@@ -1,0 +1,38 @@
+# PR #90 — Shop.sol benchmark (all servers)
+# Usage: cargo build --release && lsp-bench -c benchmarks/#90.yaml
+project: example
+file: Shop.sol
+line: 30
+col: 12
+
+iterations: 3
+warmup: 1
+timeout: 30
+index_timeout: 30
+output: benchmarks/#90
+report: benchmarks/#90/report.md
+
+benchmarks:
+  - initialize
+  - textDocument/diagnostic
+  - textDocument/definition
+  - textDocument/declaration
+  - textDocument/hover
+  - textDocument/references
+  - textDocument/completion
+  - textDocument/rename
+  - textDocument/prepareRename
+  - textDocument/documentSymbol
+  - textDocument/documentLink
+  - textDocument/formatting
+  - textDocument/semanticTokens/full
+  - workspace/symbol
+
+servers:
+  - label: "#90"
+    description: PR #90 — solc AST + diagnostics (default)
+    cmd: ./target/release/solidity-language-server
+
+  - label: v0.1.20
+    description: Installed release (forge-only)
+    cmd: solidity-language-server
