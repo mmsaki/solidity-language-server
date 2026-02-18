@@ -96,7 +96,7 @@ impl ForgeLsp {
         // On solc failure, fall back to the forge-based pipeline.
         let (lint_result, build_result, ast_result) = if self.use_solc {
             let foundry_cfg = self.foundry_config.read().await.clone();
-            let solc_future = crate::solc::solc_ast(path_str, &foundry_cfg);
+            let solc_future = crate::solc::solc_ast(path_str, &foundry_cfg, Some(&self.client));
 
             if should_lint {
                 let (lint, solc) =
@@ -340,7 +340,7 @@ impl ForgeLsp {
         let path_str = file_path.to_str()?;
         let ast_result = if self.use_solc {
             let foundry_cfg = self.foundry_config.read().await.clone();
-            match crate::solc::solc_ast(path_str, &foundry_cfg).await {
+            match crate::solc::solc_ast(path_str, &foundry_cfg, Some(&self.client)).await {
                 Ok(data) => Ok(data),
                 Err(_) => self.compiler.ast(path_str).await,
             }
