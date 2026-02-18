@@ -5,7 +5,7 @@
 [![Release](https://github.com/mmsaki/solidity-language-server/actions/workflows/release.yml/badge.svg)](https://github.com/mmsaki/solidity-language-server/actions/workflows/release.yml)
 [![GitHub Release](https://img.shields.io/github/v/release/mmsaki/solidity-language-server)](https://github.com/mmsaki/solidity-language-server/releases/latest)
 
-The fastest Solidity language server — go-to-definition, references, rename, completions, hover, and more, powered by Foundry's AST. See [benchmarks](https://github.com/mmsaki/solidity-lsp-benchmarks).
+The fastest Solidity language server — go-to-definition, references, rename, completions, hover, and more. See [benchmarks](https://github.com/mmsaki/solidity-lsp-benchmarks).
 
 ## Features
 
