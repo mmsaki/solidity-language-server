@@ -769,13 +769,13 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
                 && let Some(methods_obj) = methods.as_object()
             {
                 let mut items: Vec<CompletionItem> = Vec::new();
-                for (signature, selector) in methods_obj {
+                for (signature, selector_val) in methods_obj {
                     // signature is e.g. "swap((address,address,uint24,int24,address),(bool,int256,uint160),bytes)"
-                    // selector is e.g. "f3cd914c"
+                    // selector_val is e.g. "f3cd914c"
                     let fn_name = signature.split('(').next().unwrap_or(signature).to_string();
-                    let selector_str = selector
+                    let selector_str = selector_val
                         .as_str()
-                        .map(|s| format!("0x{}", s))
+                        .map(|s| crate::types::FuncSelector::new(s).to_prefixed())
                         .unwrap_or_default();
 
                     // Look up the AST signature with parameter names

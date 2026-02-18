@@ -5,7 +5,627 @@ use tower_lsp::lsp_types::{Hover, HoverContents, MarkupContent, MarkupKind, Posi
 use crate::gas::{self, GasIndex};
 use crate::goto::{CHILD_KEYS, cache_ids, pos_to_bytes};
 use crate::references::{byte_to_decl_via_external_refs, byte_to_id};
-use crate::types::NodeId;
+use crate::types::{EventSelector, FuncSelector, MethodId, NodeId, Selector};
+
+// ── DocIndex — pre-built userdoc/devdoc lookup ─────────────────────────────
+
+/// Merged documentation from solc userdoc + devdoc for a single declaration.
+#[derive(Debug, Clone, Default)]
+pub struct DocEntry {
+    /// `@notice` from userdoc.
+    pub notice: Option<String>,
+    /// `@dev` / `details` from devdoc.
+    pub details: Option<String>,
+    /// `@param` descriptions from devdoc, keyed by parameter name.
+    pub params: Vec<(String, String)>,
+    /// `@return` descriptions from devdoc, keyed by return name.
+    pub returns: Vec<(String, String)>,
+    /// `@title` from devdoc (contract-level only).
+    pub title: Option<String>,
+    /// `@author` from devdoc (contract-level only).
+    pub author: Option<String>,
+}
+
+/// Key for looking up documentation in the [`DocIndex`].
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum DocKey {
+    /// 4-byte selector for functions, public variables, and errors.
+    Func(FuncSelector),
+    /// 32-byte topic hash for events.
+    Event(EventSelector),
+    /// Contract-level docs, keyed by `"path:Name"`.
+    Contract(String),
+    /// State variable docs, keyed by `"path:ContractName:varName"`.
+    StateVar(String),
+    /// Fallback for methods without a selector (shouldn't happen, but safe).
+    Method(String),
+}
+
+/// Pre-built documentation index from solc contract output.
+///
+/// Keyed by [`DocKey`] for type-safe lookup from AST nodes.
+pub type DocIndex = HashMap<DocKey, DocEntry>;
+
+/// Build a documentation index from normalized AST output.
+///
+/// Iterates over `contracts[path][name]` and merges userdoc + devdoc
+/// into `DocEntry` values keyed for fast lookup from AST nodes.
+pub fn build_doc_index(ast_data: &Value) -> DocIndex {
+    let mut index = DocIndex::new();
+
+    let contracts = match ast_data.get("contracts").and_then(|c| c.as_object()) {
+        Some(c) => c,
+        None => return index,
+    };
+
+    for (path, names) in contracts {
+        let names_obj = match names.as_object() {
+            Some(n) => n,
+            None => continue,
+        };
+
+        for (name, contract) in names_obj {
+            let userdoc = contract.get("userdoc");
+            let devdoc = contract.get("devdoc");
+            let method_ids = contract
+                .get("evm")
+                .and_then(|e| e.get("methodIdentifiers"))
+                .and_then(|m| m.as_object());
+
+            // Build canonical_sig → selector for userdoc/devdoc key lookups
+            let sig_to_selector: HashMap<&str, &str> = method_ids
+                .map(|mi| {
+                    mi.iter()
+                        .filter_map(|(sig, sel)| sel.as_str().map(|s| (sig.as_str(), s)))
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            // ── Contract-level docs ──
+            let mut contract_entry = DocEntry::default();
+            if let Some(ud) = userdoc {
+                contract_entry.notice = ud
+                    .get("notice")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+            }
+            if let Some(dd) = devdoc {
+                contract_entry.title = dd
+                    .get("title")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                contract_entry.details = dd
+                    .get("details")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                contract_entry.author = dd
+                    .get("author")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+            }
+            if contract_entry.notice.is_some()
+                || contract_entry.title.is_some()
+                || contract_entry.details.is_some()
+            {
+                let key = DocKey::Contract(format!("{path}:{name}"));
+                index.insert(key, contract_entry);
+            }
+
+            // ── Method docs (functions + public state variable getters) ──
+            let ud_methods = userdoc
+                .and_then(|u| u.get("methods"))
+                .and_then(|m| m.as_object());
+            let dd_methods = devdoc
+                .and_then(|d| d.get("methods"))
+                .and_then(|m| m.as_object());
+
+            // Collect all canonical sigs from both userdoc and devdoc methods
+            let mut all_sigs: Vec<&str> = Vec::new();
+            if let Some(um) = ud_methods {
+                all_sigs.extend(um.keys().map(|k| k.as_str()));
+            }
+            if let Some(dm) = dd_methods {
+                for k in dm.keys() {
+                    if !all_sigs.contains(&k.as_str()) {
+                        all_sigs.push(k.as_str());
+                    }
+                }
+            }
+
+            for sig in &all_sigs {
+                let mut entry = DocEntry::default();
+
+                // userdoc notice
+                if let Some(um) = ud_methods
+                    && let Some(method) = um.get(*sig)
+                {
+                    entry.notice = method
+                        .get("notice")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                }
+
+                // devdoc details + params + returns
+                if let Some(dm) = dd_methods
+                    && let Some(method) = dm.get(*sig)
+                {
+                    entry.details = method
+                        .get("details")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+
+                    if let Some(params) = method.get("params").and_then(|p| p.as_object()) {
+                        for (pname, pdesc) in params {
+                            if let Some(desc) = pdesc.as_str() {
+                                entry.params.push((pname.clone(), desc.to_string()));
+                            }
+                        }
+                    }
+
+                    if let Some(returns) = method.get("returns").and_then(|r| r.as_object()) {
+                        for (rname, rdesc) in returns {
+                            if let Some(desc) = rdesc.as_str() {
+                                entry.returns.push((rname.clone(), desc.to_string()));
+                            }
+                        }
+                    }
+                }
+
+                if entry.notice.is_none()
+                    && entry.details.is_none()
+                    && entry.params.is_empty()
+                    && entry.returns.is_empty()
+                {
+                    continue;
+                }
+
+                // Key by selector (for AST node matching)
+                if let Some(selector) = sig_to_selector.get(sig) {
+                    let key = DocKey::Func(FuncSelector::new(*selector));
+                    index.insert(key, entry);
+                } else {
+                    // No selector (shouldn't happen for methods, but be safe)
+                    // Key by function name for fallback matching
+                    let fn_name = sig.split('(').next().unwrap_or(sig);
+                    let key = DocKey::Method(format!("{path}:{name}:{fn_name}"));
+                    index.insert(key, entry);
+                }
+            }
+
+            // ── Error docs ──
+            let ud_errors = userdoc
+                .and_then(|u| u.get("errors"))
+                .and_then(|e| e.as_object());
+            let dd_errors = devdoc
+                .and_then(|d| d.get("errors"))
+                .and_then(|e| e.as_object());
+
+            let mut all_error_sigs: Vec<&str> = Vec::new();
+            if let Some(ue) = ud_errors {
+                all_error_sigs.extend(ue.keys().map(|k| k.as_str()));
+            }
+            if let Some(de) = dd_errors {
+                for k in de.keys() {
+                    if !all_error_sigs.contains(&k.as_str()) {
+                        all_error_sigs.push(k.as_str());
+                    }
+                }
+            }
+
+            for sig in &all_error_sigs {
+                let mut entry = DocEntry::default();
+
+                // userdoc: errors are arrays of { notice }
+                if let Some(ue) = ud_errors
+                    && let Some(arr) = ue.get(*sig).and_then(|v| v.as_array())
+                    && let Some(first) = arr.first()
+                {
+                    entry.notice = first
+                        .get("notice")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                }
+
+                // devdoc: errors are also arrays
+                if let Some(de) = dd_errors
+                    && let Some(arr) = de.get(*sig).and_then(|v| v.as_array())
+                    && let Some(first) = arr.first()
+                {
+                    entry.details = first
+                        .get("details")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    if let Some(params) = first.get("params").and_then(|p| p.as_object()) {
+                        for (pname, pdesc) in params {
+                            if let Some(desc) = pdesc.as_str() {
+                                entry.params.push((pname.clone(), desc.to_string()));
+                            }
+                        }
+                    }
+                }
+
+                if entry.notice.is_none() && entry.details.is_none() && entry.params.is_empty() {
+                    continue;
+                }
+
+                // Compute 4-byte error selector from the canonical signature
+                // errorSelector = keccak256(sig)[0..4]
+                let selector = FuncSelector::new(compute_selector(sig));
+                index.insert(DocKey::Func(selector), entry);
+            }
+
+            // ── Event docs ──
+            let ud_events = userdoc
+                .and_then(|u| u.get("events"))
+                .and_then(|e| e.as_object());
+            let dd_events = devdoc
+                .and_then(|d| d.get("events"))
+                .and_then(|e| e.as_object());
+
+            let mut all_event_sigs: Vec<&str> = Vec::new();
+            if let Some(ue) = ud_events {
+                all_event_sigs.extend(ue.keys().map(|k| k.as_str()));
+            }
+            if let Some(de) = dd_events {
+                for k in de.keys() {
+                    if !all_event_sigs.contains(&k.as_str()) {
+                        all_event_sigs.push(k.as_str());
+                    }
+                }
+            }
+
+            for sig in &all_event_sigs {
+                let mut entry = DocEntry::default();
+
+                if let Some(ue) = ud_events
+                    && let Some(ev) = ue.get(*sig)
+                {
+                    entry.notice = ev
+                        .get("notice")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                }
+
+                if let Some(de) = dd_events
+                    && let Some(ev) = de.get(*sig)
+                {
+                    entry.details = ev
+                        .get("details")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    if let Some(params) = ev.get("params").and_then(|p| p.as_object()) {
+                        for (pname, pdesc) in params {
+                            if let Some(desc) = pdesc.as_str() {
+                                entry.params.push((pname.clone(), desc.to_string()));
+                            }
+                        }
+                    }
+                }
+
+                if entry.notice.is_none() && entry.details.is_none() && entry.params.is_empty() {
+                    continue;
+                }
+
+                // Event topic = full keccak256 hash of canonical signature
+                let topic = EventSelector::new(compute_event_topic(sig));
+                index.insert(DocKey::Event(topic), entry);
+            }
+
+            // ── State variable docs (from devdoc) ──
+            if let Some(dd) = devdoc
+                && let Some(state_vars) = dd.get("stateVariables").and_then(|s| s.as_object())
+            {
+                for (var_name, var_doc) in state_vars {
+                    let mut entry = DocEntry::default();
+                    entry.details = var_doc
+                        .get("details")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+
+                    if let Some(returns) = var_doc.get("return").and_then(|v| v.as_str()) {
+                        entry.returns.push(("_0".to_string(), returns.to_string()));
+                    }
+                    if let Some(returns) = var_doc.get("returns").and_then(|r| r.as_object()) {
+                        for (rname, rdesc) in returns {
+                            if let Some(desc) = rdesc.as_str() {
+                                entry.returns.push((rname.clone(), desc.to_string()));
+                            }
+                        }
+                    }
+
+                    if entry.details.is_some() || !entry.returns.is_empty() {
+                        let key = DocKey::StateVar(format!("{path}:{name}:{var_name}"));
+                        index.insert(key, entry);
+                    }
+                }
+            }
+        }
+    }
+
+    index
+}
+
+/// Compute a 4-byte function/error selector from a canonical ABI signature.
+///
+/// `keccak256("transfer(address,uint256)")` → first 4 bytes as hex.
+fn compute_selector(sig: &str) -> String {
+    use tiny_keccak::{Hasher, Keccak};
+    let mut hasher = Keccak::v256();
+    hasher.update(sig.as_bytes());
+    let mut output = [0u8; 32];
+    hasher.finalize(&mut output);
+    hex::encode(&output[..4])
+}
+
+/// Compute a full 32-byte event topic from a canonical ABI signature.
+///
+/// `keccak256("Transfer(address,address,uint256)")` → full hash as hex.
+fn compute_event_topic(sig: &str) -> String {
+    use tiny_keccak::{Hasher, Keccak};
+    let mut hasher = Keccak::v256();
+    hasher.update(sig.as_bytes());
+    let mut output = [0u8; 32];
+    hasher.finalize(&mut output);
+    hex::encode(output)
+}
+
+/// Look up documentation for an AST declaration node from the DocIndex.
+///
+/// Returns a cloned DocEntry since key construction is dynamic.
+pub fn lookup_doc_entry(
+    doc_index: &DocIndex,
+    decl_node: &Value,
+    sources: &Value,
+) -> Option<DocEntry> {
+    let node_type = decl_node.get("nodeType").and_then(|v| v.as_str())?;
+
+    match node_type {
+        "FunctionDefinition" | "VariableDeclaration" => {
+            // Try by functionSelector first
+            if let Some(selector) = decl_node.get("functionSelector").and_then(|v| v.as_str()) {
+                let key = DocKey::Func(FuncSelector::new(selector));
+                if let Some(entry) = doc_index.get(&key) {
+                    return Some(entry.clone());
+                }
+            }
+
+            // For state variables without selector, try statevar key
+            if node_type == "VariableDeclaration" {
+                let var_name = decl_node.get("name").and_then(|v| v.as_str())?;
+                // Find containing contract via scope
+                let scope_id = decl_node.get("scope").and_then(|v| v.as_u64())?;
+                let scope_node = find_node_by_id(sources, NodeId(scope_id))?;
+                let contract_name = scope_node.get("name").and_then(|v| v.as_str())?;
+
+                // Need to find the path — walk source units
+                let path = find_source_path_for_node(sources, scope_id)?;
+                let key = DocKey::StateVar(format!("{path}:{contract_name}:{var_name}"));
+                if let Some(entry) = doc_index.get(&key) {
+                    return Some(entry.clone());
+                }
+            }
+
+            // Fallback: try method by name
+            let fn_name = decl_node.get("name").and_then(|v| v.as_str())?;
+            let scope_id = decl_node.get("scope").and_then(|v| v.as_u64())?;
+            let scope_node = find_node_by_id(sources, NodeId(scope_id))?;
+            let contract_name = scope_node.get("name").and_then(|v| v.as_str())?;
+            let path = find_source_path_for_node(sources, scope_id)?;
+            let key = DocKey::Method(format!("{path}:{contract_name}:{fn_name}"));
+            doc_index.get(&key).cloned()
+        }
+        "ErrorDefinition" => {
+            if let Some(selector) = decl_node.get("errorSelector").and_then(|v| v.as_str()) {
+                let key = DocKey::Func(FuncSelector::new(selector));
+                return doc_index.get(&key).cloned();
+            }
+            None
+        }
+        "EventDefinition" => {
+            if let Some(selector) = decl_node.get("eventSelector").and_then(|v| v.as_str()) {
+                let key = DocKey::Event(EventSelector::new(selector));
+                return doc_index.get(&key).cloned();
+            }
+            None
+        }
+        "ContractDefinition" => {
+            let contract_name = decl_node.get("name").and_then(|v| v.as_str())?;
+            // Find the source path for this contract
+            let node_id = decl_node.get("id").and_then(|v| v.as_u64())?;
+            let path = find_source_path_for_node(sources, node_id)?;
+            let key = DocKey::Contract(format!("{path}:{contract_name}"));
+            doc_index.get(&key).cloned()
+        }
+        _ => None,
+    }
+}
+
+/// Look up documentation for a parameter from its parent function/error/event.
+///
+/// When hovering a `VariableDeclaration` that is a parameter or return value,
+/// this walks up to the parent declaration (via `scope`) and extracts the
+/// relevant `@param` or `@return` entry for this specific name.
+///
+/// Tries the DocIndex first (structured devdoc), then falls back to parsing
+/// the raw AST `documentation` field.
+pub fn lookup_param_doc(
+    doc_index: &DocIndex,
+    decl_node: &Value,
+    sources: &Value,
+) -> Option<String> {
+    let node_type = decl_node.get("nodeType").and_then(|v| v.as_str())?;
+    if node_type != "VariableDeclaration" {
+        return None;
+    }
+
+    let param_name = decl_node.get("name").and_then(|v| v.as_str())?;
+    if param_name.is_empty() {
+        return None;
+    }
+
+    // Walk up to the parent via scope
+    let scope_id = decl_node.get("scope").and_then(|v| v.as_u64())?;
+    let parent_node = find_node_by_id(sources, NodeId(scope_id))?;
+    let parent_type = parent_node.get("nodeType").and_then(|v| v.as_str())?;
+
+    // Only handle function/error/event parents
+    if !matches!(
+        parent_type,
+        "FunctionDefinition" | "ErrorDefinition" | "EventDefinition" | "ModifierDefinition"
+    ) {
+        return None;
+    }
+
+    // Determine if this param is an input parameter or a return value
+    let is_return = if parent_type == "FunctionDefinition" {
+        parent_node
+            .get("returnParameters")
+            .and_then(|rp| rp.get("parameters"))
+            .and_then(|p| p.as_array())
+            .map(|arr| {
+                let decl_id = decl_node.get("id").and_then(|v| v.as_u64());
+                arr.iter()
+                    .any(|p| p.get("id").and_then(|v| v.as_u64()) == decl_id)
+            })
+            .unwrap_or(false)
+    } else {
+        false
+    };
+
+    // Try DocIndex first (structured devdoc)
+    if let Some(parent_doc) = lookup_doc_entry(doc_index, parent_node, sources) {
+        if is_return {
+            // Look in returns
+            for (rname, rdesc) in &parent_doc.returns {
+                if rname == param_name {
+                    return Some(rdesc.clone());
+                }
+            }
+        } else {
+            // Look in params
+            for (pname, pdesc) in &parent_doc.params {
+                if pname == param_name {
+                    return Some(pdesc.clone());
+                }
+            }
+        }
+    }
+
+    // Fallback: parse raw AST documentation on the parent
+    if let Some(doc_text) = extract_documentation(parent_node) {
+        // Resolve @inheritdoc if present
+        let resolved = if doc_text.contains("@inheritdoc") {
+            resolve_inheritdoc(sources, parent_node, &doc_text)
+        } else {
+            None
+        };
+        let text = resolved.as_deref().unwrap_or(&doc_text);
+
+        let tag = if is_return { "@return " } else { "@param " };
+        for line in text.lines() {
+            let trimmed = line.trim().trim_start_matches('*').trim();
+            if let Some(rest) = trimmed.strip_prefix(tag) {
+                if let Some((name, desc)) = rest.split_once(' ') {
+                    if name == param_name {
+                        return Some(desc.to_string());
+                    }
+                } else if rest == param_name {
+                    return Some(String::new());
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Find the source file path that contains a given node id.
+fn find_source_path_for_node(sources: &Value, target_id: u64) -> Option<String> {
+    let sources_obj = sources.as_object()?;
+    for (path, source_data) in sources_obj {
+        let ast = source_data.get("ast")?;
+        // Check if this source unit contains the node (check source unit id first)
+        let source_id = ast.get("id").and_then(|v| v.as_u64())?;
+        if source_id == target_id {
+            return Some(path.clone());
+        }
+
+        // Check nodes in this source
+        if let Some(nodes) = ast.get("nodes").and_then(|n| n.as_array()) {
+            for node in nodes {
+                if let Some(id) = node.get("id").and_then(|v| v.as_u64())
+                    && id == target_id
+                {
+                    return Some(path.clone());
+                }
+                // Check one more level (functions inside contracts)
+                if let Some(sub_nodes) = node.get("nodes").and_then(|n| n.as_array()) {
+                    for sub in sub_nodes {
+                        if let Some(id) = sub.get("id").and_then(|v| v.as_u64())
+                            && id == target_id
+                        {
+                            return Some(path.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Format a `DocEntry` as markdown for hover display.
+pub fn format_doc_entry(entry: &DocEntry) -> String {
+    let mut lines: Vec<String> = Vec::new();
+
+    // Title (contract-level)
+    if let Some(title) = &entry.title {
+        lines.push(format!("**{title}**"));
+        lines.push(String::new());
+    }
+
+    // Notice (@notice)
+    if let Some(notice) = &entry.notice {
+        lines.push(notice.clone());
+    }
+
+    // Author
+    if let Some(author) = &entry.author {
+        lines.push(format!("*@author {author}*"));
+    }
+
+    // Details (@dev)
+    if let Some(details) = &entry.details {
+        lines.push(String::new());
+        lines.push("**@dev**".to_string());
+        lines.push(format!("*{details}*"));
+    }
+
+    // Parameters (@param)
+    if !entry.params.is_empty() {
+        lines.push(String::new());
+        lines.push("**Parameters:**".to_string());
+        for (name, desc) in &entry.params {
+            lines.push(format!("- `{name}` — {desc}"));
+        }
+    }
+
+    // Returns (@return)
+    if !entry.returns.is_empty() {
+        lines.push(String::new());
+        lines.push("**Returns:**".to_string());
+        for (name, desc) in &entry.returns {
+            if name.starts_with('_') && name.len() <= 3 {
+                // Unnamed return (e.g. "_0") — just show description
+                lines.push(format!("- {desc}"));
+            } else {
+                lines.push(format!("- `{name}` — {desc}"));
+            }
+        }
+    }
+
+    lines.join("\n")
+}
 
 /// Find the raw AST node with the given id by walking all sources.
 pub fn find_node_by_id(sources: &Value, target_id: NodeId) -> Option<&Value> {
@@ -52,26 +672,24 @@ pub fn extract_documentation(node: &Value) -> Option<String> {
 }
 
 /// Extract the selector from a declaration node.
-/// Returns (selector_hex, selector_kind) where kind is "function", "error", or "event".
-pub fn extract_selector(node: &Value) -> Option<(String, &'static str)> {
+///
+/// Returns a [`Selector`] — either a 4-byte [`FuncSelector`] (for functions,
+/// public variables, and errors) or a 32-byte [`EventSelector`] (for events).
+pub fn extract_selector(node: &Value) -> Option<Selector> {
     let node_type = node.get("nodeType").and_then(|v| v.as_str())?;
     match node_type {
-        "FunctionDefinition" => node
+        "FunctionDefinition" | "VariableDeclaration" => node
             .get("functionSelector")
             .and_then(|v| v.as_str())
-            .map(|s| (s.to_string(), "function")),
-        "VariableDeclaration" => node
-            .get("functionSelector")
-            .and_then(|v| v.as_str())
-            .map(|s| (s.to_string(), "function")),
+            .map(|s| Selector::Func(FuncSelector::new(s))),
         "ErrorDefinition" => node
             .get("errorSelector")
             .and_then(|v| v.as_str())
-            .map(|s| (s.to_string(), "error")),
+            .map(|s| Selector::Func(FuncSelector::new(s))),
         "EventDefinition" => node
             .get("eventSelector")
             .and_then(|v| v.as_str())
-            .map(|s| (s.to_string(), "event")),
+            .map(|s| Selector::Event(EventSelector::new(s))),
         _ => None,
     }
 }
@@ -98,7 +716,7 @@ pub fn resolve_inheritdoc<'a>(
         .trim();
 
     // Get the selector from the implementation function
-    let (impl_selector, _) = extract_selector(decl_node)?;
+    let impl_selector = extract_selector(decl_node)?;
 
     // Get the scope (containing contract id)
     let scope_id = decl_node.get("scope").and_then(|v| v.as_u64())?;
@@ -130,7 +748,7 @@ pub fn resolve_inheritdoc<'a>(
     // Search parent's children for matching selector
     let parent_nodes = parent_contract.get("nodes").and_then(|v| v.as_array())?;
     for child in parent_nodes {
-        if let Some((child_selector, _)) = extract_selector(child)
+        if let Some(child_selector) = extract_selector(child)
             && child_selector == impl_selector
         {
             return extract_documentation(child);
@@ -428,7 +1046,8 @@ fn gas_hover_for_function(
 
     // Try by selector first (external/public functions)
     if let Some(selector) = decl_node.get("functionSelector").and_then(|v| v.as_str())
-        && let Some((_contract, cost)) = gas::gas_by_selector(gas_index, selector)
+        && let Some((_contract, cost)) =
+            gas::gas_by_selector(gas_index, &FuncSelector::new(selector))
     {
         return Some(format!("Gas: `{}`", gas::format_gas(cost)));
     }
@@ -480,21 +1099,15 @@ fn gas_hover_for_contract(
     }
 
     // External function gas
-    if !contract_gas.external.is_empty() {
+    if !contract_gas.external_by_sig.is_empty() {
         lines.push(String::new());
         lines.push("**Function Gas**".to_string());
 
-        // Collect only signature entries (skip raw selector entries)
-        let mut fns: Vec<(&String, &String)> = contract_gas
-            .external
-            .iter()
-            .filter(|(k, _)| k.contains('('))
-            .collect();
-        fns.sort_by_key(|(k, _)| (*k).clone());
+        let mut fns: Vec<(&MethodId, &String)> = contract_gas.external_by_sig.iter().collect();
+        fns.sort_by_key(|(k, _)| k.as_str().to_string());
 
         for (sig, cost) in fns {
-            let fn_name = sig.split('(').next().unwrap_or(sig);
-            lines.push(format!("- `{fn_name}`: `{}`", gas::format_gas(cost)));
+            lines.push(format!("- `{}`: `{}`", sig.name(), gas::format_gas(cost)));
         }
     }
 
@@ -512,6 +1125,7 @@ pub fn hover_info(
     position: Position,
     source_bytes: &[u8],
     gas_index: &GasIndex,
+    doc_index: &DocIndex,
 ) -> Option<Hover> {
     let sources = ast_data.get("sources")?;
     let source_id_to_path = ast_data
@@ -571,11 +1185,8 @@ pub fn hover_info(
     }
 
     // Selector (function, error, or event)
-    if let Some((selector, kind)) = extract_selector(decl_node) {
-        match kind {
-            "event" => parts.push(format!("Selector: `0x{selector}`")),
-            _ => parts.push(format!("Selector: `0x{selector}`")),
-        }
+    if let Some(selector) = extract_selector(decl_node) {
+        parts.push(format!("Selector: `{}`", selector.to_prefixed()));
     }
 
     // Gas estimates
@@ -587,12 +1198,22 @@ pub fn hover_info(
         }
     }
 
-    // Documentation — resolve @inheritdoc via selector matching
-    if let Some(doc_text) = extract_documentation(decl_node) {
+    // Documentation — try userdoc/devdoc first, fall back to AST docs
+    if let Some(doc_entry) = lookup_doc_entry(doc_index, decl_node, sources) {
+        let formatted = format_doc_entry(&doc_entry);
+        if !formatted.is_empty() {
+            parts.push(format!("---\n{formatted}"));
+        }
+    } else if let Some(doc_text) = extract_documentation(decl_node) {
         let inherited_doc = resolve_inheritdoc(sources, decl_node, &doc_text);
         let formatted = format_natspec(&doc_text, inherited_doc.as_deref());
         if !formatted.is_empty() {
             parts.push(format!("---\n{formatted}"));
+        }
+    } else if let Some(param_doc) = lookup_param_doc(doc_index, decl_node, sources) {
+        // Parameter/return value — show the @param/@return description from parent
+        if !param_doc.is_empty() {
+            parts.push(format!("---\n{param_doc}"));
         }
     }
 
@@ -824,9 +1445,9 @@ mod tests {
         let sources = ast.get("sources").unwrap();
         // PoolManager.swap (id=1167) has functionSelector "f3cd914c"
         let node = find_node_by_id(sources, NodeId(1167)).unwrap();
-        let (selector, kind) = extract_selector(node).unwrap();
-        assert_eq!(selector, "f3cd914c");
-        assert_eq!(kind, "function");
+        let selector = extract_selector(node).unwrap();
+        assert_eq!(selector, Selector::Func(FuncSelector::new("f3cd914c")));
+        assert_eq!(selector.as_hex(), "f3cd914c");
     }
 
     #[test]
@@ -835,9 +1456,9 @@ mod tests {
         let sources = ast.get("sources").unwrap();
         // DelegateCallNotAllowed (id=508) has errorSelector
         let node = find_node_by_id(sources, NodeId(508)).unwrap();
-        let (selector, kind) = extract_selector(node).unwrap();
-        assert_eq!(selector, "0d89438e");
-        assert_eq!(kind, "error");
+        let selector = extract_selector(node).unwrap();
+        assert_eq!(selector, Selector::Func(FuncSelector::new("0d89438e")));
+        assert_eq!(selector.as_hex(), "0d89438e");
     }
 
     #[test]
@@ -846,9 +1467,9 @@ mod tests {
         let sources = ast.get("sources").unwrap();
         // OwnershipTransferred (id=8) has eventSelector
         let node = find_node_by_id(sources, NodeId(8)).unwrap();
-        let (selector, kind) = extract_selector(node).unwrap();
-        assert!(selector.len() == 64); // 32-byte keccak hash
-        assert_eq!(kind, "event");
+        let selector = extract_selector(node).unwrap();
+        assert!(matches!(selector, Selector::Event(_)));
+        assert_eq!(selector.as_hex().len(), 64); // 32-byte keccak hash
     }
 
     #[test]
@@ -857,9 +1478,8 @@ mod tests {
         let sources = ast.get("sources").unwrap();
         // owner (id=10) is public, has functionSelector
         let node = find_node_by_id(sources, NodeId(10)).unwrap();
-        let (selector, kind) = extract_selector(node).unwrap();
-        assert_eq!(selector, "8da5cb5b");
-        assert_eq!(kind, "function");
+        let selector = extract_selector(node).unwrap();
+        assert_eq!(selector, Selector::Func(FuncSelector::new("8da5cb5b")));
     }
 
     #[test]
@@ -939,5 +1559,537 @@ mod tests {
         assert!(!formatted.contains("@inheritdoc"));
         assert!(formatted.contains("Swap against the given pool"));
         assert!(formatted.contains("**Parameters:**"));
+    }
+
+    // --- Parameter/return doc tests ---
+
+    #[test]
+    fn test_param_doc_error_parameter() {
+        let ast = load_test_ast();
+        let sources = ast.get("sources").unwrap();
+        let doc_index = build_doc_index(&ast);
+
+        // PriceLimitAlreadyExceeded.sqrtPriceCurrentX96 (id=4760)
+        let param_node = find_node_by_id(sources, NodeId(4760)).unwrap();
+        assert_eq!(
+            param_node.get("name").and_then(|v| v.as_str()),
+            Some("sqrtPriceCurrentX96")
+        );
+
+        let doc = lookup_param_doc(&doc_index, param_node, sources).unwrap();
+        assert!(
+            doc.contains("invalid"),
+            "should describe the invalid price: {doc}"
+        );
+    }
+
+    #[test]
+    fn test_param_doc_error_second_parameter() {
+        let ast = load_test_ast();
+        let sources = ast.get("sources").unwrap();
+        let doc_index = build_doc_index(&ast);
+
+        // PriceLimitAlreadyExceeded.sqrtPriceLimitX96 (id=4762)
+        let param_node = find_node_by_id(sources, NodeId(4762)).unwrap();
+        let doc = lookup_param_doc(&doc_index, param_node, sources).unwrap();
+        assert!(
+            doc.contains("surpassed price limit"),
+            "should describe the surpassed limit: {doc}"
+        );
+    }
+
+    #[test]
+    fn test_param_doc_function_return_value() {
+        let ast = load_test_ast();
+        let sources = ast.get("sources").unwrap();
+        let doc_index = build_doc_index(&ast);
+
+        // Pool.modifyLiquidity return param "delta" (id=4994)
+        let param_node = find_node_by_id(sources, NodeId(4994)).unwrap();
+        assert_eq!(
+            param_node.get("name").and_then(|v| v.as_str()),
+            Some("delta")
+        );
+
+        let doc = lookup_param_doc(&doc_index, param_node, sources).unwrap();
+        assert!(
+            doc.contains("deltas of the token balances"),
+            "should have return doc: {doc}"
+        );
+    }
+
+    #[test]
+    fn test_param_doc_function_input_parameter() {
+        let ast = load_test_ast();
+        let sources = ast.get("sources").unwrap();
+        let doc_index = build_doc_index(&ast);
+
+        // Pool.modifyLiquidity input param "params" (id 4992 or similar)
+        // Find it via the function's parameters
+        let fn_node = find_node_by_id(sources, NodeId(5310)).unwrap();
+        let params_arr = fn_node
+            .get("parameters")
+            .and_then(|p| p.get("parameters"))
+            .and_then(|p| p.as_array())
+            .unwrap();
+        let params_param = params_arr
+            .iter()
+            .find(|p| p.get("name").and_then(|v| v.as_str()) == Some("params"))
+            .unwrap();
+
+        let doc = lookup_param_doc(&doc_index, params_param, sources).unwrap();
+        assert!(
+            doc.contains("position details"),
+            "should have param doc: {doc}"
+        );
+    }
+
+    #[test]
+    fn test_param_doc_inherited_function_via_docindex() {
+        let ast = load_test_ast();
+        let sources = ast.get("sources").unwrap();
+        let doc_index = build_doc_index(&ast);
+
+        // PoolManager.swap `key` param (id=1029) — parent has @inheritdoc IPoolManager
+        // The DocIndex should have the resolved devdoc from IPoolManager
+        let param_node = find_node_by_id(sources, NodeId(1029)).unwrap();
+        assert_eq!(param_node.get("name").and_then(|v| v.as_str()), Some("key"));
+
+        let doc = lookup_param_doc(&doc_index, param_node, sources).unwrap();
+        assert!(
+            doc.contains("pool to swap"),
+            "should have inherited param doc: {doc}"
+        );
+    }
+
+    #[test]
+    fn test_param_doc_non_parameter_returns_none() {
+        let ast = load_test_ast();
+        let sources = ast.get("sources").unwrap();
+        let doc_index = build_doc_index(&ast);
+
+        // PoolManager contract (id=1767) is not a parameter
+        let node = find_node_by_id(sources, NodeId(1767)).unwrap();
+        assert!(lookup_param_doc(&doc_index, node, sources).is_none());
+    }
+
+    // ── DocIndex integration tests (poolmanager.json) ──
+
+    fn load_solc_fixture() -> Value {
+        let data = std::fs::read_to_string("poolmanager.json").expect("test fixture");
+        let raw: Value = serde_json::from_str(&data).expect("valid json");
+        crate::solc::normalize_solc_output(raw)
+    }
+
+    #[test]
+    fn test_doc_index_is_not_empty() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+        assert!(!index.is_empty(), "DocIndex should contain entries");
+    }
+
+    #[test]
+    fn test_doc_index_has_contract_entries() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // PoolManager has both title and notice
+        let pm_keys: Vec<_> = index
+            .keys()
+            .filter(|k| matches!(k, DocKey::Contract(s) if s.contains("PoolManager")))
+            .collect();
+        assert!(
+            !pm_keys.is_empty(),
+            "should have a Contract entry for PoolManager"
+        );
+
+        let pm_key = DocKey::Contract(
+            "/Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/PoolManager.sol:PoolManager".to_string(),
+        );
+        let entry = index.get(&pm_key).expect("PoolManager contract entry");
+        assert_eq!(entry.title.as_deref(), Some("PoolManager"));
+        assert_eq!(
+            entry.notice.as_deref(),
+            Some("Holds the state for all pools")
+        );
+    }
+
+    #[test]
+    fn test_doc_index_has_function_by_selector() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // initialize selector = 6276cbbe
+        let init_key = DocKey::Func(FuncSelector::new("6276cbbe"));
+        let entry = index
+            .get(&init_key)
+            .expect("should have initialize by selector");
+        assert_eq!(
+            entry.notice.as_deref(),
+            Some("Initialize the state for a given pool ID")
+        );
+        assert!(
+            entry
+                .details
+                .as_deref()
+                .unwrap_or("")
+                .contains("MAX_SWAP_FEE"),
+            "devdoc details should mention MAX_SWAP_FEE"
+        );
+        // params: key, sqrtPriceX96
+        let param_names: Vec<&str> = entry.params.iter().map(|(n, _)| n.as_str()).collect();
+        assert!(param_names.contains(&"key"), "should have param 'key'");
+        assert!(
+            param_names.contains(&"sqrtPriceX96"),
+            "should have param 'sqrtPriceX96'"
+        );
+        // returns: tick
+        let return_names: Vec<&str> = entry.returns.iter().map(|(n, _)| n.as_str()).collect();
+        assert!(return_names.contains(&"tick"), "should have return 'tick'");
+    }
+
+    #[test]
+    fn test_doc_index_swap_by_selector() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // swap selector = f3cd914c
+        let swap_key = DocKey::Func(FuncSelector::new("f3cd914c"));
+        let entry = index.get(&swap_key).expect("should have swap by selector");
+        assert!(
+            entry
+                .notice
+                .as_deref()
+                .unwrap_or("")
+                .contains("Swap against the given pool"),
+            "swap notice should describe swapping"
+        );
+        // devdoc params: key, params, hookData
+        assert!(
+            !entry.params.is_empty(),
+            "swap should have param documentation"
+        );
+    }
+
+    #[test]
+    fn test_doc_index_settle_by_selector() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // settle() selector = 11da60b4
+        let key = DocKey::Func(FuncSelector::new("11da60b4"));
+        let entry = index.get(&key).expect("should have settle by selector");
+        assert!(
+            entry.notice.is_some(),
+            "settle should have a notice from userdoc"
+        );
+    }
+
+    #[test]
+    fn test_doc_index_has_error_entries() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // AlreadyUnlocked() → keccak256("AlreadyUnlocked()")[0..4]
+        let selector = compute_selector("AlreadyUnlocked()");
+        let key = DocKey::Func(FuncSelector::new(&selector));
+        let entry = index.get(&key).expect("should have AlreadyUnlocked error");
+        assert!(
+            entry
+                .notice
+                .as_deref()
+                .unwrap_or("")
+                .contains("already unlocked"),
+            "AlreadyUnlocked notice: {:?}",
+            entry.notice
+        );
+    }
+
+    #[test]
+    fn test_doc_index_error_with_params() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // CurrenciesOutOfOrderOrEqual(address,address) has a notice
+        let selector = compute_selector("CurrenciesOutOfOrderOrEqual(address,address)");
+        let key = DocKey::Func(FuncSelector::new(&selector));
+        let entry = index
+            .get(&key)
+            .expect("should have CurrenciesOutOfOrderOrEqual error");
+        assert!(entry.notice.is_some(), "error should have notice");
+    }
+
+    #[test]
+    fn test_doc_index_has_event_entries() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // Count event entries
+        let event_count = index
+            .keys()
+            .filter(|k| matches!(k, DocKey::Event(_)))
+            .count();
+        assert!(event_count > 0, "should have event entries in the DocIndex");
+    }
+
+    #[test]
+    fn test_doc_index_swap_event() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // Swap event topic = keccak256("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)")
+        let topic =
+            compute_event_topic("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)");
+        let key = DocKey::Event(EventSelector::new(&topic));
+        let entry = index.get(&key).expect("should have Swap event");
+
+        // userdoc notice
+        assert!(
+            entry
+                .notice
+                .as_deref()
+                .unwrap_or("")
+                .contains("swaps between currency0 and currency1"),
+            "Swap event notice: {:?}",
+            entry.notice
+        );
+
+        // devdoc params (amount0, amount1, id, sender, sqrtPriceX96, etc.)
+        let param_names: Vec<&str> = entry.params.iter().map(|(n, _)| n.as_str()).collect();
+        assert!(
+            param_names.contains(&"amount0"),
+            "should have param 'amount0'"
+        );
+        assert!(
+            param_names.contains(&"sender"),
+            "should have param 'sender'"
+        );
+        assert!(param_names.contains(&"id"), "should have param 'id'");
+    }
+
+    #[test]
+    fn test_doc_index_initialize_event() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        let topic = compute_event_topic(
+            "Initialize(bytes32,address,address,uint24,int24,address,uint160,int24)",
+        );
+        let key = DocKey::Event(EventSelector::new(&topic));
+        let entry = index.get(&key).expect("should have Initialize event");
+        assert!(
+            !entry.params.is_empty(),
+            "Initialize event should have param docs"
+        );
+    }
+
+    #[test]
+    fn test_doc_index_no_state_variables_for_pool_manager() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // PoolManager has no devdoc.stateVariables, so no StateVar keys for it
+        let sv_count = index
+            .keys()
+            .filter(|k| matches!(k, DocKey::StateVar(s) if s.contains("PoolManager")))
+            .count();
+        assert_eq!(
+            sv_count, 0,
+            "PoolManager should have no state variable doc entries"
+        );
+    }
+
+    #[test]
+    fn test_doc_index_multiple_contracts() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // Should have contract entries for multiple contracts (ERC6909, Extsload, IPoolManager, etc.)
+        let contract_count = index
+            .keys()
+            .filter(|k| matches!(k, DocKey::Contract(_)))
+            .count();
+        assert!(
+            contract_count >= 5,
+            "should have at least 5 contract-level entries, got {contract_count}"
+        );
+    }
+
+    #[test]
+    fn test_doc_index_func_key_count() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        let func_count = index
+            .keys()
+            .filter(|k| matches!(k, DocKey::Func(_)))
+            .count();
+        // We have methods + errors keyed by selector across all 43 contracts
+        assert!(
+            func_count >= 30,
+            "should have at least 30 Func entries (methods + errors), got {func_count}"
+        );
+    }
+
+    #[test]
+    fn test_doc_index_format_initialize_entry() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        let key = DocKey::Func(FuncSelector::new("6276cbbe"));
+        let entry = index.get(&key).expect("initialize entry");
+        let formatted = format_doc_entry(entry);
+
+        assert!(
+            formatted.contains("Initialize the state for a given pool ID"),
+            "formatted should include notice"
+        );
+        assert!(
+            formatted.contains("**@dev**"),
+            "formatted should include dev section"
+        );
+        assert!(
+            formatted.contains("**Parameters:**"),
+            "formatted should include parameters"
+        );
+        assert!(
+            formatted.contains("`key`"),
+            "formatted should include key param"
+        );
+        assert!(
+            formatted.contains("**Returns:**"),
+            "formatted should include returns"
+        );
+        assert!(
+            formatted.contains("`tick`"),
+            "formatted should include tick return"
+        );
+    }
+
+    #[test]
+    fn test_doc_index_format_contract_entry() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        let key = DocKey::Contract(
+            "/Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/PoolManager.sol:PoolManager".to_string(),
+        );
+        let entry = index.get(&key).expect("PoolManager contract entry");
+        let formatted = format_doc_entry(entry);
+
+        assert!(
+            formatted.contains("**PoolManager**"),
+            "should include bold title"
+        );
+        assert!(
+            formatted.contains("Holds the state for all pools"),
+            "should include notice"
+        );
+    }
+
+    #[test]
+    fn test_doc_index_inherited_docs_resolved() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // Both PoolManager and IPoolManager define methods with the same selector.
+        // The last one written wins (PoolManager overwrites IPoolManager for same selector).
+        // Either way, swap(f3cd914c) should have full docs, not just "@inheritdoc".
+        let key = DocKey::Func(FuncSelector::new("f3cd914c"));
+        let entry = index.get(&key).expect("swap entry");
+        // The notice should be the resolved text, not "@inheritdoc IPoolManager"
+        let notice = entry.notice.as_deref().unwrap_or("");
+        assert!(
+            !notice.contains("@inheritdoc"),
+            "userdoc/devdoc should have resolved inherited docs, not raw @inheritdoc"
+        );
+    }
+
+    #[test]
+    fn test_compute_selector_known_values() {
+        // keccak256("AlreadyUnlocked()") first 4 bytes
+        let sel = compute_selector("AlreadyUnlocked()");
+        assert_eq!(sel.len(), 8, "selector should be 8 hex chars");
+
+        // Verify against a known selector from evm.methodIdentifiers
+        let init_sel =
+            compute_selector("initialize((address,address,uint24,int24,address),uint160)");
+        assert_eq!(
+            init_sel, "6276cbbe",
+            "computed initialize selector should match evm.methodIdentifiers"
+        );
+    }
+
+    #[test]
+    fn test_compute_event_topic_length() {
+        let topic =
+            compute_event_topic("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)");
+        assert_eq!(
+            topic.len(),
+            64,
+            "event topic should be 64 hex chars (32 bytes)"
+        );
+    }
+
+    #[test]
+    fn test_doc_index_error_count_poolmanager() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // PoolManager userdoc has 14 errors. Check that they're all indexed.
+        // Compute selectors for all 14 error signatures and verify they exist.
+        let error_sigs = [
+            "AlreadyUnlocked()",
+            "CurrenciesOutOfOrderOrEqual(address,address)",
+            "CurrencyNotSettled()",
+            "InvalidCaller()",
+            "ManagerLocked()",
+            "MustClearExactPositiveDelta()",
+            "NonzeroNativeValue()",
+            "PoolNotInitialized()",
+            "ProtocolFeeCurrencySynced()",
+            "ProtocolFeeTooLarge(uint24)",
+            "SwapAmountCannotBeZero()",
+            "TickSpacingTooLarge(int24)",
+            "TickSpacingTooSmall(int24)",
+            "UnauthorizedDynamicLPFeeUpdate()",
+        ];
+        let mut found = 0;
+        for sig in &error_sigs {
+            let selector = compute_selector(sig);
+            let key = DocKey::Func(FuncSelector::new(&selector));
+            if index.contains_key(&key) {
+                found += 1;
+            }
+        }
+        assert_eq!(
+            found,
+            error_sigs.len(),
+            "all 14 PoolManager errors should be in the DocIndex"
+        );
+    }
+
+    #[test]
+    fn test_doc_index_extsload_overloads_have_different_selectors() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // Three extsload overloads should each have their own selector entry
+        // extsload(bytes32) = 1e2eaeaf
+        // extsload(bytes32,uint256) = 35fd631a
+        // extsload(bytes32[]) = dbd035ff
+        let sel1 = DocKey::Func(FuncSelector::new("1e2eaeaf"));
+        let sel2 = DocKey::Func(FuncSelector::new("35fd631a"));
+        let sel3 = DocKey::Func(FuncSelector::new("dbd035ff"));
+
+        assert!(index.contains_key(&sel1), "extsload(bytes32) should exist");
+        assert!(
+            index.contains_key(&sel2),
+            "extsload(bytes32,uint256) should exist"
+        );
+        assert!(
+            index.contains_key(&sel3),
+            "extsload(bytes32[]) should exist"
+        );
     }
 }

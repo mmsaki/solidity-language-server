@@ -609,9 +609,9 @@ fn ts_gas_hint_for_function(
 
     let prefix = format!("{fn_name}(");
     let cost = contract_gas
-        .external
+        .external_by_sig
         .iter()
-        .find(|(sig, _)| sig.starts_with(&prefix))
+        .find(|(sig, _)| sig.as_str().starts_with(&prefix))
         .map(|(_, c)| c.as_str())
         .or_else(|| {
             contract_gas
