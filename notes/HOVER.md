@@ -197,6 +197,142 @@ Swap against the given pool
 - `swapDelta` — The balance delta of the address swapping
 ````
 
+## userdoc/devdoc DocIndex
+
+Instead of only relying on raw AST `documentation` text (which requires manual `@inheritdoc` resolution), we now also consume solc's pre-resolved `userdoc` and `devdoc` from contract output. These are already requested in `outputSelection` and contain fully resolved documentation — `@inheritdoc` is handled by the compiler.
+
+### What solc provides
+
+**userdoc** — user-facing docs keyed by canonical ABI signature:
+```json
+{
+  "notice": "Holds the state for all pools",
+  "methods": {
+    "swap((address,address,uint24,int24,address),(bool,int256,uint160),bytes)": {
+      "notice": "Swap against the given pool"
+    }
+  },
+  "events": { "Swap(bytes32,address,...)": { "notice": "..." } },
+  "errors": { "AlreadyUnlocked()": [{ "notice": "..." }] }
+}
+```
+
+**devdoc** — developer docs with params and returns:
+```json
+{
+  "title": "PoolManager",
+  "methods": {
+    "swap(...)": {
+      "details": "Swapping on low liquidity pools...",
+      "params": { "key": "The pool to swap in", ... },
+      "returns": { "swapDelta": "The balance delta..." }
+    }
+  },
+  "stateVariables": { "MAX_TICK_SPACING": { "details": "..." } }
+}
+```
+
+### DocIndex construction (`build_doc_index`)
+
+At `CachedBuild::new()` time, we iterate `contracts[path][name]` and merge userdoc + devdoc into `DocEntry` values. Each entry is keyed by a typed `DocKey`:
+
+| DocKey variant | Key source | Example |
+|---------------|------------|---------|
+| `DocKey::Func(FuncSelector)` | `evm.methodIdentifiers` for methods, `keccak256(sig)[0..4]` for errors | `Func("f3cd914c")` |
+| `DocKey::Event(EventSelector)` | `keccak256(sig)` full hash | `Event("40e9cecb...")` |
+| `DocKey::Contract(String)` | `"path:Name"` | `Contract("src/PoolManager.sol:PoolManager")` |
+| `DocKey::StateVar(String)` | `"path:Contract:var"` | `StateVar("src/Pool.sol:Pool:MAX_TICK")` |
+| `DocKey::Method(String)` | fallback `"path:Contract:fnName"` | `Method("src/Foo.sol:Foo:bar")` |
+
+### Matching strategy
+
+userdoc/devdoc keys use canonical ABI signatures (`swap((address,address,uint24,int24,address),...)`) while AST nodes use Solidity types (`struct PoolKey`). We bridge this via `evm.methodIdentifiers`:
+
+```
+methodIdentifiers: { "swap((address,...),bytes)": "f3cd914c" }
+                                                      │
+AST node: { functionSelector: "f3cd914c" } ───────────┘
+```
+
+For errors: we compute `keccak256(canonical_sig)[0..4]` to get the selector.
+For events: we compute the full `keccak256(canonical_sig)` topic hash.
+
+### Lookup order in `hover_info()`
+
+1. **DocIndex** (`lookup_doc_entry`) — structured devdoc/userdoc, pre-resolved `@inheritdoc`
+2. **AST documentation** (`extract_documentation` + `resolve_inheritdoc`) — raw NatSpec text
+3. **Parameter docs** (`lookup_param_doc`) — walks up to parent, extracts `@param`/`@return`
+
+## Parameter and Return Value Documentation
+
+When hovering a parameter or return value — whether at its declaration site or any usage inside the function body — we show the `@param`/`@return` description from the parent function's documentation.
+
+### How it works
+
+1. **Cursor resolves to the declaration node** — when you hover `key` used inside the swap body, the AST `Identifier` node has `referencedDeclaration` pointing to the `VariableDeclaration` parameter. `hover_info()` follows this at line `let decl_id = node_info.referenced_declaration.unwrap_or(node_id)`, so `decl_node` is always the parameter's declaration regardless of hover location.
+
+2. **Walk up via `scope`** — the parameter's `VariableDeclaration` has `scope` pointing to the parent `FunctionDefinition`, `ErrorDefinition`, or `EventDefinition`:
+   ```json
+   { "id": 1029, "name": "key", "nodeType": "VariableDeclaration", "scope": 1167 }
+   ```
+   Where `scope: 1167` is `PoolManager.swap`.
+
+3. **Determine param kind** — check if the declaration ID appears in `returnParameters.parameters[]` (return value) or `parameters.parameters[]` (input param).
+
+4. **Extract the doc** — two resolution paths:
+   - **DocIndex path**: look up the parent function's `DocEntry` by selector → extract matching `params["key"]` or `returns["delta"]` entry. This handles `@inheritdoc` automatically because solc already resolved it.
+   - **AST fallback**: parse the parent's raw `documentation.text`, resolve `@inheritdoc` if present, scan for `@param key ...` or `@return delta ...` lines.
+
+### Examples
+
+Hovering `sqrtPriceCurrentX96` in `error PriceLimitAlreadyExceeded(uint160 sqrtPriceCurrentX96, ...)`:
+````
+```solidity
+uint160 sqrtPriceCurrentX96
+```
+
+---
+The invalid, already surpassed sqrtPriceLimitX96
+````
+
+Hovering `key` anywhere inside `PoolManager.swap()` body (resolved from `@inheritdoc IPoolManager`):
+````
+```solidity
+struct PoolKey memory key
+```
+
+---
+The pool to swap in
+````
+
+Hovering `delta` in `returns (BalanceDelta delta, BalanceDelta feeDelta)`:
+````
+```solidity
+BalanceDelta internal delta
+```
+
+---
+the deltas of the token balances of the pool, from the liquidity change
+````
+
+## Typed Selectors
+
+Raw hex selector strings are wrapped in newtypes defined in `src/types.rs`:
+
+| Type | Width | Source | Example |
+|------|-------|--------|---------|
+| `FuncSelector` | 4 bytes (8 hex chars) | AST `functionSelector`, `errorSelector` | `FuncSelector::new("f3cd914c")` |
+| `EventSelector` | 32 bytes (64 hex chars) | AST `eventSelector` | `EventSelector::new("8be0079c...")` |
+| `Selector` | enum | `extract_selector()` return | `Selector::Func(...)`, `Selector::Event(...)` |
+| `MethodId` | variable | `evm.methodIdentifiers` keys, userdoc/devdoc keys | `MethodId::new("swap((address,...),bytes)")` |
+
+These prevent mixing up selectors with other strings and make the data flow self-documenting:
+- `gas_by_selector()` takes `&FuncSelector` (not `&str`)
+- `ContractGas.external_by_selector` is `HashMap<FuncSelector, String>` (not `HashMap<String, String>`)
+- `DocKey::Func(FuncSelector)` vs `DocKey::Event(EventSelector)` — can't accidentally use a 4-byte selector to look up an event
+
+Display helpers: `selector.as_hex()` → `"f3cd914c"`, `selector.to_prefixed()` → `"0xf3cd914c"`.
+
 ## NatSpec Tag Handling
 
 | Tag | Rendering |
@@ -252,19 +388,60 @@ cat pool-manager-ast.json | jq '.. | objects | select(.eventSelector != null) | 
 
 # Verify selector matching between implementation and interface
 cat pool-manager-ast.json | jq '.. | objects | select(.name == "extsload" and .nodeType == "FunctionDefinition") | {id, name, functionSelector, scope}'
+
+# userdoc/devdoc from solc contract output (poolmanager.json)
+PM='.contracts["/Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/PoolManager.sol"]["PoolManager"]'
+
+# List all userdoc method keys (canonical ABI signatures)
+cat poolmanager.json | jq "$PM.userdoc.methods | keys"
+
+# View userdoc notice for swap
+cat poolmanager.json | jq "$PM.userdoc.methods[\"swap((address,address,uint24,int24,address),(bool,int256,uint160),bytes)\"]"
+
+# View devdoc for swap (details, params, returns)
+cat poolmanager.json | jq "$PM.devdoc.methods[\"swap((address,address,uint24,int24,address),(bool,int256,uint160),bytes)\"]"
+
+# Contract-level userdoc/devdoc
+cat poolmanager.json | jq "$PM.userdoc | {kind, notice}"
+cat poolmanager.json | jq "$PM.devdoc | {kind, title, details, author}"
+
+# methodIdentifiers (bridges ABI sigs to 4-byte selectors)
+cat poolmanager.json | jq "$PM.evm.methodIdentifiers"
+
+# All error docs (userdoc errors are arrays)
+cat poolmanager.json | jq "$PM.userdoc.errors"
+
+# All event docs with params
+cat poolmanager.json | jq "$PM.devdoc.events"
+
+# State variable docs
+cat poolmanager.json | jq "$PM.devdoc.stateVariables"
+
+# List all contracts in solc output
+cat poolmanager.json | jq '[.contracts | to_entries[] | {path: .key, contracts: (.value | keys)}]'
+
+# Parameter scope → parent function (pool-manager-ast.json)
+cat pool-manager-ast.json | jq '.. | objects | select(.id == 1029) | {id, name, scope}'
+# Then check the parent
+cat pool-manager-ast.json | jq '.. | objects | select(.id == 1167) | {id, name, nodeType}'
 ```
 
 ## Performance
 
 - Uses `ast_cache` (Arc-based) — no forge calls on hover
+- `DocIndex` and `GasIndex` are built once at `CachedBuild::new()` time
 - `find_node_by_id` walks the AST once per hover request
-- `resolve_inheritdoc` calls `find_node_by_id` up to 2 more times (scope contract + parent contract)
-- `cache_ids` is called per request (same as goto/references) — could be cached in future
+- `lookup_doc_entry` is a HashMap lookup by selector — O(1)
+- `lookup_param_doc` does one `find_node_by_id` for the parent + one `lookup_doc_entry`
+- `resolve_inheritdoc` (fallback path) calls `find_node_by_id` up to 2 more times
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `src/hover.rs` | `hover_info()`, `find_node_by_id()`, `extract_documentation()`, `extract_selector()`, `resolve_inheritdoc()`, `format_natspec()`, `build_function_signature()` |
-| `src/lsp.rs` | `hover` handler, `hover_provider` capability |
-| `src/lib.rs` | Module registration |
+| `src/hover.rs` | `hover_info()`, `find_node_by_id()`, `extract_documentation()`, `extract_selector()`, `resolve_inheritdoc()`, `format_natspec()`, `build_function_signature()`, `build_doc_index()`, `lookup_doc_entry()`, `lookup_param_doc()`, `format_doc_entry()`, `compute_selector()`, `compute_event_topic()` |
+| `src/types.rs` | `FuncSelector`, `EventSelector`, `Selector`, `MethodId` |
+| `src/gas.rs` | `ContractGas` (uses `FuncSelector` and `MethodId`), `gas_by_selector()` |
+| `src/goto.rs` | `CachedBuild` — stores `doc_index` field |
+| `src/lsp.rs` | `hover` handler, passes `doc_index` to `hover_info()` |
+| `src/completion.rs` | Uses `FuncSelector::to_prefixed()` for selector display |

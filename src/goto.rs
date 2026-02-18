@@ -112,6 +112,9 @@ pub struct CachedBuild {
     /// Pre-built hint lookup per file. Built once, reused on every
     /// inlay hint request (avoids O(n²) declaration resolution per request).
     pub hint_index: crate::inlay_hints::HintIndex,
+    /// Pre-built documentation index from solc userdoc/devdoc.
+    /// Merged and keyed by selector for fast hover lookup.
+    pub doc_index: crate::hover::DocIndex,
     /// The text_cache version this build was created from.
     /// Used to detect dirty files (unsaved edits since last build).
     pub build_version: i32,
@@ -149,6 +152,8 @@ impl CachedBuild {
             HashMap::new()
         };
 
+        let doc_index = crate::hover::build_doc_index(&ast);
+
         Self {
             ast,
             nodes,
@@ -157,6 +162,7 @@ impl CachedBuild {
             id_to_path_map,
             gas_index,
             hint_index,
+            doc_index,
             build_version,
         }
     }

@@ -7,6 +7,8 @@
 use serde_json::Value;
 use std::collections::HashMap;
 
+use crate::types::{FuncSelector, MethodId};
+
 /// Emoji prefix for gas estimate labels (inlay hints, code lens).
 pub const GAS_ICON: &str = "\u{1f525}";
 
@@ -15,8 +17,10 @@ pub const GAS_ICON: &str = "\u{1f525}";
 pub struct ContractGas {
     /// Deploy costs: `codeDepositCost`, `executionCost`, `totalCost`.
     pub creation: HashMap<String, String>,
-    /// External function gas: selector → gas cost.
-    pub external: HashMap<String, String>,
+    /// External function gas keyed by 4-byte selector.
+    pub external_by_selector: HashMap<FuncSelector, String>,
+    /// External function gas keyed by ABI signature (for display).
+    pub external_by_sig: HashMap<MethodId, String>,
     /// Internal function gas: signature → gas cost.
     pub internal: HashMap<String, String>,
 }
@@ -84,11 +88,13 @@ pub fn build_gas_index(ast_data: &Value) -> GasIndex {
                     // Store by selector for fast AST node lookup
                     if let Some(selector) = sig_to_selector.get(sig.as_str()) {
                         contract_gas
-                            .external
-                            .insert(selector.to_string(), cost.clone());
+                            .external_by_selector
+                            .insert(FuncSelector::new(*selector), cost.clone());
                     }
                     // Also store by signature for display
-                    contract_gas.external.insert(sig.clone(), cost);
+                    contract_gas
+                        .external_by_sig
+                        .insert(MethodId::new(sig.clone()), cost);
                 }
             }
 
@@ -108,10 +114,13 @@ pub fn build_gas_index(ast_data: &Value) -> GasIndex {
     index
 }
 
-/// Look up gas cost for a function by its selector (external functions).
-pub fn gas_by_selector<'a>(index: &'a GasIndex, selector: &str) -> Option<(&'a str, &'a str)> {
+/// Look up gas cost for a function by its [`FuncSelector`] (external functions).
+pub fn gas_by_selector<'a>(
+    index: &'a GasIndex,
+    selector: &FuncSelector,
+) -> Option<(&'a str, &'a str)> {
     for (contract_key, gas) in index {
-        if let Some(cost) = gas.external.get(selector) {
+        if let Some(cost) = gas.external_by_selector.get(selector) {
             return Some((contract_key.as_str(), cost.as_str()));
         }
     }
@@ -300,9 +309,19 @@ mod tests {
         assert_eq!(foo.creation.get("executionCost").unwrap(), "infinite");
 
         // External — by selector
-        assert_eq!(foo.external.get("abcd1234").unwrap(), "109");
+        assert_eq!(
+            foo.external_by_selector
+                .get(&FuncSelector::new("abcd1234"))
+                .unwrap(),
+            "109"
+        );
         // External — by signature
-        assert_eq!(foo.external.get("bar(uint256)").unwrap(), "109");
+        assert_eq!(
+            foo.external_by_sig
+                .get(&MethodId::new("bar(uint256)"))
+                .unwrap(),
+            "109"
+        );
 
         // Internal
         assert_eq!(foo.internal.get("_baz(uint256)").unwrap(), "50");
@@ -328,7 +347,7 @@ mod tests {
         });
 
         let index = build_gas_index(&data);
-        let (contract, cost) = gas_by_selector(&index, "abcd1234").unwrap();
+        let (contract, cost) = gas_by_selector(&index, &FuncSelector::new("abcd1234")).unwrap();
         assert_eq!(contract, "src/Foo.sol:Foo");
         assert_eq!(cost, "109");
     }
@@ -420,7 +439,7 @@ mod tests {
 
         // External functions
         assert!(
-            !pm.external.is_empty(),
+            !pm.external_by_selector.is_empty(),
             "should have external function gas estimates"
         );
 
@@ -437,7 +456,7 @@ mod tests {
         let index = build_gas_index(&ast);
 
         // owner() has selector "8da5cb5b" (well-known)
-        let result = gas_by_selector(&index, "8da5cb5b");
+        let result = gas_by_selector(&index, &FuncSelector::new("8da5cb5b"));
         assert!(result.is_some(), "should find owner() by selector");
         let (contract, cost) = result.unwrap();
         assert!(

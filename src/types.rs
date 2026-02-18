@@ -68,6 +68,158 @@ impl std::fmt::Display for FileId {
     }
 }
 
+// ── Selector types ─────────────────────────────────────────────────────────
+
+/// 4-byte function selector (`keccak256(signature)[0..4]`).
+///
+/// Used for external/public functions, public state variable getters,
+/// and custom errors. Stored as 8-char lowercase hex without `0x` prefix,
+/// matching the format solc uses in AST `functionSelector` / `errorSelector`
+/// fields and in `evm.methodIdentifiers` values.
+///
+/// # Examples
+/// ```ignore
+/// FuncSelector::new("f3cd914c")   // PoolManager.swap
+/// FuncSelector::new("8da5cb5b")   // Ownable.owner
+/// FuncSelector::new("0d89438e")   // DelegateCallNotAllowed error
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FuncSelector(String);
+
+impl FuncSelector {
+    /// Wrap a raw 8-char hex string (no `0x` prefix).
+    pub fn new(hex: impl Into<String>) -> Self {
+        Self(hex.into())
+    }
+
+    /// The raw hex string (no `0x` prefix), e.g. `"f3cd914c"`.
+    pub fn as_hex(&self) -> &str {
+        &self.0
+    }
+
+    /// Display with `0x` prefix, e.g. `"0xf3cd914c"`.
+    pub fn to_prefixed(&self) -> String {
+        format!("0x{}", self.0)
+    }
+}
+
+impl std::fmt::Display for FuncSelector {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// 32-byte event topic (`keccak256(signature)`).
+///
+/// Used for events. Stored as 64-char lowercase hex without `0x` prefix,
+/// matching the format solc uses in the AST `eventSelector` field.
+///
+/// # Examples
+/// ```ignore
+/// EventSelector::new("8be0079c...") // OwnershipTransferred
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct EventSelector(String);
+
+impl EventSelector {
+    /// Wrap a raw 64-char hex string (no `0x` prefix).
+    pub fn new(hex: impl Into<String>) -> Self {
+        Self(hex.into())
+    }
+
+    /// The raw hex string (no `0x` prefix).
+    pub fn as_hex(&self) -> &str {
+        &self.0
+    }
+
+    /// Display with `0x` prefix.
+    pub fn to_prefixed(&self) -> String {
+        format!("0x{}", self.0)
+    }
+}
+
+impl std::fmt::Display for EventSelector {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// A selector extracted from an AST declaration node.
+///
+/// Unifies [`FuncSelector`] (functions, errors, public variables) and
+/// [`EventSelector`] (events) into a single enum so callers can handle
+/// both with one match.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Selector {
+    /// 4-byte selector for functions, public variables, and errors.
+    Func(FuncSelector),
+    /// 32-byte topic hash for events.
+    Event(EventSelector),
+}
+
+impl Selector {
+    /// The raw hex string (no `0x` prefix).
+    pub fn as_hex(&self) -> &str {
+        match self {
+            Selector::Func(s) => s.as_hex(),
+            Selector::Event(s) => s.as_hex(),
+        }
+    }
+
+    /// Display with `0x` prefix.
+    pub fn to_prefixed(&self) -> String {
+        match self {
+            Selector::Func(s) => s.to_prefixed(),
+            Selector::Event(s) => s.to_prefixed(),
+        }
+    }
+}
+
+impl std::fmt::Display for Selector {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Selector::Func(s) => write!(f, "{s}"),
+            Selector::Event(s) => write!(f, "{s}"),
+        }
+    }
+}
+
+/// Canonical ABI method signature from `evm.methodIdentifiers`.
+///
+/// This is the full ABI-encoded signature string like
+/// `"swap((address,address,uint24,int24,address),(bool,int256,uint160),bytes)"`.
+/// Unlike Solidity source signatures (which use struct names like `PoolKey`),
+/// these use fully-expanded tuple types. They are also the keys used in
+/// solc's `userdoc` and `devdoc` output.
+///
+/// Paired with a [`FuncSelector`] via `evm.methodIdentifiers`:
+/// `{ "swap(...)": "f3cd914c" }`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MethodId(String);
+
+impl MethodId {
+    /// Wrap a canonical ABI signature string.
+    pub fn new(sig: impl Into<String>) -> Self {
+        Self(sig.into())
+    }
+
+    /// The canonical signature, e.g. `"swap((address,...),bytes)"`.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// The function/error name (text before the first `(`).
+    pub fn name(&self) -> &str {
+        self.0.split('(').next().unwrap_or(&self.0)
+    }
+}
+
+impl std::fmt::Display for MethodId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -126,5 +278,64 @@ mod tests {
         let _f: FileId = FileId(1);
         // If you uncomment the following line, it won't compile:
         // assert_ne!(_n, _f);
+    }
+
+    // ── Selector type tests ────────────────────────────────────────────
+
+    #[test]
+    fn test_func_selector_display() {
+        let sel = FuncSelector::new("f3cd914c");
+        assert_eq!(sel.as_hex(), "f3cd914c");
+        assert_eq!(sel.to_prefixed(), "0xf3cd914c");
+        assert_eq!(format!("{sel}"), "f3cd914c");
+    }
+
+    #[test]
+    fn test_func_selector_equality() {
+        assert_eq!(FuncSelector::new("f3cd914c"), FuncSelector::new("f3cd914c"));
+        assert_ne!(FuncSelector::new("f3cd914c"), FuncSelector::new("8da5cb5b"));
+    }
+
+    #[test]
+    fn test_event_selector_display() {
+        let sel =
+            EventSelector::new("8be0079c5114abcdef1234567890abcdef1234567890abcdef1234567890abcd");
+        assert_eq!(sel.as_hex().len(), 64);
+        assert!(sel.to_prefixed().starts_with("0x"));
+    }
+
+    #[test]
+    fn test_selector_enum_variants() {
+        let func = Selector::Func(FuncSelector::new("f3cd914c"));
+        let event = Selector::Event(EventSelector::new("a".repeat(64)));
+
+        assert_eq!(func.as_hex(), "f3cd914c");
+        assert_eq!(func.to_prefixed(), "0xf3cd914c");
+        assert_eq!(event.as_hex().len(), 64);
+    }
+
+    #[test]
+    fn test_method_id() {
+        let mid = MethodId::new(
+            "swap((address,address,uint24,int24,address),(bool,int256,uint160),bytes)",
+        );
+        assert_eq!(mid.name(), "swap");
+        assert!(mid.as_str().starts_with("swap("));
+    }
+
+    #[test]
+    fn test_method_id_no_params() {
+        let mid = MethodId::new("settle()");
+        assert_eq!(mid.name(), "settle");
+    }
+
+    #[test]
+    fn test_func_selector_hashmap_key() {
+        use std::collections::HashMap;
+        let mut map = HashMap::new();
+        map.insert(FuncSelector::new("f3cd914c"), "swap");
+        map.insert(FuncSelector::new("8da5cb5b"), "owner");
+        assert_eq!(map.get(&FuncSelector::new("f3cd914c")), Some(&"swap"));
+        assert_eq!(map.get(&FuncSelector::new("8da5cb5b")), Some(&"owner"));
     }
 }

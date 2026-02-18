@@ -1504,6 +1504,7 @@ impl LanguageServer for ForgeLsp {
             position,
             &source_bytes,
             &cached_build.gas_index,
+            &cached_build.doc_index,
         );
 
         if result.is_some() {
