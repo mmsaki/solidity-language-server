@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.1.21
+
+### Features
+
+- Auto-detect solc version from `pragma solidity` and resolve matching binary (#93, #95)
+  - Parses pragma constraints: exact (`0.8.26`), caret (`^0.8.0`), gte (`>=0.8.0`), range (`>=0.6.2 <0.9.0`)
+  - Scans svm-rs and solc-select install directories for matching versions
+  - Auto-installs missing versions via `svm install` with user-visible progress
+  - Resolution order: `foundry.toml` version > pragma match > auto-install > system `solc`
+  - Cross-platform support (macOS, Linux, Windows)
+  - Cached version list (scanned once per session)
+- Gas estimates in hover, inlay hints, and code lens (#91, #94)
+  - `GasIndex` built from solc contract output (creation + external/internal costs)
+  - Hover shows gas cost for functions and deploy cost for contracts
+  - Gas icon (`⛽`) with formatted numbers (e.g. `125,432`)
+- Use solc directly for AST + diagnostics, 11x faster on large projects (#90)
+
+### Refactor
+
+- Gas inlay hints use tree-sitter positions from the live buffer (#96)
+  - Fixes hints drifting to wrong positions during editing
+  - Function gas hints support opening/closing brace placement (`FN_GAS_HINT_POSITION` constant)
+  - Contract deploy hints show `codeDepositCost` when `totalCost` is infinite
+  - Libraries and interfaces now show deploy cost hints
+- Remove code lens — gas info is covered by inlay hints and hover (#96)
+
+### Fixes
+
+- Improve natspec tag formatting in hover (#98)
+  - `@dev` now renders with a bold `**@dev**` header above italic content
+  - `@custom:` tags and other unknown `@` tags render with bold label and italic content
+- Bound `foundry.toml` search at git repo root (#89)
+- Hover works when file has compilation errors (#92)
+
+### Tests
+
+- 371 total tests, 0 warnings
+
 ## v0.1.20
 
 ### Features
