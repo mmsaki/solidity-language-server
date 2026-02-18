@@ -1,5 +1,5 @@
 use crate::completion;
-use crate::config::{self, LintConfig};
+use crate::config::{self, FoundryConfig, LintConfig};
 use crate::goto;
 use crate::hover;
 use crate::inlay_hints;
@@ -26,12 +26,16 @@ pub struct ForgeLsp {
     completion_cache: Arc<RwLock<HashMap<String, Arc<completion::CompletionCache>>>>,
     /// Cached lint configuration from `foundry.toml`.
     lint_config: Arc<RwLock<LintConfig>>,
+    /// Cached project configuration from `foundry.toml`.
+    foundry_config: Arc<RwLock<FoundryConfig>>,
     /// Client capabilities received during initialization.
     client_capabilities: Arc<RwLock<Option<ClientCapabilities>>>,
+    /// Whether to use solc directly for AST generation (with forge fallback).
+    use_solc: bool,
 }
 
 impl ForgeLsp {
-    pub fn new(client: Client, use_solar: bool) -> Self {
+    pub fn new(client: Client, use_solar: bool, use_solc: bool) -> Self {
         let compiler: Arc<dyn Runner> = if use_solar {
             Arc::new(crate::solar_runner::SolarRunner)
         } else {
@@ -41,6 +45,7 @@ impl ForgeLsp {
         let text_cache = Arc::new(RwLock::new(HashMap::new()));
         let completion_cache = Arc::new(RwLock::new(HashMap::new()));
         let lint_config = Arc::new(RwLock::new(LintConfig::default()));
+        let foundry_config = Arc::new(RwLock::new(FoundryConfig::default()));
         let client_capabilities = Arc::new(RwLock::new(None));
         Self {
             client,
@@ -49,7 +54,9 @@ impl ForgeLsp {
             text_cache,
             completion_cache,
             lint_config,
+            foundry_config,
             client_capabilities,
+            use_solc,
         }
     }
 
@@ -83,25 +90,105 @@ impl ForgeLsp {
             lint_cfg.should_lint(&file_path)
         };
 
-        let (lint_result, build_result, ast_result) = if should_lint {
-            let (lint, build, ast) = tokio::join!(
-                self.compiler.get_lint_diagnostics(&uri),
-                self.compiler.get_build_diagnostics(&uri),
-                self.compiler.ast(path_str)
-            );
-            (Some(lint), build, ast)
+        // When use_solc is enabled, run solc once for both AST and diagnostics.
+        // This avoids running `forge build` separately (~27s on large projects).
+        // On solc failure, fall back to the forge-based pipeline.
+        let (lint_result, build_result, ast_result) = if self.use_solc {
+            let foundry_cfg = self.foundry_config.read().await.clone();
+            let solc_future = crate::solc::solc_ast(path_str, &foundry_cfg);
+
+            if should_lint {
+                let (lint, solc) =
+                    tokio::join!(self.compiler.get_lint_diagnostics(&uri), solc_future);
+                match solc {
+                    Ok(data) => {
+                        self.client
+                            .log_message(
+                                MessageType::INFO,
+                                "solc: AST + diagnostics from single run",
+                            )
+                            .await;
+                        // Extract diagnostics from the same solc output
+                        let content = tokio::fs::read_to_string(&file_path)
+                            .await
+                            .unwrap_or_default();
+                        let build_diags =
+                            crate::build::build_output_to_diagnostics(&data, &file_path, &content);
+                        (Some(lint), Ok(build_diags), Ok(data))
+                    }
+                    Err(e) => {
+                        self.client
+                            .log_message(
+                                MessageType::WARNING,
+                                format!("solc failed, falling back to forge: {e}"),
+                            )
+                            .await;
+                        let (build, ast) = tokio::join!(
+                            self.compiler.get_build_diagnostics(&uri),
+                            self.compiler.ast(path_str)
+                        );
+                        (Some(lint), build, ast)
+                    }
+                }
+            } else {
+                self.client
+                    .log_message(
+                        MessageType::INFO,
+                        format!("skipping lint for ignored file: {path_str}"),
+                    )
+                    .await;
+                match solc_future.await {
+                    Ok(data) => {
+                        self.client
+                            .log_message(
+                                MessageType::INFO,
+                                "solc: AST + diagnostics from single run",
+                            )
+                            .await;
+                        let content = tokio::fs::read_to_string(&file_path)
+                            .await
+                            .unwrap_or_default();
+                        let build_diags =
+                            crate::build::build_output_to_diagnostics(&data, &file_path, &content);
+                        (None, Ok(build_diags), Ok(data))
+                    }
+                    Err(e) => {
+                        self.client
+                            .log_message(
+                                MessageType::WARNING,
+                                format!("solc failed, falling back to forge: {e}"),
+                            )
+                            .await;
+                        let (build, ast) = tokio::join!(
+                            self.compiler.get_build_diagnostics(&uri),
+                            self.compiler.ast(path_str)
+                        );
+                        (None, build, ast)
+                    }
+                }
+            }
         } else {
-            self.client
-                .log_message(
-                    MessageType::INFO,
-                    format!("skipping lint for ignored file: {path_str}"),
-                )
-                .await;
-            let (build, ast) = tokio::join!(
-                self.compiler.get_build_diagnostics(&uri),
-                self.compiler.ast(path_str)
-            );
-            (None, build, ast)
+            // forge-only pipeline (--use-forge)
+            if should_lint {
+                let (lint, build, ast) = tokio::join!(
+                    self.compiler.get_lint_diagnostics(&uri),
+                    self.compiler.get_build_diagnostics(&uri),
+                    self.compiler.ast(path_str)
+                );
+                (Some(lint), build, ast)
+            } else {
+                self.client
+                    .log_message(
+                        MessageType::INFO,
+                        format!("skipping lint for ignored file: {path_str}"),
+                    )
+                    .await;
+                let (build, ast) = tokio::join!(
+                    self.compiler.get_build_diagnostics(&uri),
+                    self.compiler.ast(path_str)
+                );
+                (None, build, ast)
+            }
         };
 
         // Only replace cache with new AST if build succeeded (no errors; warnings are OK)
@@ -243,7 +330,16 @@ impl ForgeLsp {
 
         // Cache miss — build the AST from disk.
         let path_str = file_path.to_str()?;
-        match self.compiler.ast(path_str).await {
+        let ast_result = if self.use_solc {
+            let foundry_cfg = self.foundry_config.read().await.clone();
+            match crate::solc::solc_ast(path_str, &foundry_cfg).await {
+                Ok(data) => Ok(data),
+                Err(_) => self.compiler.ast(path_str).await,
+            }
+        } else {
+            self.compiler.ast(path_str).await
+        };
+        match ast_result {
             Ok(data) => {
                 // Built from disk (cache miss) — use version 0; the next
                 // didSave/on_change will stamp the correct version.
@@ -296,7 +392,7 @@ impl LanguageServer for ForgeLsp {
             *caps = Some(params.capabilities.clone());
         }
 
-        // Load lint config from the workspace root's foundry.toml.
+        // Load config from the workspace root's foundry.toml.
         if let Some(root_uri) = params
             .root_uri
             .as_ref()
@@ -315,6 +411,20 @@ impl LanguageServer for ForgeLsp {
                 .await;
             let mut config = self.lint_config.write().await;
             *config = lint_cfg;
+
+            let foundry_cfg = config::load_foundry_config(&root_uri);
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    format!(
+                        "loaded foundry.toml project config: solc_version={:?}, remappings={}",
+                        foundry_cfg.solc_version,
+                        foundry_cfg.remappings.len()
+                    ),
+                )
+                .await;
+            let mut fc = self.foundry_config.write().await;
+            *fc = foundry_cfg;
         }
 
         // Negotiate position encoding with the client (once, for the session).
@@ -415,10 +525,16 @@ impl LanguageServer for ForgeLsp {
                 method: "workspace/didChangeWatchedFiles".to_string(),
                 register_options: Some(
                     serde_json::to_value(DidChangeWatchedFilesRegistrationOptions {
-                        watchers: vec![FileSystemWatcher {
-                            glob_pattern: GlobPattern::String("**/foundry.toml".to_string()),
-                            kind: Some(WatchKind::all()),
-                        }],
+                        watchers: vec![
+                            FileSystemWatcher {
+                                glob_pattern: GlobPattern::String("**/foundry.toml".to_string()),
+                                kind: Some(WatchKind::all()),
+                            },
+                            FileSystemWatcher {
+                                glob_pattern: GlobPattern::String("**/remappings.txt".to_string()),
+                                kind: Some(WatchKind::all()),
+                            },
+                        ],
                     })
                     .unwrap(),
                 ),
@@ -642,14 +758,16 @@ impl LanguageServer for ForgeLsp {
             .log_message(MessageType::INFO, "watched files have changed.")
             .await;
 
-        // Reload lint config if any changed file is a foundry.toml.
+        // Reload configs if foundry.toml or remappings.txt changed.
         for change in &params.changes {
             let path = match change.uri.to_file_path() {
                 Ok(p) => p,
                 Err(_) => continue,
             };
 
-            if path.file_name().and_then(|n| n.to_str()) == Some("foundry.toml") {
+            let filename = path.file_name().and_then(|n| n.to_str());
+
+            if filename == Some("foundry.toml") {
                 let lint_cfg = config::load_lint_config_from_toml(&path);
                 self.client
                     .log_message(
@@ -661,9 +779,34 @@ impl LanguageServer for ForgeLsp {
                         ),
                     )
                     .await;
-                let mut config = self.lint_config.write().await;
-                *config = lint_cfg;
+                let mut lc = self.lint_config.write().await;
+                *lc = lint_cfg;
+
+                let foundry_cfg = config::load_foundry_config_from_toml(&path);
+                self.client
+                    .log_message(
+                        MessageType::INFO,
+                        format!(
+                            "reloaded foundry.toml project config: solc_version={:?}, remappings={}",
+                            foundry_cfg.solc_version,
+                            foundry_cfg.remappings.len()
+                        ),
+                    )
+                    .await;
+                let mut fc = self.foundry_config.write().await;
+                *fc = foundry_cfg;
                 break;
+            }
+
+            if filename == Some("remappings.txt") {
+                self.client
+                    .log_message(
+                        MessageType::INFO,
+                        "remappings.txt changed, config may need refresh",
+                    )
+                    .await;
+                // Remappings from remappings.txt are resolved at solc invocation time
+                // via `forge remappings`, so no cached state to update here.
             }
         }
     }

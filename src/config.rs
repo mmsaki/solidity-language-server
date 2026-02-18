@@ -1,5 +1,108 @@
 use std::path::{Path, PathBuf};
 
+/// Project-level configuration extracted from `foundry.toml`.
+///
+/// This includes both lint settings and compiler settings needed by the
+/// solc runner (solc version, remappings).
+#[derive(Debug, Clone)]
+pub struct FoundryConfig {
+    /// The project root where `foundry.toml` was found.
+    pub root: PathBuf,
+    /// Solc version from `[profile.default] solc = "0.8.26"`.
+    /// `None` means use the system default.
+    pub solc_version: Option<String>,
+    /// Remappings from `[profile.default] remappings = [...]`.
+    /// Empty if not specified (will fall back to `forge remappings`).
+    pub remappings: Vec<String>,
+}
+
+impl Default for FoundryConfig {
+    fn default() -> Self {
+        Self {
+            root: PathBuf::new(),
+            solc_version: None,
+            remappings: Vec::new(),
+        }
+    }
+}
+
+/// Load project configuration from the nearest `foundry.toml`.
+pub fn load_foundry_config(file_path: &Path) -> FoundryConfig {
+    let toml_path = match find_foundry_toml(file_path) {
+        Some(p) => p,
+        None => return FoundryConfig::default(),
+    };
+    load_foundry_config_from_toml(&toml_path)
+}
+
+/// Load project configuration from a known `foundry.toml` path.
+pub fn load_foundry_config_from_toml(toml_path: &Path) -> FoundryConfig {
+    let root = toml_path.parent().unwrap_or(Path::new("")).to_path_buf();
+
+    let content = match std::fs::read_to_string(toml_path) {
+        Ok(c) => c,
+        Err(_) => {
+            return FoundryConfig {
+                root,
+                ..Default::default()
+            };
+        }
+    };
+
+    let table: toml::Table = match content.parse() {
+        Ok(t) => t,
+        Err(_) => {
+            return FoundryConfig {
+                root,
+                ..Default::default()
+            };
+        }
+    };
+
+    let profile_name = std::env::var("FOUNDRY_PROFILE").unwrap_or_else(|_| "default".to_string());
+
+    let profile = table
+        .get("profile")
+        .and_then(|p| p.as_table())
+        .and_then(|p| p.get(&profile_name))
+        .and_then(|p| p.as_table());
+
+    let profile = match profile {
+        Some(p) => p,
+        None => {
+            return FoundryConfig {
+                root,
+                ..Default::default()
+            };
+        }
+    };
+
+    // Parse solc version: `solc = "0.8.26"` or `solc_version = "0.8.26"`
+    let solc_version = profile
+        .get("solc")
+        .or_else(|| profile.get("solc_version"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    // Parse remappings: `remappings = ["ds-test/=lib/...", ...]`
+    let remappings = profile
+        .get("remappings")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str())
+                .map(|s| s.to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    FoundryConfig {
+        root,
+        solc_version,
+        remappings,
+    }
+}
+
 /// Lint-related configuration extracted from `foundry.toml`.
 #[derive(Debug, Clone)]
 pub struct LintConfig {

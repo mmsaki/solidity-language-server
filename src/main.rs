@@ -20,6 +20,11 @@ pub struct LspArgs {
     pub stdio: bool,
     #[arg(long)]
     pub use_solar: bool,
+    /// Use forge build for AST generation instead of solc.
+    /// By default, the LSP uses solc directly for faster AST generation
+    /// and falls back to forge automatically if solc fails.
+    #[arg(long)]
+    pub use_forge: bool,
     /// Deprecated: scope-aware completions are now always enabled.
     /// This flag is a no-op and will be removed in a future release.
     #[arg(long, value_enum, hide = true)]
@@ -46,7 +51,9 @@ impl LspArgs {
 
         let stdin = tokio::io::stdin();
         let stdout = tokio::io::stdout();
-        let (service, socket) = LspService::new(|client| ForgeLsp::new(client, self.use_solar));
+        let use_solc = !self.use_forge;
+        let (service, socket) =
+            LspService::new(|client| ForgeLsp::new(client, self.use_solar, use_solc));
         Server::new(stdin, stdout, socket).serve(service).await;
 
         info!("Solidity LSP Server stopped.");
