@@ -1,0 +1,1091 @@
+{
+  "benchmarks": [
+    {
+      "name": "initialize",
+      "servers": [
+        {
+          "iterations": [
+            {
+              "ms": 3.21,
+              "response": "ok"
+            }
+          ],
+          "mean_ms": 3.21,
+          "p50_ms": 3.21,
+          "p95_ms": 3.21,
+          "response": "ok",
+          "server": "#90",
+          "status": "ok"
+        },
+        {
+          "iterations": [
+            {
+              "ms": 4.48,
+              "response": "ok"
+            }
+          ],
+          "mean_ms": 4.48,
+          "p50_ms": 4.48,
+          "p95_ms": 4.48,
+          "response": "ok",
+          "server": "v0.1.20",
+          "status": "ok"
+        }
+      ]
+    },
+    {
+      "name": "textDocument/diagnostic",
+      "servers": [
+        {
+          "iterations": [
+            {
+              "ms": 2487.52,
+              "response": {
+                "diagnostics": [
+                  {
+                    "code": "mixed-case-variable",
+                    "message": "[forge lint] mutable variables should use mixedCase",
+                    "range": {
+                      "end": {
+                        "character": 40,
+                        "line": 354
+                      },
+                      "start": {
+                        "character": 16,
+                        "line": 354
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "mixed-case-variable",
+                    "message": "[forge lint] mutable variables should use mixedCase",
+                    "range": {
+                      "end": {
+                        "character": 40,
+                        "line": 355
+                      },
+                      "start": {
+                        "character": 16,
+                        "line": 355
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "mixed-case-variable",
+                    "message": "[forge lint] mutable variables should use mixedCase",
+                    "range": {
+                      "end": {
+                        "character": 40,
+                        "line": 383
+                      },
+                      "start": {
+                        "character": 16,
+                        "line": 383
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "mixed-case-variable",
+                    "message": "[forge lint] mutable variables should use mixedCase",
+                    "range": {
+                      "end": {
+                        "character": 40,
+                        "line": 384
+                      },
+                      "start": {
+                        "character": 16,
+                        "line": 384
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "unused-import",
+                    "message": "[forge lint] unused imports should be removed",
+                    "range": {
+                      "end": {
+                        "character": 22,
+                        "line": 15
+                      },
+                      "start": {
+                        "character": 8,
+                        "line": 15
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "unused-import",
+                    "message": "[forge lint] unused imports should be removed",
+                    "range": {
+                      "end": {
+                        "character": 15,
+                        "line": 16
+                      },
+                      "start": {
+                        "character": 8,
+                        "line": 16
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "unused-import",
+                    "message": "[forge lint] unused imports should be removed",
+                    "range": {
+                      "end": {
+                        "character": 31,
+                        "line": 18
+                      },
+                      "start": {
+                        "character": 8,
+                        "line": 18
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "unused-import",
+                    "message": "[forge lint] unused imports should be removed",
+                    "range": {
+                      "end": {
+                        "character": 16,
+                        "line": 26
+                      },
+                      "start": {
+                        "character": 8,
+                        "line": 26
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "unused-import",
+                    "message": "[forge lint] unused imports should be removed",
+                    "range": {
+                      "end": {
+                        "character": 21,
+                        "line": 29
+                      },
+                      "start": {
+                        "character": 8,
+                        "line": 29
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "named-struct-fields",
+                    "message": "[forge lint] prefer initializing structs with named fields",
+                    "range": {
+                      "end": {
+                        "character": 102,
+                        "line": 812
+                      },
+                      "start": {
+                        "character": 39,
+                        "line": 812
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "named-struct-fields",
+                    "message": "[forge lint] prefer initializing structs with named fields",
+                    "range": {
+                      "end": {
+                        "character": 57,
+                        "line": 1053
+                      },
+                      "start": {
+                        "character": 17,
+                        "line": 1053
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "named-struct-fields",
+                    "message": "[forge lint] prefer initializing structs with named fields",
+                    "range": {
+                      "end": {
+                        "character": 56,
+                        "line": 1079
+                      },
+                      "start": {
+                        "character": 17,
+                        "line": 1079
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "named-struct-fields",
+                    "message": "[forge lint] prefer initializing structs with named fields",
+                    "range": {
+                      "end": {
+                        "character": 66,
+                        "line": 1105
+                      },
+                      "start": {
+                        "character": 12,
+                        "line": 1105
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "named-struct-fields",
+                    "message": "[forge lint] prefer initializing structs with named fields",
+                    "range": {
+                      "end": {
+                        "character": 63,
+                        "line": 1133
+                      },
+                      "start": {
+                        "character": 23,
+                        "line": 1133
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "named-struct-fields",
+                    "message": "[forge lint] prefer initializing structs with named fields",
+                    "range": {
+                      "end": {
+                        "character": 63,
+                        "line": 1160
+                      },
+                      "start": {
+                        "character": 23,
+                        "line": 1160
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  }
+                ],
+                "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/PoolManager.t.sol"
+              }
+            }
+          ],
+          "mean_ms": 2487.52,
+          "p50_ms": 2487.52,
+          "p95_ms": 2487.52,
+          "response": {
+            "diagnostics": [
+              {
+                "code": "mixed-case-variable",
+                "message": "[forge lint] mutable variables should use mixedCase",
+                "range": {
+                  "end": {
+                    "character": 40,
+                    "line": 354
+                  },
+                  "start": {
+                    "character": 16,
+                    "line": 354
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "mixed-case-variable",
+                "message": "[forge lint] mutable variables should use mixedCase",
+                "range": {
+                  "end": {
+                    "character": 40,
+                    "line": 355
+                  },
+                  "start": {
+                    "character": 16,
+                    "line": 355
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "mixed-case-variable",
+                "message": "[forge lint] mutable variables should use mixedCase",
+                "range": {
+                  "end": {
+                    "character": 40,
+                    "line": 383
+                  },
+                  "start": {
+                    "character": 16,
+                    "line": 383
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "mixed-case-variable",
+                "message": "[forge lint] mutable variables should use mixedCase",
+                "range": {
+                  "end": {
+                    "character": 40,
+                    "line": 384
+                  },
+                  "start": {
+                    "character": 16,
+                    "line": 384
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "unused-import",
+                "message": "[forge lint] unused imports should be removed",
+                "range": {
+                  "end": {
+                    "character": 22,
+                    "line": 15
+                  },
+                  "start": {
+                    "character": 8,
+                    "line": 15
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "unused-import",
+                "message": "[forge lint] unused imports should be removed",
+                "range": {
+                  "end": {
+                    "character": 15,
+                    "line": 16
+                  },
+                  "start": {
+                    "character": 8,
+                    "line": 16
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "unused-import",
+                "message": "[forge lint] unused imports should be removed",
+                "range": {
+                  "end": {
+                    "character": 31,
+                    "line": 18
+                  },
+                  "start": {
+                    "character": 8,
+                    "line": 18
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "unused-import",
+                "message": "[forge lint] unused imports should be removed",
+                "range": {
+                  "end": {
+                    "character": 16,
+                    "line": 26
+                  },
+                  "start": {
+                    "character": 8,
+                    "line": 26
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "unused-import",
+                "message": "[forge lint] unused imports should be removed",
+                "range": {
+                  "end": {
+                    "character": 21,
+                    "line": 29
+                  },
+                  "start": {
+                    "character": 8,
+                    "line": 29
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "named-struct-fields",
+                "message": "[forge lint] prefer initializing structs with named fields",
+                "range": {
+                  "end": {
+                    "character": 102,
+                    "line": 812
+                  },
+                  "start": {
+                    "character": 39,
+                    "line": 812
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "named-struct-fields",
+                "message": "[forge lint] prefer initializing structs with named fields",
+                "range": {
+                  "end": {
+                    "character": 57,
+                    "line": 1053
+                  },
+                  "start": {
+                    "character": 17,
+                    "line": 1053
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "named-struct-fields",
+                "message": "[forge lint] prefer initializing structs with named fields",
+                "range": {
+                  "end": {
+                    "character": 56,
+                    "line": 1079
+                  },
+                  "start": {
+                    "character": 17,
+                    "line": 1079
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "named-struct-fields",
+                "message": "[forge lint] prefer initializing structs with named fields",
+                "range": {
+                  "end": {
+                    "character": 66,
+                    "line": 1105
+                  },
+                  "start": {
+                    "character": 12,
+                    "line": 1105
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "named-struct-fields",
+                "message": "[forge lint] prefer initializing structs with named fields",
+                "range": {
+                  "end": {
+                    "character": 63,
+                    "line": 1133
+                  },
+                  "start": {
+                    "character": 23,
+                    "line": 1133
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "named-struct-fields",
+                "message": "[forge lint] prefer initializing structs with named fields",
+                "range": {
+                  "end": {
+                    "character": 63,
+                    "line": 1160
+                  },
+                  "start": {
+                    "character": 23,
+                    "line": 1160
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              }
+            ],
+            "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/PoolManager.t.sol"
+          },
+          "rss_kb": 279856,
+          "server": "#90",
+          "status": "ok"
+        },
+        {
+          "iterations": [
+            {
+              "ms": 28300.3,
+              "response": {
+                "diagnostics": [
+                  {
+                    "code": "mixed-case-variable",
+                    "message": "[forge lint] mutable variables should use mixedCase",
+                    "range": {
+                      "end": {
+                        "character": 40,
+                        "line": 354
+                      },
+                      "start": {
+                        "character": 16,
+                        "line": 354
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "mixed-case-variable",
+                    "message": "[forge lint] mutable variables should use mixedCase",
+                    "range": {
+                      "end": {
+                        "character": 40,
+                        "line": 355
+                      },
+                      "start": {
+                        "character": 16,
+                        "line": 355
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "mixed-case-variable",
+                    "message": "[forge lint] mutable variables should use mixedCase",
+                    "range": {
+                      "end": {
+                        "character": 40,
+                        "line": 383
+                      },
+                      "start": {
+                        "character": 16,
+                        "line": 383
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "mixed-case-variable",
+                    "message": "[forge lint] mutable variables should use mixedCase",
+                    "range": {
+                      "end": {
+                        "character": 40,
+                        "line": 384
+                      },
+                      "start": {
+                        "character": 16,
+                        "line": 384
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "unused-import",
+                    "message": "[forge lint] unused imports should be removed",
+                    "range": {
+                      "end": {
+                        "character": 22,
+                        "line": 15
+                      },
+                      "start": {
+                        "character": 8,
+                        "line": 15
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "unused-import",
+                    "message": "[forge lint] unused imports should be removed",
+                    "range": {
+                      "end": {
+                        "character": 15,
+                        "line": 16
+                      },
+                      "start": {
+                        "character": 8,
+                        "line": 16
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "unused-import",
+                    "message": "[forge lint] unused imports should be removed",
+                    "range": {
+                      "end": {
+                        "character": 31,
+                        "line": 18
+                      },
+                      "start": {
+                        "character": 8,
+                        "line": 18
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "unused-import",
+                    "message": "[forge lint] unused imports should be removed",
+                    "range": {
+                      "end": {
+                        "character": 16,
+                        "line": 26
+                      },
+                      "start": {
+                        "character": 8,
+                        "line": 26
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "unused-import",
+                    "message": "[forge lint] unused imports should be removed",
+                    "range": {
+                      "end": {
+                        "character": 21,
+                        "line": 29
+                      },
+                      "start": {
+                        "character": 8,
+                        "line": 29
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "named-struct-fields",
+                    "message": "[forge lint] prefer initializing structs with named fields",
+                    "range": {
+                      "end": {
+                        "character": 102,
+                        "line": 812
+                      },
+                      "start": {
+                        "character": 39,
+                        "line": 812
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "named-struct-fields",
+                    "message": "[forge lint] prefer initializing structs with named fields",
+                    "range": {
+                      "end": {
+                        "character": 57,
+                        "line": 1053
+                      },
+                      "start": {
+                        "character": 17,
+                        "line": 1053
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "named-struct-fields",
+                    "message": "[forge lint] prefer initializing structs with named fields",
+                    "range": {
+                      "end": {
+                        "character": 56,
+                        "line": 1079
+                      },
+                      "start": {
+                        "character": 17,
+                        "line": 1079
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "named-struct-fields",
+                    "message": "[forge lint] prefer initializing structs with named fields",
+                    "range": {
+                      "end": {
+                        "character": 66,
+                        "line": 1105
+                      },
+                      "start": {
+                        "character": 12,
+                        "line": 1105
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "named-struct-fields",
+                    "message": "[forge lint] prefer initializing structs with named fields",
+                    "range": {
+                      "end": {
+                        "character": 63,
+                        "line": 1133
+                      },
+                      "start": {
+                        "character": 23,
+                        "line": 1133
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  },
+                  {
+                    "code": "named-struct-fields",
+                    "message": "[forge lint] prefer initializing structs with named fields",
+                    "range": {
+                      "end": {
+                        "character": 63,
+                        "line": 1160
+                      },
+                      "start": {
+                        "character": 23,
+                        "line": 1160
+                      }
+                    },
+                    "severity": 3,
+                    "source": "forge-lint"
+                  }
+                ],
+                "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/PoolManager.t.sol"
+              }
+            }
+          ],
+          "mean_ms": 28300.3,
+          "p50_ms": 28300.3,
+          "p95_ms": 28300.3,
+          "response": {
+            "diagnostics": [
+              {
+                "code": "mixed-case-variable",
+                "message": "[forge lint] mutable variables should use mixedCase",
+                "range": {
+                  "end": {
+                    "character": 40,
+                    "line": 354
+                  },
+                  "start": {
+                    "character": 16,
+                    "line": 354
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "mixed-case-variable",
+                "message": "[forge lint] mutable variables should use mixedCase",
+                "range": {
+                  "end": {
+                    "character": 40,
+                    "line": 355
+                  },
+                  "start": {
+                    "character": 16,
+                    "line": 355
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "mixed-case-variable",
+                "message": "[forge lint] mutable variables should use mixedCase",
+                "range": {
+                  "end": {
+                    "character": 40,
+                    "line": 383
+                  },
+                  "start": {
+                    "character": 16,
+                    "line": 383
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "mixed-case-variable",
+                "message": "[forge lint] mutable variables should use mixedCase",
+                "range": {
+                  "end": {
+                    "character": 40,
+                    "line": 384
+                  },
+                  "start": {
+                    "character": 16,
+                    "line": 384
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "unused-import",
+                "message": "[forge lint] unused imports should be removed",
+                "range": {
+                  "end": {
+                    "character": 22,
+                    "line": 15
+                  },
+                  "start": {
+                    "character": 8,
+                    "line": 15
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "unused-import",
+                "message": "[forge lint] unused imports should be removed",
+                "range": {
+                  "end": {
+                    "character": 15,
+                    "line": 16
+                  },
+                  "start": {
+                    "character": 8,
+                    "line": 16
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "unused-import",
+                "message": "[forge lint] unused imports should be removed",
+                "range": {
+                  "end": {
+                    "character": 31,
+                    "line": 18
+                  },
+                  "start": {
+                    "character": 8,
+                    "line": 18
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "unused-import",
+                "message": "[forge lint] unused imports should be removed",
+                "range": {
+                  "end": {
+                    "character": 16,
+                    "line": 26
+                  },
+                  "start": {
+                    "character": 8,
+                    "line": 26
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "unused-import",
+                "message": "[forge lint] unused imports should be removed",
+                "range": {
+                  "end": {
+                    "character": 21,
+                    "line": 29
+                  },
+                  "start": {
+                    "character": 8,
+                    "line": 29
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "named-struct-fields",
+                "message": "[forge lint] prefer initializing structs with named fields",
+                "range": {
+                  "end": {
+                    "character": 102,
+                    "line": 812
+                  },
+                  "start": {
+                    "character": 39,
+                    "line": 812
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "named-struct-fields",
+                "message": "[forge lint] prefer initializing structs with named fields",
+                "range": {
+                  "end": {
+                    "character": 57,
+                    "line": 1053
+                  },
+                  "start": {
+                    "character": 17,
+                    "line": 1053
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "named-struct-fields",
+                "message": "[forge lint] prefer initializing structs with named fields",
+                "range": {
+                  "end": {
+                    "character": 56,
+                    "line": 1079
+                  },
+                  "start": {
+                    "character": 17,
+                    "line": 1079
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "named-struct-fields",
+                "message": "[forge lint] prefer initializing structs with named fields",
+                "range": {
+                  "end": {
+                    "character": 66,
+                    "line": 1105
+                  },
+                  "start": {
+                    "character": 12,
+                    "line": 1105
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "named-struct-fields",
+                "message": "[forge lint] prefer initializing structs with named fields",
+                "range": {
+                  "end": {
+                    "character": 63,
+                    "line": 1133
+                  },
+                  "start": {
+                    "character": 23,
+                    "line": 1133
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              },
+              {
+                "code": "named-struct-fields",
+                "message": "[forge lint] prefer initializing structs with named fields",
+                "range": {
+                  "end": {
+                    "character": 63,
+                    "line": 1160
+                  },
+                  "start": {
+                    "character": 23,
+                    "line": 1160
+                  }
+                },
+                "severity": 3,
+                "source": "forge-lint"
+              }
+            ],
+            "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/PoolManager.t.sol"
+          },
+          "rss_kb": 376592,
+          "server": "v0.1.20",
+          "status": "ok"
+        }
+      ]
+    }
+  ],
+  "date": "2026-02-18",
+  "servers": [
+    {
+      "description": "PR",
+      "name": "#90",
+      "version": "solidity-language-server 0.1.20+commit.7e1491a.macos.aarch64"
+    },
+    {
+      "description": "Installed release (forge-only)",
+      "name": "v0.1.20",
+      "version": "solidity-language-server 0.1.19+commit.96b5608.macos.aarch64"
+    }
+  ],
+  "settings": {
+    "col": 8,
+    "file": "test/PoolManager.t.sol",
+    "index_timeout_secs": 60,
+    "iterations": 1,
+    "line": 3,
+    "methods": {
+      "textDocument/completion": {
+        "col": 16,
+        "line": 102,
+        "trigger": "."
+      },
+      "textDocument/declaration": {
+        "col": 8,
+        "line": 4
+      },
+      "textDocument/definition": {
+        "col": 8,
+        "line": 3
+      },
+      "textDocument/rename": {
+        "col": 8,
+        "line": 5
+      }
+    },
+    "project": "v4-core",
+    "timeout_secs": 30,
+    "warmup": 0
+  },
+  "timestamp": "2026-02-18T11:10:59Z"
+}

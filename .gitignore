@@ -7,5 +7,7 @@ benchmarks/*
 !benchmarks/*.md
 !benchmarks/Issue*
 benchmarks/Issue*/results
+!benchmarks/#90
+benchmarks/#90/partial
 DELTA.md
 v4-core
