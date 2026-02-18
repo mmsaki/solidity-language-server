@@ -16,6 +16,13 @@
   - Hover shows gas cost for functions and deploy cost for contracts
   - Fire icon (🔥) with formatted numbers (e.g. `125,432`)
 - Use solc directly for AST + diagnostics, 11x faster on large projects (#90)
+- Use solc userdoc/devdoc for hover documentation (#99)
+  - `DocIndex` built from solc contract output at cache time with pre-resolved `@inheritdoc`
+  - Hover on parameters and return values shows `@param`/`@return` docs from parent function
+  - Works at both declaration site and any usage inside the function body
+  - Structured rendering: notice, `@dev` details, params table, returns table
+  - Typed selectors: `FuncSelector`, `EventSelector`, `Selector` enum, `MethodId` newtype
+  - Replaces raw `String` selectors throughout gas, hover, completion, and inlay hints
 
 ### Refactor
 
@@ -36,7 +43,7 @@
 
 ### Tests
 
-- 371 total tests, 0 warnings
+- 385 total tests, 0 warnings
 
 ## v0.1.20
 
