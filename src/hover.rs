@@ -414,10 +414,10 @@ fn gas_hover_for_function(
     }
 
     // Try by selector first (external/public functions)
-    if let Some(selector) = decl_node.get("functionSelector").and_then(|v| v.as_str()) {
-        if let Some((_contract, cost)) = gas::gas_by_selector(gas_index, selector) {
-            return Some(format!("Gas: `{}`", gas::format_gas(cost)));
-        }
+    if let Some(selector) = decl_node.get("functionSelector").and_then(|v| v.as_str())
+        && let Some((_contract, cost)) = gas::gas_by_selector(gas_index, selector)
+    {
+        return Some(format!("Gas: `{}`", gas::format_gas(cost)));
     }
 
     // Try by name (internal functions)

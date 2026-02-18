@@ -59,11 +59,11 @@ pub fn build_hint_index(sources: &Value) -> HintIndex {
 
     if let Some(obj) = sources.as_object() {
         for (_, source_data) in obj {
-            if let Some(ast) = source_data.get("ast") {
-                if let Some(abs_path) = ast.get("absolutePath").and_then(|v| v.as_str()) {
-                    let lookup = build_hint_lookup(ast, &id_index);
-                    hint_index.insert(abs_path.to_string(), lookup);
-                }
+            if let Some(ast) = source_data.get("ast")
+                && let Some(abs_path) = ast.get("absolutePath").and_then(|v| v.as_str())
+            {
+                let lookup = build_hint_lookup(ast, &id_index);
+                hint_index.insert(abs_path.to_string(), lookup);
             }
         }
     }
@@ -110,7 +110,7 @@ pub fn inlay_hints(
     };
 
     let mut hints = Vec::new();
-    collect_ts_hints(tree.root_node(), &source_str, &range, &lookup, &mut hints);
+    collect_ts_hints(tree.root_node(), &source_str, &range, lookup, &mut hints);
 
     // Gas inlay hints: use tree-sitter positions (tracks live buffer)
     if !build.gas_index.is_empty() {
@@ -673,7 +673,7 @@ fn ts_gas_hint_for_contract(
         position: Position::new(brace_pos.line, brace_pos.character + 1),
         kind: Some(InlayHintKind::TYPE),
         label: InlayHintLabel::String(format!(
-            "{} deploy: {}",
+            "{} Deploy: {}",
             gas::GAS_ICON,
             gas::format_gas(display_cost)
         )),
