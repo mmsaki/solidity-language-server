@@ -673,7 +673,7 @@ fn ts_gas_hint_for_contract(
         position: Position::new(brace_pos.line, brace_pos.character + 1),
         kind: Some(InlayHintKind::TYPE),
         label: InlayHintLabel::String(format!(
-            "{} Deploy: {}",
+            "{} {}",
             gas::GAS_ICON,
             gas::format_gas(display_cost)
         )),
