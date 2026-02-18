@@ -1,6 +1,6 @@
 [package]
 name = "solidity-language-server"
-description = "A solidity language server with foundry's build process."
+description = "A fast Solidity language server powered by solc and Foundry"
 version = "0.1.20"
 edition = "2024"
 license = "MIT"
