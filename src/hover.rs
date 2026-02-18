@@ -1678,7 +1678,7 @@ mod tests {
     fn load_solc_fixture() -> Value {
         let data = std::fs::read_to_string("poolmanager.json").expect("test fixture");
         let raw: Value = serde_json::from_str(&data).expect("valid json");
-        crate::solc::normalize_solc_output(raw)
+        crate::solc::normalize_solc_output(raw, None)
     }
 
     #[test]

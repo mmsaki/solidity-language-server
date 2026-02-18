@@ -520,11 +520,17 @@ pub async fn run_solc(
 /// - `contracts[path][name] = { abi, evm, ... }` — kept as-is
 /// - `errors` — kept as-is (defaults to `[]` if absent)
 ///
+/// When `project_root` is provided, relative source paths are resolved to
+/// absolute paths so that downstream code (goto, hover, links) can map AST
+/// paths back to `file://` URIs. This is necessary because `solc_ast()`
+/// passes a relative path to solc (to fix import resolution), and solc then
+/// returns relative paths in the AST `absolutePath` and source keys.
+///
 /// Constructs `source_id_to_path` from source IDs for cross-file resolution.
 ///
 /// Takes ownership and uses `Value::take()` to move AST nodes in-place,
 /// avoiding expensive clones of multi-MB AST data.
-pub fn normalize_solc_output(mut solc_output: Value) -> Value {
+pub fn normalize_solc_output(mut solc_output: Value, project_root: Option<&Path>) -> Value {
     let mut result = Map::new();
 
     // Move errors out (defaults to [] if absent)
@@ -534,34 +540,68 @@ pub fn normalize_solc_output(mut solc_output: Value) -> Value {
         .unwrap_or_else(|| json!([]));
     result.insert("errors".to_string(), errors);
 
-    // Sources: keep solc's native { path: { id, ast } } shape.
+    // Helper: resolve a path to absolute using the project root.
+    // If the path is already absolute or no project root is given, return as-is.
+    let resolve = |p: &str| -> String {
+        if let Some(root) = project_root {
+            let path = Path::new(p);
+            if path.is_relative() {
+                return root.join(path).to_string_lossy().into_owned();
+            }
+        }
+        p.to_string()
+    };
+
+    // Sources: rekey with absolute paths and update AST absolutePath fields.
     // Also build source_id_to_path for cross-file resolution.
     let mut source_id_to_path = Map::new();
+    let mut resolved_sources = Map::new();
 
     if let Some(sources) = solc_output
         .get_mut("sources")
         .and_then(|s| s.as_object_mut())
     {
-        for (path, source_data) in sources.iter() {
-            if let Some(id) = source_data.get("id") {
-                source_id_to_path.insert(id.to_string(), json!(path));
+        // Collect keys first to avoid borrow issues
+        let keys: Vec<String> = sources.keys().cloned().collect();
+        for key in keys {
+            if let Some(mut source_data) = sources.remove(&key) {
+                let abs_key = resolve(&key);
+
+                // Update the AST absolutePath field to match
+                if let Some(ast) = source_data.get_mut("ast") {
+                    if let Some(abs_path) = ast.get("absolutePath").and_then(|v| v.as_str()) {
+                        let resolved = resolve(abs_path);
+                        ast.as_object_mut()
+                            .unwrap()
+                            .insert("absolutePath".to_string(), json!(resolved));
+                    }
+                }
+
+                if let Some(id) = source_data.get("id") {
+                    source_id_to_path.insert(id.to_string(), json!(&abs_key));
+                }
+
+                resolved_sources.insert(abs_key, source_data);
             }
         }
     }
 
-    // Move sources as-is
-    let sources = solc_output
-        .get_mut("sources")
-        .map(Value::take)
-        .unwrap_or_else(|| json!({}));
-    result.insert("sources".to_string(), sources);
+    result.insert("sources".to_string(), Value::Object(resolved_sources));
 
-    // Contracts: keep solc's native { path: { name: { abi, evm, ... } } } shape
-    let contracts = solc_output
+    // Contracts: rekey with absolute paths
+    let mut resolved_contracts = Map::new();
+    if let Some(contracts) = solc_output
         .get_mut("contracts")
-        .map(Value::take)
-        .unwrap_or_else(|| json!({}));
-    result.insert("contracts".to_string(), contracts);
+        .and_then(|c| c.as_object_mut())
+    {
+        let keys: Vec<String> = contracts.keys().cloned().collect();
+        for key in keys {
+            if let Some(contract_data) = contracts.remove(&key) {
+                resolved_contracts.insert(resolve(&key), contract_data);
+            }
+        }
+    }
+    result.insert("contracts".to_string(), Value::Object(resolved_contracts));
 
     // Construct source_id_to_path for cross-file resolution
     result.insert(
@@ -659,9 +699,19 @@ pub async fn solc_ast(
     let file_source = std::fs::read_to_string(file_path).ok();
     let solc_binary = resolve_solc_binary(config, file_source.as_deref(), client).await;
     let remappings = resolve_remappings(config).await;
-    let input = build_standard_json_input(file_path, &remappings);
+
+    // Solc's import resolver fails when sources use absolute paths — it resolves
+    // 0 transitive imports, causing "No matching declaration found" errors for
+    // inherited members. Convert to a path relative to the project root so solc
+    // can properly resolve `src/`, `lib/`, and remapped imports.
+    let rel_path = Path::new(file_path)
+        .strip_prefix(&config.root)
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| file_path.to_string());
+
+    let input = build_standard_json_input(&rel_path, &remappings);
     let raw_output = run_solc(&solc_binary, &input, &config.root).await?;
-    Ok(normalize_solc_output(raw_output))
+    Ok(normalize_solc_output(raw_output, Some(&config.root)))
 }
 
 /// Run solc for build diagnostics (same output, just used for error extraction).
@@ -702,7 +752,7 @@ mod tests {
             "errors": []
         });
 
-        let normalized = normalize_solc_output(solc_output);
+        let normalized = normalize_solc_output(solc_output, None);
 
         // Sources kept in solc-native shape: path -> { id, ast }
         let sources = normalized.get("sources").unwrap().as_object().unwrap();
@@ -751,7 +801,7 @@ mod tests {
             "errors": []
         });
 
-        let normalized = normalize_solc_output(solc_output);
+        let normalized = normalize_solc_output(solc_output, None);
 
         // Contracts kept in solc-native shape: path -> name -> { abi, evm, ... }
         let contracts = normalized.get("contracts").unwrap().as_object().unwrap();
@@ -787,7 +837,7 @@ mod tests {
             }]
         });
 
-        let normalized = normalize_solc_output(solc_output);
+        let normalized = normalize_solc_output(solc_output, None);
 
         let errors = normalized.get("errors").unwrap().as_array().unwrap();
         assert_eq!(errors.len(), 1);
@@ -804,7 +854,7 @@ mod tests {
             "contracts": {}
         });
 
-        let normalized = normalize_solc_output(solc_output);
+        let normalized = normalize_solc_output(solc_output, None);
 
         assert!(
             normalized
