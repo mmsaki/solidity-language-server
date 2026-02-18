@@ -1,4 +1,5 @@
 use crate::completion;
+use crate::config::{self, LintConfig};
 use crate::goto;
 use crate::hover;
 use crate::inlay_hints;
@@ -23,6 +24,10 @@ pub struct ForgeLsp {
     /// The key is the file's URI converted to string, and the value is a tuple of (version, content).
     text_cache: Arc<RwLock<HashMap<String, (i32, String)>>>,
     completion_cache: Arc<RwLock<HashMap<String, Arc<completion::CompletionCache>>>>,
+    /// Cached lint configuration from `foundry.toml`.
+    lint_config: Arc<RwLock<LintConfig>>,
+    /// Client capabilities received during initialization.
+    client_capabilities: Arc<RwLock<Option<ClientCapabilities>>>,
 }
 
 impl ForgeLsp {
@@ -35,12 +40,16 @@ impl ForgeLsp {
         let ast_cache = Arc::new(RwLock::new(HashMap::new()));
         let text_cache = Arc::new(RwLock::new(HashMap::new()));
         let completion_cache = Arc::new(RwLock::new(HashMap::new()));
+        let lint_config = Arc::new(RwLock::new(LintConfig::default()));
+        let client_capabilities = Arc::new(RwLock::new(None));
         Self {
             client,
             compiler,
             ast_cache,
             text_cache,
             completion_cache,
+            lint_config,
+            client_capabilities,
         }
     }
 
@@ -68,11 +77,32 @@ impl ForgeLsp {
             }
         };
 
-        let (lint_result, build_result, ast_result) = tokio::join!(
-            self.compiler.get_lint_diagnostics(&uri),
-            self.compiler.get_build_diagnostics(&uri),
-            self.compiler.ast(path_str)
-        );
+        // Check if linting should be skipped based on foundry.toml config.
+        let should_lint = {
+            let lint_cfg = self.lint_config.read().await;
+            lint_cfg.should_lint(&file_path)
+        };
+
+        let (lint_result, build_result, ast_result) = if should_lint {
+            let (lint, build, ast) = tokio::join!(
+                self.compiler.get_lint_diagnostics(&uri),
+                self.compiler.get_build_diagnostics(&uri),
+                self.compiler.ast(path_str)
+            );
+            (Some(lint), build, ast)
+        } else {
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    format!("skipping lint for ignored file: {path_str}"),
+                )
+                .await;
+            let (build, ast) = tokio::join!(
+                self.compiler.get_build_diagnostics(&uri),
+                self.compiler.ast(path_str)
+            );
+            (None, build, ast)
+        };
 
         // Only replace cache with new AST if build succeeded (no errors; warnings are OK)
         let build_succeeded = matches!(&build_result, Ok(diagnostics) if diagnostics.iter().all(|d| d.severity != Some(DiagnosticSeverity::ERROR)));
@@ -130,23 +160,25 @@ impl ForgeLsp {
 
         let mut all_diagnostics = vec![];
 
-        match lint_result {
-            Ok(mut lints) => {
-                self.client
-                    .log_message(
-                        MessageType::INFO,
-                        format!("found {} lint diagnostics", lints.len()),
-                    )
-                    .await;
-                all_diagnostics.append(&mut lints);
-            }
-            Err(e) => {
-                self.client
-                    .log_message(
-                        MessageType::ERROR,
-                        format!("Forge lint diagnostics failed: {e}"),
-                    )
-                    .await;
+        if let Some(lint_result) = lint_result {
+            match lint_result {
+                Ok(mut lints) => {
+                    self.client
+                        .log_message(
+                            MessageType::INFO,
+                            format!("found {} lint diagnostics", lints.len()),
+                        )
+                        .await;
+                    all_diagnostics.append(&mut lints);
+                }
+                Err(e) => {
+                    self.client
+                        .log_message(
+                            MessageType::ERROR,
+                            format!("Forge lint diagnostics failed: {e}"),
+                        )
+                        .await;
+                }
             }
         }
 
@@ -258,6 +290,33 @@ impl LanguageServer for ForgeLsp {
         &self,
         params: InitializeParams,
     ) -> tower_lsp::jsonrpc::Result<InitializeResult> {
+        // Store client capabilities for use during `initialized()`.
+        {
+            let mut caps = self.client_capabilities.write().await;
+            *caps = Some(params.capabilities.clone());
+        }
+
+        // Load lint config from the workspace root's foundry.toml.
+        if let Some(root_uri) = params
+            .root_uri
+            .as_ref()
+            .and_then(|uri| uri.to_file_path().ok())
+        {
+            let lint_cfg = config::load_lint_config(&root_uri);
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    format!(
+                        "loaded foundry.toml lint config: lint_on_build={}, ignore_patterns={}",
+                        lint_cfg.lint_on_build,
+                        lint_cfg.ignore_patterns.len()
+                    ),
+                )
+                .await;
+            let mut config = self.lint_config.write().await;
+            *config = lint_cfg;
+        }
+
         // Negotiate position encoding with the client (once, for the session).
         let client_encodings = params
             .capabilities
@@ -338,6 +397,46 @@ impl LanguageServer for ForgeLsp {
         self.client
             .log_message(MessageType::INFO, "lsp server initialized.")
             .await;
+
+        // Dynamically register a file watcher for foundry.toml changes.
+        let supports_dynamic = self
+            .client_capabilities
+            .read()
+            .await
+            .as_ref()
+            .and_then(|caps| caps.workspace.as_ref())
+            .and_then(|ws| ws.did_change_watched_files.as_ref())
+            .and_then(|dcwf| dcwf.dynamic_registration)
+            .unwrap_or(false);
+
+        if supports_dynamic {
+            let registration = Registration {
+                id: "foundry-toml-watcher".to_string(),
+                method: "workspace/didChangeWatchedFiles".to_string(),
+                register_options: Some(
+                    serde_json::to_value(DidChangeWatchedFilesRegistrationOptions {
+                        watchers: vec![FileSystemWatcher {
+                            glob_pattern: GlobPattern::String("**/foundry.toml".to_string()),
+                            kind: Some(WatchKind::all()),
+                        }],
+                    })
+                    .unwrap(),
+                ),
+            };
+
+            if let Err(e) = self.client.register_capability(vec![registration]).await {
+                self.client
+                    .log_message(
+                        MessageType::WARNING,
+                        format!("failed to register foundry.toml watcher: {e}"),
+                    )
+                    .await;
+            } else {
+                self.client
+                    .log_message(MessageType::INFO, "registered foundry.toml file watcher")
+                    .await;
+            }
+        }
     }
 
     async fn shutdown(&self) -> tower_lsp::jsonrpc::Result<()> {
@@ -538,10 +637,35 @@ impl LanguageServer for ForgeLsp {
             .await;
     }
 
-    async fn did_change_watched_files(&self, _: DidChangeWatchedFilesParams) {
+    async fn did_change_watched_files(&self, params: DidChangeWatchedFilesParams) {
         self.client
             .log_message(MessageType::INFO, "watched files have changed.")
             .await;
+
+        // Reload lint config if any changed file is a foundry.toml.
+        for change in &params.changes {
+            let path = match change.uri.to_file_path() {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
+
+            if path.file_name().and_then(|n| n.to_str()) == Some("foundry.toml") {
+                let lint_cfg = config::load_lint_config_from_toml(&path);
+                self.client
+                    .log_message(
+                        MessageType::INFO,
+                        format!(
+                            "reloaded foundry.toml lint config: lint_on_build={}, ignore_patterns={}",
+                            lint_cfg.lint_on_build,
+                            lint_cfg.ignore_patterns.len()
+                        ),
+                    )
+                    .await;
+                let mut config = self.lint_config.write().await;
+                *config = lint_cfg;
+                break;
+            }
+        }
     }
 
     async fn completion(

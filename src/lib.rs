@@ -1,5 +1,6 @@
 pub mod build;
 pub mod completion;
+pub mod config;
 pub mod goto;
 pub mod hover;
 pub mod inlay_hints;
