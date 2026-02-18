@@ -39,11 +39,10 @@ solidity-language-server --help                   # show all options
 
 ### Flags
 
-| Flag | Values | Default | Description |
-|------|--------|---------|-------------|
-| `--version`, `-V` | | | Show version, commit hash, OS, and architecture |
-| `--use-forge` | | | Use forge build instead of solc for AST generation |
-| `--stdio` | | | Use stdio transport |
+| Flag | Description |
+|------|-------------|
+| `--version`, `-V` | Show version, commit hash, OS, and architecture |
+| `--stdio` | Use stdio transport |
 
 ### Neovim
 
