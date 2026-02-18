@@ -106,13 +106,24 @@ pub struct CachedBuild {
     pub path_to_abs: HashMap<String, String>,
     pub external_refs: ExternalRefs,
     pub id_to_path_map: HashMap<String, String>,
+    /// Pre-built gas index from contract output. Built once, reused by
+    /// hover, inlay hints, and code lens.
+    pub gas_index: crate::gas::GasIndex,
+    /// Pre-built hint lookup per file. Built once, reused on every
+    /// inlay hint request (avoids O(n²) declaration resolution per request).
+    pub hint_index: crate::inlay_hints::HintIndex,
     /// The text_cache version this build was created from.
     /// Used to detect dirty files (unsaved edits since last build).
     pub build_version: i32,
 }
 
 impl CachedBuild {
-    /// Build the index from raw `forge build --ast` output.
+    /// Build the index from normalized AST output.
+    ///
+    /// Canonical shape:
+    /// - `sources[path] = { id, ast }`
+    /// - `contracts[path][name] = { abi, evm, ... }`
+    /// - `source_id_to_path = { "0": "path", ... }`
     pub fn new(ast: Value, build_version: i32) -> Self {
         let (nodes, path_to_abs, external_refs) = if let Some(sources) = ast.get("sources") {
             cache_ids(sources)
@@ -121,10 +132,7 @@ impl CachedBuild {
         };
 
         let id_to_path_map = ast
-            .get("build_infos")
-            .and_then(|v| v.as_array())
-            .and_then(|arr| arr.first())
-            .and_then(|info| info.get("source_id_to_path"))
+            .get("source_id_to_path")
             .and_then(|v| v.as_object())
             .map(|obj| {
                 obj.iter()
@@ -133,12 +141,22 @@ impl CachedBuild {
             })
             .unwrap_or_default();
 
+        let gas_index = crate::gas::build_gas_index(&ast);
+
+        let hint_index = if let Some(sources) = ast.get("sources") {
+            crate::inlay_hints::build_hint_index(sources)
+        } else {
+            HashMap::new()
+        };
+
         Self {
             ast,
             nodes,
             path_to_abs,
             external_refs,
             id_to_path_map,
+            gas_index,
+            hint_index,
             build_version,
         }
     }
@@ -156,12 +174,8 @@ pub fn cache_ids(sources: &Value) -> Type {
     let mut external_refs: ExternalRefs = HashMap::new();
 
     if let Some(sources_obj) = sources.as_object() {
-        for (path, contents) in sources_obj {
-            if let Some(contents_array) = contents.as_array()
-                && let Some(first_content) = contents_array.first()
-                && let Some(source_file) = first_content.get("source_file")
-                && let Some(ast) = source_file.get("ast")
-            {
+        for (path, source_data) in sources_obj {
+            if let Some(ast) = source_data.get("ast") {
                 // Get the absolute path for this file
                 let abs_path = ast
                     .get("absolutePath")
@@ -471,9 +485,7 @@ pub fn goto_declaration(
     source_bytes: &[u8],
 ) -> Option<Location> {
     let sources = ast_data.get("sources")?;
-    let build_infos = ast_data.get("build_infos")?.as_array()?;
-    let first_build_info = build_infos.first()?;
-    let id_to_path = first_build_info.get("source_id_to_path")?.as_object()?;
+    let id_to_path = ast_data.get("source_id_to_path")?.as_object()?;
 
     let id_to_path_map: HashMap<String, String> = id_to_path
         .iter()

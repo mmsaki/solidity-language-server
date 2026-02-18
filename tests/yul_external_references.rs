@@ -10,10 +10,11 @@ type Type = (
     goto::ExternalRefs,
 );
 
-/// Load pool-manager-ast.json and run cache_ids.
+/// Load pool-manager-ast.json, normalize from forge shape, and run cache_ids.
 fn load_ast() -> Type {
-    let ast_data: Value =
+    let raw: Value =
         serde_json::from_str(&fs::read_to_string("pool-manager-ast.json").unwrap()).unwrap();
+    let ast_data = solidity_language_server::solc::normalize_forge_output(raw);
     let sources = ast_data.get("sources").unwrap();
     goto::cache_ids(sources)
 }
@@ -181,12 +182,11 @@ fn test_no_yul_src_keys_in_u64_map() {
 
 #[test]
 fn test_goto_bytes_resolves_yul_identifier() {
-    let ast_data: Value =
+    let raw: Value =
         serde_json::from_str(&fs::read_to_string("pool-manager-ast.json").unwrap()).unwrap();
+    let ast_data = solidity_language_server::solc::normalize_forge_output(raw);
     let sources = ast_data.get("sources").unwrap();
-    let build_infos = ast_data.get("build_infos").unwrap().as_array().unwrap();
-    let first_build_info = build_infos.first().unwrap();
-    let id_to_path_obj = first_build_info
+    let id_to_path_obj = ast_data
         .get("source_id_to_path")
         .unwrap()
         .as_object()
@@ -262,13 +262,11 @@ struct SetupGotoResult(
 
 /// Helper: set up goto_bytes inputs from the fixture.
 fn setup_goto() -> SetupGotoResult {
-    let ast_data: Value =
+    let raw: Value =
         serde_json::from_str(&fs::read_to_string("pool-manager-ast.json").unwrap()).unwrap();
+    let ast_data = solidity_language_server::solc::normalize_forge_output(raw);
     let sources = ast_data.get("sources").unwrap();
-    let build_infos = ast_data.get("build_infos").unwrap().as_array().unwrap();
-    let id_to_path: HashMap<String, String> = build_infos
-        .first()
-        .unwrap()
+    let id_to_path: HashMap<String, String> = ast_data
         .get("source_id_to_path")
         .unwrap()
         .as_object()

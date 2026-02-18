@@ -9,17 +9,16 @@ const PM_KEY: &str = "/Users/meek/developer/uniswap/v4-core/src/PoolManager.sol"
 
 /// Load the fixture as a CachedBuild.
 fn load_build() -> CachedBuild {
-    let ast: Value =
+    let raw: Value =
         serde_json::from_str(&fs::read_to_string("pool-manager-ast.json").unwrap()).unwrap();
+    let ast = solidity_language_server::solc::normalize_forge_output(raw);
     CachedBuild::new(ast, 0)
 }
 
-/// Extract ImportDirective nodes from the raw fixture AST.
+/// Extract ImportDirective nodes from the normalized fixture AST.
 /// Returns (src, file, absolutePath) tuples for verification.
 fn extract_imports(ast: &Value) -> Vec<(&str, &str, &str)> {
-    let nodes = ast["sources"][PM_KEY][0]["source_file"]["ast"]["nodes"]
-        .as_array()
-        .unwrap();
+    let nodes = ast["sources"][PM_KEY]["ast"]["nodes"].as_array().unwrap();
     nodes
         .iter()
         .filter(|n| n["nodeType"].as_str() == Some("ImportDirective"))

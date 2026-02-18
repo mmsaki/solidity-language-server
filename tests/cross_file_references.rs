@@ -7,8 +7,9 @@ use std::fs;
 
 /// Load pool-manager-ast.json as a CachedBuild.
 fn load_cached_build() -> CachedBuild {
-    let ast_data: Value =
+    let raw: Value =
         serde_json::from_str(&fs::read_to_string("pool-manager-ast.json").unwrap()).unwrap();
+    let ast_data = solidity_language_server::solc::normalize_forge_output(raw);
     CachedBuild::new(ast_data, 0)
 }
 
@@ -65,7 +66,7 @@ fn test_cached_build_has_external_refs() {
 fn test_cached_build_preserves_raw_ast() {
     let build = load_cached_build();
     assert!(build.ast.get("sources").is_some());
-    assert!(build.ast.get("build_infos").is_some());
+    assert!(build.ast.get("source_id_to_path").is_some());
 }
 
 // =============================================================================

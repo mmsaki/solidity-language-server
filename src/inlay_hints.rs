@@ -1,3 +1,4 @@
+use crate::gas;
 use crate::goto::CachedBuild;
 use crate::types::SourceLoc;
 use serde_json::Value;
@@ -6,6 +7,7 @@ use tower_lsp::lsp_types::*;
 use tree_sitter::{Node, Parser};
 
 /// Parameter info resolved from the AST for a callable.
+#[derive(Debug, Clone)]
 struct ParamInfo {
     /// Parameter names from the declaration.
     names: Vec<String>,
@@ -14,6 +16,7 @@ struct ParamInfo {
 }
 
 /// Call-site info extracted from the AST, keyed by source byte offset.
+#[derive(Debug, Clone)]
 struct CallSite {
     /// The resolved parameter info for this specific call.
     info: ParamInfo,
@@ -22,18 +25,44 @@ struct CallSite {
 }
 
 /// Both lookup strategies: exact byte-offset match and (name, arg_count) fallback.
-struct HintLookup {
+/// Built once per file when the AST is cached, reused on every inlay hint request.
+#[derive(Debug, Clone)]
+pub struct HintLookup {
     /// Primary: byte_offset → CallSite (exact match when AST offsets are fresh).
     by_offset: HashMap<usize, CallSite>,
     /// Fallback: (name, arg_count) → ParamInfo (works even with stale offsets).
     by_name: HashMap<(String, usize), ParamInfo>,
 }
 
+/// Pre-computed hint lookups for all files, keyed by absolutePath.
+/// Built once in `CachedBuild::new()`, reused on every inlay hint request.
+pub type HintIndex = HashMap<String, HintLookup>;
+
+/// Build the hint index for all files from the AST sources.
+/// Called once in `CachedBuild::new()`.
+pub fn build_hint_index(sources: &Value) -> HintIndex {
+    let id_index = build_id_index(sources);
+    let mut hint_index = HashMap::new();
+
+    if let Some(obj) = sources.as_object() {
+        for (_, source_data) in obj {
+            if let Some(ast) = source_data.get("ast") {
+                if let Some(abs_path) = ast.get("absolutePath").and_then(|v| v.as_str()) {
+                    let lookup = build_hint_lookup(ast, &id_index);
+                    hint_index.insert(abs_path.to_string(), lookup);
+                }
+            }
+        }
+    }
+
+    hint_index
+}
+
 /// Generate inlay hints for a given range of source.
 ///
 /// Uses tree-sitter on the **live buffer** for argument positions (so hints
-/// follow edits in real time) and the Forge AST for semantic info (parameter
-/// names via `referencedDeclaration`).
+/// follow edits in real time) and the pre-cached hint index for semantic
+/// info (parameter names via `referencedDeclaration`).
 pub fn inlay_hints(
     build: &CachedBuild,
     uri: &Url,
@@ -64,10 +93,13 @@ pub fn inlay_hints(
         None => return vec![],
     };
 
-    // Phase 1: Build lookup from AST
-    let lookup = build_hint_lookup(file_ast, sources);
+    // Use the pre-cached hint lookup for this file
+    let lookup = match build.hint_index.get(&abs) {
+        Some(l) => l,
+        None => return vec![],
+    };
 
-    // Phase 2: Walk tree-sitter on the live buffer for real-time positions
+    // Walk tree-sitter on the live buffer for real-time argument positions
     let source_str = String::from_utf8_lossy(live_source);
     let tree = match ts_parse(&source_str) {
         Some(t) => t,
@@ -76,7 +108,60 @@ pub fn inlay_hints(
 
     let mut hints = Vec::new();
     collect_ts_hints(tree.root_node(), &source_str, &range, &lookup, &mut hints);
+
+    // Gas inlay hints: show gas cost at function/contract definitions
+    if !build.gas_index.is_empty() {
+        collect_gas_hints(
+            file_ast,
+            sources,
+            &build.gas_index,
+            live_source,
+            &range,
+            &mut hints,
+        );
+    }
+
     hints
+}
+
+/// Build a flat node-id → AST-node index from all sources.
+/// This is O(total_nodes) and replaces the O(calls × total_nodes)
+/// `find_declaration` that walked the entire AST per lookup.
+fn build_id_index(sources: &Value) -> HashMap<u64, &Value> {
+    let mut index = HashMap::new();
+    if let Some(obj) = sources.as_object() {
+        for (_, source_data) in obj {
+            if let Some(ast) = source_data.get("ast") {
+                index_node_ids(ast, &mut index);
+            }
+        }
+    }
+    index
+}
+
+/// Recursively index all nodes that have an `id` field.
+fn index_node_ids<'a>(node: &'a Value, index: &mut HashMap<u64, &'a Value>) {
+    if let Some(id) = node.get("id").and_then(|v| v.as_u64()) {
+        index.insert(id, node);
+    }
+    for key in crate::goto::CHILD_KEYS {
+        if let Some(child) = node.get(*key) {
+            if child.is_array() {
+                if let Some(arr) = child.as_array() {
+                    for item in arr {
+                        index_node_ids(item, index);
+                    }
+                }
+            } else if child.is_object() {
+                index_node_ids(child, index);
+            }
+        }
+    }
+    if let Some(nodes) = node.get("nodes").and_then(|v| v.as_array()) {
+        for child in nodes {
+            index_node_ids(child, index);
+        }
+    }
 }
 
 /// Parse Solidity source with tree-sitter.
@@ -89,12 +174,12 @@ fn ts_parse(source: &str) -> Option<tree_sitter::Tree> {
 }
 
 /// Build both lookup strategies from the AST.
-fn build_hint_lookup(file_ast: &Value, sources: &Value) -> HintLookup {
+fn build_hint_lookup(file_ast: &Value, id_index: &HashMap<u64, &Value>) -> HintLookup {
     let mut lookup = HintLookup {
         by_offset: HashMap::new(),
         by_name: HashMap::new(),
     };
-    collect_ast_calls(file_ast, sources, &mut lookup);
+    collect_ast_calls(file_ast, id_index, &mut lookup);
     lookup
 }
 
@@ -105,12 +190,12 @@ fn parse_src_offset(node: &Value) -> Option<usize> {
 }
 
 /// Recursively walk AST nodes collecting call site info.
-fn collect_ast_calls(node: &Value, sources: &Value, lookup: &mut HintLookup) {
+fn collect_ast_calls(node: &Value, id_index: &HashMap<u64, &Value>, lookup: &mut HintLookup) {
     let node_type = node.get("nodeType").and_then(|v| v.as_str()).unwrap_or("");
 
     match node_type {
         "FunctionCall" => {
-            if let Some((name, info)) = extract_call_info(node, sources) {
+            if let Some((name, info)) = extract_call_info(node, id_index) {
                 let arg_count = node
                     .get("arguments")
                     .and_then(|v| v.as_array())
@@ -133,7 +218,7 @@ fn collect_ast_calls(node: &Value, sources: &Value, lookup: &mut HintLookup) {
         }
         "EmitStatement" => {
             if let Some(event_call) = node.get("eventCall")
-                && let Some((name, info)) = extract_call_info(event_call, sources)
+                && let Some((name, info)) = extract_call_info(event_call, id_index)
             {
                 let arg_count = event_call
                     .get("arguments")
@@ -164,18 +249,18 @@ fn collect_ast_calls(node: &Value, sources: &Value, lookup: &mut HintLookup) {
             if child.is_array() {
                 if let Some(arr) = child.as_array() {
                     for item in arr {
-                        collect_ast_calls(item, sources, lookup);
+                        collect_ast_calls(item, id_index, lookup);
                     }
                 }
             } else if child.is_object() {
-                collect_ast_calls(child, sources, lookup);
+                collect_ast_calls(child, id_index, lookup);
             }
         }
     }
 }
 
 /// Extract function/event name and parameter info from an AST FunctionCall node.
-fn extract_call_info(node: &Value, sources: &Value) -> Option<(String, ParamInfo)> {
+fn extract_call_info(node: &Value, id_index: &HashMap<u64, &Value>) -> Option<(String, ParamInfo)> {
     let args = node.get("arguments")?.as_array()?;
     if args.is_empty() {
         return None;
@@ -195,8 +280,8 @@ fn extract_call_info(node: &Value, sources: &Value) -> Option<(String, ParamInfo
     let expr = node.get("expression")?;
     let decl_id = expr.get("referencedDeclaration").and_then(|v| v.as_u64())?;
 
-    let decl_node = find_declaration(sources, decl_id)?;
-    let names = get_parameter_names(&decl_node)?;
+    let decl_node = id_index.get(&decl_id)?;
+    let names = get_parameter_names(decl_node)?;
 
     // Extract the function name from the expression
     let func_name = extract_function_name(expr)?;
@@ -407,54 +492,191 @@ fn first_named_child(node: Node) -> Option<Node> {
     node.children(&mut cursor).find(|c| c.is_named())
 }
 
-// ── AST helpers (unchanged) ──────────────────────────────────────────────
+// ── Gas inlay hints ──────────────────────────────────────────────────────
 
-/// Find a declaration node by ID in the AST sources.
-fn find_declaration(sources: &Value, decl_id: u64) -> Option<Value> {
-    let sources_obj = sources.as_object()?;
-    for (_, file_data) in sources_obj {
-        let entries = file_data.as_array()?;
-        for entry in entries {
-            let ast = entry.get("source_file")?.get("ast")?;
-            if let Some(found) = find_node_by_id(ast, decl_id) {
-                return Some(found.clone());
-            }
-        }
+/// Walk the AST for FunctionDefinition and ContractDefinition nodes,
+/// emitting gas cost hints at the end of the declaration line.
+fn collect_gas_hints(
+    file_ast: &Value,
+    sources: &Value,
+    gas_index: &gas::GasIndex,
+    source_bytes: &[u8],
+    range: &Range,
+    hints: &mut Vec<InlayHint>,
+) {
+    let nodes = match file_ast.get("nodes").and_then(|v| v.as_array()) {
+        Some(n) => n,
+        None => return,
+    };
+
+    for node in nodes {
+        collect_gas_hints_recursive(node, sources, gas_index, source_bytes, range, hints);
     }
-    None
 }
 
-/// Recursively find a node by its `id` field.
-fn find_node_by_id(node: &Value, id: u64) -> Option<&Value> {
-    if node.get("id").and_then(|v| v.as_u64()) == Some(id) {
-        return Some(node);
-    }
-    for key in crate::goto::CHILD_KEYS {
-        if let Some(child) = node.get(*key) {
-            if child.is_array() {
-                if let Some(arr) = child.as_array() {
-                    for item in arr {
-                        if let Some(found) = find_node_by_id(item, id) {
-                            return Some(found);
-                        }
-                    }
-                }
-            } else if child.is_object()
-                && let Some(found) = find_node_by_id(child, id)
+fn collect_gas_hints_recursive(
+    node: &Value,
+    sources: &Value,
+    gas_index: &gas::GasIndex,
+    source_bytes: &[u8],
+    range: &Range,
+    hints: &mut Vec<InlayHint>,
+) {
+    let node_type = node.get("nodeType").and_then(|v| v.as_str()).unwrap_or("");
+
+    match node_type {
+        "FunctionDefinition" => {
+            if let Some(hint) = gas_hint_for_function(node, sources, gas_index, source_bytes, range)
             {
-                return Some(found);
+                hints.push(hint);
+            }
+        }
+        "ContractDefinition" => {
+            if let Some(hint) = gas_hint_for_contract(node, sources, gas_index, source_bytes, range)
+            {
+                hints.push(hint);
+            }
+        }
+        _ => {}
+    }
+
+    // Recurse into children
+    if let Some(children) = node.get("nodes").and_then(|v| v.as_array()) {
+        for child in children {
+            collect_gas_hints_recursive(child, sources, gas_index, source_bytes, range, hints);
+        }
+    }
+    // Also check function body statements
+    if let Some(body) = node.get("body") {
+        if let Some(stmts) = body.get("statements").and_then(|v| v.as_array()) {
+            for stmt in stmts {
+                collect_gas_hints_recursive(stmt, sources, gas_index, source_bytes, range, hints);
             }
         }
     }
-    if let Some(nodes) = node.get("nodes").and_then(|v| v.as_array()) {
-        for child in nodes {
-            if let Some(found) = find_node_by_id(child, id) {
-                return Some(found);
-            }
-        }
-    }
-    None
 }
+
+/// Create a gas inlay hint for a function definition.
+fn gas_hint_for_function(
+    node: &Value,
+    sources: &Value,
+    gas_index: &gas::GasIndex,
+    source_bytes: &[u8],
+    range: &Range,
+) -> Option<InlayHint> {
+    // Find gas cost
+    let cost = if let Some(selector) = node.get("functionSelector").and_then(|v| v.as_str()) {
+        // External/public function — look up by selector
+        gas::gas_by_selector(gas_index, selector).map(|(_, c)| c.to_string())
+    } else {
+        // Internal function — look up by name in containing contract
+        let fn_name = node.get("name").and_then(|v| v.as_str())?;
+        let contract_key = gas::resolve_contract_key(sources, node, gas_index)?;
+        let contract_gas = gas_index.get(&contract_key)?;
+
+        let prefix = format!("{fn_name}(");
+        contract_gas
+            .internal
+            .iter()
+            .find(|(sig, _)| sig.starts_with(&prefix))
+            .map(|(_, c)| c.to_string())
+    }?;
+
+    // Position the hint at the end of the function signature line.
+    // Use the body's opening brace position (start of body src).
+    let body_src = node.get("body")?.get("src")?.as_str()?;
+    let body_loc = crate::types::SourceLoc::parse(body_src)?;
+    let text = String::from_utf8_lossy(source_bytes);
+
+    // Bounds check — body offset must be within the live buffer
+    if body_loc.offset >= text.len() {
+        return None;
+    }
+    let pos = crate::utils::byte_offset_to_position(&text, body_loc.offset);
+
+    // Check if position is within the visible range
+    if pos.line < range.start.line || pos.line > range.end.line {
+        return None;
+    }
+
+    Some(InlayHint {
+        position: Position::new(pos.line, pos.character + 1),
+        kind: Some(InlayHintKind::TYPE),
+        label: InlayHintLabel::String(format!("{} {}", gas::GAS_ICON, gas::format_gas(&cost))),
+        text_edits: None,
+        tooltip: Some(InlayHintTooltip::String("Estimated gas cost".to_string())),
+        padding_left: Some(true),
+        padding_right: None,
+        data: None,
+    })
+}
+
+/// Create a gas inlay hint for a contract definition (deploy cost).
+fn gas_hint_for_contract(
+    node: &Value,
+    sources: &Value,
+    gas_index: &gas::GasIndex,
+    source_bytes: &[u8],
+    range: &Range,
+) -> Option<InlayHint> {
+    let contract_key = gas::resolve_contract_key(sources, node, gas_index)?;
+    let contract_gas = gas_index.get(&contract_key)?;
+
+    let total_cost = contract_gas.creation.get("totalCost")?;
+
+    let src = node.get("src").and_then(|v| v.as_str())?;
+    let loc = crate::types::SourceLoc::parse(src)?;
+    let text = String::from_utf8_lossy(source_bytes);
+
+    // Bounds check — the contract's src range must fit within the live buffer
+    let end = loc.offset + loc.length;
+    if end > text.len() {
+        return None;
+    }
+
+    // Find the opening brace of the contract body
+    let node_text = &text[loc.offset..end];
+    let brace_offset = node_text.find('{')?;
+    let abs_brace_offset = loc.offset + brace_offset;
+    let pos = crate::utils::byte_offset_to_position(&text, abs_brace_offset);
+
+    if pos.line < range.start.line || pos.line > range.end.line {
+        return None;
+    }
+
+    Some(InlayHint {
+        position: Position::new(pos.line, pos.character + 1),
+        kind: Some(InlayHintKind::TYPE),
+        label: InlayHintLabel::String(format!(
+            "{} deploy: {}",
+            gas::GAS_ICON,
+            gas::format_gas(total_cost)
+        )),
+        text_edits: None,
+        tooltip: Some(InlayHintTooltip::String(format!(
+            "Deploy cost — code deposit: {}, execution: {}",
+            gas::format_gas(
+                contract_gas
+                    .creation
+                    .get("codeDepositCost")
+                    .map(|s| s.as_str())
+                    .unwrap_or("?")
+            ),
+            gas::format_gas(
+                contract_gas
+                    .creation
+                    .get("executionCost")
+                    .map(|s| s.as_str())
+                    .unwrap_or("?")
+            )
+        ))),
+        padding_left: Some(true),
+        padding_right: None,
+        data: None,
+    })
+}
+
+// ── AST helpers ──────────────────────────────────────────────────────────
 
 /// Extract parameter names from a function/event/error/struct declaration.
 fn get_parameter_names(decl: &Value) -> Option<Vec<String>> {
@@ -481,13 +703,10 @@ fn get_parameter_names(decl: &Value) -> Option<Vec<String>> {
 /// Find the AST for a specific file by its absolutePath.
 fn find_file_ast<'a>(sources: &'a Value, abs_path: &str) -> Option<&'a Value> {
     let sources_obj = sources.as_object()?;
-    for (_, file_data) in sources_obj {
-        let entries = file_data.as_array()?;
-        for entry in entries {
-            let ast = entry.get("source_file")?.get("ast")?;
-            if ast.get("absolutePath").and_then(|v| v.as_str()) == Some(abs_path) {
-                return Some(ast);
-            }
+    for (_, source_data) in sources_obj {
+        let ast = source_data.get("ast")?;
+        if ast.get("absolutePath").and_then(|v| v.as_str()) == Some(abs_path) {
+            return Some(ast);
         }
     }
     None

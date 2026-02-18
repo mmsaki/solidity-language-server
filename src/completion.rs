@@ -373,14 +373,10 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
     let mut linearized_base_contracts: HashMap<NodeId, Vec<NodeId>> = HashMap::new();
 
     if let Some(sources_obj) = sources.as_object() {
-        for (path, contents) in sources_obj {
-            if let Some(contents_array) = contents.as_array()
-                && let Some(first_content) = contents_array.first()
-                && let Some(source_file) = first_content.get("source_file")
-                && let Some(ast) = source_file.get("ast")
-            {
+        for (path, source_data) in sources_obj {
+            if let Some(ast) = source_data.get("ast") {
                 // Map file path → source file id for scope resolution
-                if let Some(fid) = source_file.get("id").and_then(|v| v.as_u64()) {
+                if let Some(fid) = source_data.get("id").and_then(|v| v.as_u64()) {
                     path_to_file_id.insert(path.clone(), FileId(fid));
                 }
                 let mut stack: Vec<&Value> = vec![ast];
@@ -768,8 +764,7 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
 
             if let Some(path_entry) = contracts_obj.get(path)
                 && let Some(contract_entry) = path_entry.get(contract_name)
-                && let Some(first) = contract_entry.get(0)
-                && let Some(evm) = first.get("contract").and_then(|c| c.get("evm"))
+                && let Some(evm) = contract_entry.get("evm")
                 && let Some(methods) = evm.get("methodIdentifiers")
                 && let Some(methods_obj) = methods.as_object()
             {

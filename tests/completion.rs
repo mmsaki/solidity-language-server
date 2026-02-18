@@ -9,7 +9,9 @@ use std::fs;
 use tower_lsp::lsp_types::CompletionItemKind;
 
 fn load_ast() -> Value {
-    serde_json::from_str(&fs::read_to_string("pool-manager-ast.json").unwrap()).unwrap()
+    let raw: Value =
+        serde_json::from_str(&fs::read_to_string("pool-manager-ast.json").unwrap()).unwrap();
+    solidity_language_server::solc::normalize_forge_output(raw)
 }
 
 fn load_cache() -> solidity_language_server::completion::CompletionCache {

@@ -2,6 +2,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use tower_lsp::lsp_types::{Hover, HoverContents, MarkupContent, MarkupKind, Position, Url};
 
+use crate::gas::{self, GasIndex};
 use crate::goto::{CHILD_KEYS, cache_ids, pos_to_bytes};
 use crate::references::{byte_to_decl_via_external_refs, byte_to_id};
 use crate::types::NodeId;
@@ -9,11 +10,8 @@ use crate::types::NodeId;
 /// Find the raw AST node with the given id by walking all sources.
 pub fn find_node_by_id(sources: &Value, target_id: NodeId) -> Option<&Value> {
     let sources_obj = sources.as_object()?;
-    for (_path, contents) in sources_obj {
-        let contents_array = contents.as_array()?;
-        let first_content = contents_array.first()?;
-        let source_file = first_content.get("source_file")?;
-        let ast = source_file.get("ast")?;
+    for (_path, source_data) in sources_obj {
+        let ast = source_data.get("ast")?;
 
         // Check root
         if ast.get("id").and_then(|v| v.as_u64()) == Some(target_id.0) {
@@ -404,17 +402,106 @@ fn format_parameters(params_node: Option<&Value>) -> String {
     parts.join(", ")
 }
 
+/// Build gas hover text for a function declaration.
+fn gas_hover_for_function(
+    decl_node: &Value,
+    sources: &Value,
+    gas_index: &GasIndex,
+) -> Option<String> {
+    let node_type = decl_node.get("nodeType").and_then(|v| v.as_str())?;
+    if node_type != "FunctionDefinition" {
+        return None;
+    }
+
+    // Try by selector first (external/public functions)
+    if let Some(selector) = decl_node.get("functionSelector").and_then(|v| v.as_str()) {
+        if let Some((_contract, cost)) = gas::gas_by_selector(gas_index, selector) {
+            return Some(format!("Gas: `{}`", gas::format_gas(cost)));
+        }
+    }
+
+    // Try by name (internal functions)
+    let fn_name = decl_node.get("name").and_then(|v| v.as_str())?;
+    let contract_key = gas::resolve_contract_key(sources, decl_node, gas_index)?;
+    let contract_gas = gas_index.get(&contract_key)?;
+
+    // Match by name prefix in internal gas estimates
+    let prefix = format!("{fn_name}(");
+    for (sig, cost) in &contract_gas.internal {
+        if sig.starts_with(&prefix) {
+            return Some(format!("Gas: `{}`", gas::format_gas(cost)));
+        }
+    }
+
+    None
+}
+
+/// Build gas hover text for a contract declaration.
+fn gas_hover_for_contract(
+    decl_node: &Value,
+    sources: &Value,
+    gas_index: &GasIndex,
+) -> Option<String> {
+    let node_type = decl_node.get("nodeType").and_then(|v| v.as_str())?;
+    if node_type != "ContractDefinition" {
+        return None;
+    }
+
+    let contract_key = gas::resolve_contract_key(sources, decl_node, gas_index)?;
+    let contract_gas = gas_index.get(&contract_key)?;
+
+    let mut lines = Vec::new();
+
+    // Creation/deploy costs
+    if !contract_gas.creation.is_empty() {
+        lines.push("**Deploy Cost**".to_string());
+        if let Some(cost) = contract_gas.creation.get("totalCost") {
+            lines.push(format!("- Total: `{}`", gas::format_gas(cost)));
+        }
+        if let Some(cost) = contract_gas.creation.get("codeDepositCost") {
+            lines.push(format!("- Code deposit: `{}`", gas::format_gas(cost)));
+        }
+        if let Some(cost) = contract_gas.creation.get("executionCost") {
+            lines.push(format!("- Execution: `{}`", gas::format_gas(cost)));
+        }
+    }
+
+    // External function gas
+    if !contract_gas.external.is_empty() {
+        lines.push(String::new());
+        lines.push("**Function Gas**".to_string());
+
+        // Collect only signature entries (skip raw selector entries)
+        let mut fns: Vec<(&String, &String)> = contract_gas
+            .external
+            .iter()
+            .filter(|(k, _)| k.contains('('))
+            .collect();
+        fns.sort_by_key(|(k, _)| (*k).clone());
+
+        for (sig, cost) in fns {
+            let fn_name = sig.split('(').next().unwrap_or(sig);
+            lines.push(format!("- `{fn_name}`: `{}`", gas::format_gas(cost)));
+        }
+    }
+
+    if lines.is_empty() {
+        return None;
+    }
+
+    Some(lines.join("\n"))
+}
+
 /// Produce hover information for the symbol at the given position.
 pub fn hover_info(
     ast_data: &Value,
     file_uri: &Url,
     position: Position,
     source_bytes: &[u8],
+    gas_index: &GasIndex,
 ) -> Option<Hover> {
     let sources = ast_data.get("sources")?;
-    let build_infos = ast_data.get("build_infos").and_then(|v| v.as_array())?;
-    let first_build = build_infos.first()?;
-    let source_id_to_path = first_build
+    let source_id_to_path = ast_data
         .get("source_id_to_path")
         .and_then(|v| v.as_object())?;
 
@@ -478,6 +565,15 @@ pub fn hover_info(
         }
     }
 
+    // Gas estimates
+    if !gas_index.is_empty() {
+        if let Some(gas_text) = gas_hover_for_function(decl_node, sources, gas_index) {
+            parts.push(gas_text);
+        } else if let Some(gas_text) = gas_hover_for_contract(decl_node, sources, gas_index) {
+            parts.push(gas_text);
+        }
+    }
+
     // Documentation — resolve @inheritdoc via selector matching
     if let Some(doc_text) = extract_documentation(decl_node) {
         let inherited_doc = resolve_inheritdoc(sources, decl_node, &doc_text);
@@ -506,7 +602,8 @@ mod tests {
 
     fn load_test_ast() -> Value {
         let data = std::fs::read_to_string("pool-manager-ast.json").expect("test fixture");
-        serde_json::from_str(&data).expect("valid json")
+        let raw: Value = serde_json::from_str(&data).expect("valid json");
+        crate::solc::normalize_forge_output(raw)
     }
 
     #[test]

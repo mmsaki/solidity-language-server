@@ -1,5 +1,6 @@
 use crate::completion;
 use crate::config::{self, FoundryConfig, LintConfig};
+use crate::gas;
 use crate::goto;
 use crate::hover;
 use crate::inlay_hints;
@@ -328,6 +329,13 @@ impl ForgeLsp {
             }
         }
 
+        // Cache miss — if caller doesn't want to trigger a build, return None.
+        // This prevents inlay hints, code lens, etc. from blocking on a full
+        // solc/forge build. The cache will be populated by on_change (did_open/did_save).
+        if !insert_on_miss {
+            return None;
+        }
+
         // Cache miss — build the AST from disk.
         let path_str = file_path.to_str()?;
         let ast_result = if self.use_solc {
@@ -344,10 +352,8 @@ impl ForgeLsp {
                 // Built from disk (cache miss) — use version 0; the next
                 // didSave/on_change will stamp the correct version.
                 let build = Arc::new(goto::CachedBuild::new(data, 0));
-                if insert_on_miss {
-                    let mut cache = self.ast_cache.write().await;
-                    cache.insert(uri_str.clone(), build.clone());
-                }
+                let mut cache = self.ast_cache.write().await;
+                cache.insert(uri_str.clone(), build.clone());
                 Some(build)
             }
             Err(e) => {
@@ -467,6 +473,9 @@ impl LanguageServer for ForgeLsp {
                     },
                 }),
                 document_formatting_provider: Some(OneOf::Left(true)),
+                code_lens_provider: Some(CodeLensOptions {
+                    resolve_provider: Some(false),
+                }),
                 inlay_hint_provider: Some(OneOf::Right(InlayHintServerCapabilities::Options(
                     InlayHintOptions {
                         resolve_provider: Some(false),
@@ -1492,7 +1501,13 @@ impl LanguageServer for ForgeLsp {
             None => return Ok(None),
         };
 
-        let result = hover::hover_info(&cached_build.ast, &uri, position, &source_bytes);
+        let result = hover::hover_info(
+            &cached_build.ast,
+            &uri,
+            position,
+            &source_bytes,
+            &cached_build.gas_index,
+        );
 
         if result.is_some() {
             self.client
@@ -1639,6 +1654,132 @@ impl LanguageServer for ForgeLsp {
                 )
                 .await;
             Ok(Some(hints))
+        }
+    }
+
+    async fn code_lens(
+        &self,
+        params: CodeLensParams,
+    ) -> tower_lsp::jsonrpc::Result<Option<Vec<CodeLens>>> {
+        let uri = params.text_document.uri;
+
+        let file_path = match uri.to_file_path() {
+            Ok(path) => path,
+            Err(_) => return Ok(None),
+        };
+
+        let source_bytes = match self.get_source_bytes(&uri, &file_path).await {
+            Some(bytes) => bytes,
+            None => return Ok(None),
+        };
+
+        let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
+        let cached_build = match cached_build {
+            Some(cb) => cb,
+            None => return Ok(None),
+        };
+
+        let gas_index = &cached_build.gas_index;
+        if gas_index.is_empty() {
+            return Ok(None);
+        }
+
+        let sources = match cached_build.ast.get("sources") {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+
+        // Find the file's AST
+        let file_path_str = file_path.to_str().unwrap_or("");
+        let abs_path = cached_build
+            .path_to_abs
+            .iter()
+            .find(|(k, _)| file_path_str.ends_with(k.as_str()))
+            .map(|(_, v)| v.clone());
+
+        let abs = match abs_path {
+            Some(a) => a,
+            None => return Ok(None),
+        };
+
+        let file_ast = match sources.as_object().and_then(|obj| {
+            obj.iter()
+                .find(|(_, v)| {
+                    v.get("ast")
+                        .and_then(|ast| ast.get("absolutePath"))
+                        .and_then(|v| v.as_str())
+                        == Some(&abs)
+                })
+                .map(|(_, v)| v)
+        }) {
+            Some(s) => s.get("ast"),
+            None => None,
+        };
+
+        let file_ast = match file_ast {
+            Some(a) => a,
+            None => return Ok(None),
+        };
+
+        let text = String::from_utf8_lossy(&source_bytes);
+        let mut lenses = Vec::new();
+
+        // Walk top-level nodes for ContractDefinition
+        if let Some(nodes) = file_ast.get("nodes").and_then(|v| v.as_array()) {
+            for node in nodes {
+                let node_type = node.get("nodeType").and_then(|v| v.as_str()).unwrap_or("");
+                if node_type != "ContractDefinition" {
+                    continue;
+                }
+
+                if let Some(contract_key) = gas::resolve_contract_key(sources, node, gas_index) {
+                    if let Some(contract_gas) = gas_index.get(&contract_key) {
+                        if let Some(total) = contract_gas.creation.get("totalCost") {
+                            // Position: line above the contract definition
+                            if let Some(src) = node.get("src").and_then(|v| v.as_str()) {
+                                if let Some(loc) = crate::types::SourceLoc::parse(src) {
+                                    let pos =
+                                        crate::utils::byte_offset_to_position(&text, loc.offset);
+                                    let range = Range::new(pos, pos);
+
+                                    let code_deposit = contract_gas
+                                        .creation
+                                        .get("codeDepositCost")
+                                        .map(|s| gas::format_gas(s))
+                                        .unwrap_or_else(|| "?".to_string());
+                                    let execution = contract_gas
+                                        .creation
+                                        .get("executionCost")
+                                        .map(|s| gas::format_gas(s))
+                                        .unwrap_or_else(|| "?".to_string());
+
+                                    lenses.push(CodeLens {
+                                        range,
+                                        command: Some(Command {
+                                            title: format!(
+                                                "{} Deploy: {} (code: {}, exec: {})",
+                                                gas::GAS_ICON,
+                                                gas::format_gas(total),
+                                                code_deposit,
+                                                execution
+                                            ),
+                                            command: String::new(),
+                                            arguments: None,
+                                        }),
+                                        data: None,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if lenses.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(lenses))
         }
     }
 }

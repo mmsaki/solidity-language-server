@@ -201,15 +201,7 @@ pub fn goto_references_with_index(
         Some(s) => s,
         None => return vec![],
     };
-    let build_infos = match ast_data.get("build_infos").and_then(|v| v.as_array()) {
-        Some(infos) => infos,
-        None => return vec![],
-    };
-    let first_build_info = match build_infos.first() {
-        Some(info) => info,
-        None => return vec![],
-    };
-    let id_to_path = match first_build_info
+    let id_to_path = match ast_data
         .get("source_id_to_path")
         .and_then(|v| v.as_object())
     {

@@ -1,4 +1,7 @@
-use crate::{build::build_output_to_diagnostics, lint::lint_output_to_diagnostics};
+use crate::{
+    build::build_output_to_diagnostics, lint::lint_output_to_diagnostics,
+    solc::normalize_forge_output,
+};
 use serde::{Deserialize, Serialize};
 use std::{io, path::PathBuf};
 use thiserror::Error;
@@ -88,7 +91,7 @@ impl Runner for ForgeRunner {
         let stdout_str = String::from_utf8_lossy(&output.stdout);
         let parsed: serde_json::Value = serde_json::from_str(&stdout_str)?;
 
-        Ok(parsed)
+        Ok(normalize_forge_output(parsed))
     }
 
     async fn format(&self, file_path: &str) -> Result<String, RunnerError> {

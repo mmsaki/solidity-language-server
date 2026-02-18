@@ -155,99 +155,142 @@ pub async fn run_solc(
     Ok(parsed)
 }
 
-/// Normalize solc `--standard-json` output into the shape that
-/// `forge build --json --ast` produces.
+/// Normalize raw solc `--standard-json` output into the canonical shape.
 ///
-/// Transforms:
-/// - `sources[path] = { id, ast }` → `sources[path] = [{ source_file: { id, ast } }]`
-/// - `contracts[path][name] = { ... }` → `contracts[path][name] = [{ contract: { ... } }]`
-/// - Constructs `build_infos[0].source_id_to_path` from source IDs.
+/// Solc's native shape is already close to canonical:
+/// - `sources[path] = { id, ast }` — kept as-is
+/// - `contracts[path][name] = { abi, evm, ... }` — kept as-is
+/// - `errors` — kept as-is (defaults to `[]` if absent)
+///
+/// Constructs `source_id_to_path` from source IDs for cross-file resolution.
 ///
 /// Takes ownership and uses `Value::take()` to move AST nodes in-place,
 /// avoiding expensive clones of multi-MB AST data.
 pub fn normalize_solc_output(mut solc_output: Value) -> Value {
     let mut result = Map::new();
 
-    // Move errors out (same schema as forge)
+    // Move errors out (defaults to [] if absent)
     let errors = solc_output
         .get_mut("errors")
         .map(Value::take)
         .unwrap_or_else(|| json!([]));
     result.insert("errors".to_string(), errors);
 
-    // Normalize sources: { path: { id, ast } } → { path: [{ source_file: { id, ast } }] }
+    // Sources: keep solc's native { path: { id, ast } } shape.
+    // Also build source_id_to_path for cross-file resolution.
     let mut source_id_to_path = Map::new();
-    let mut normalized_sources = Map::new();
 
     if let Some(sources) = solc_output
         .get_mut("sources")
         .and_then(|s| s.as_object_mut())
     {
-        for (path, source_data) in sources.iter_mut() {
-            let id = source_data
-                .get_mut("id")
-                .map(Value::take)
-                .unwrap_or(json!(0));
-            let ast = source_data
-                .get_mut("ast")
-                .map(Value::take)
-                .unwrap_or(Value::Null);
-
-            // Build the source_id_to_path mapping
-            source_id_to_path.insert(id.to_string(), json!(path));
-
-            // Wrap in forge's array-of-objects shape
-            normalized_sources.insert(
-                path.clone(),
-                json!([{
-                    "source_file": {
-                        "id": id,
-                        "ast": ast
-                    }
-                }]),
-            );
+        for (path, source_data) in sources.iter() {
+            if let Some(id) = source_data.get("id") {
+                source_id_to_path.insert(id.to_string(), json!(path));
+            }
         }
     }
 
+    // Move sources as-is
+    let sources = solc_output
+        .get_mut("sources")
+        .map(Value::take)
+        .unwrap_or_else(|| json!({}));
+    result.insert("sources".to_string(), sources);
+
+    // Contracts: keep solc's native { path: { name: { abi, evm, ... } } } shape
+    let contracts = solc_output
+        .get_mut("contracts")
+        .map(Value::take)
+        .unwrap_or_else(|| json!({}));
+    result.insert("contracts".to_string(), contracts);
+
+    // Construct source_id_to_path for cross-file resolution
+    result.insert(
+        "source_id_to_path".to_string(),
+        Value::Object(source_id_to_path),
+    );
+
+    Value::Object(result)
+}
+
+/// Normalize forge `build --json --ast` output into the canonical shape.
+///
+/// Forge wraps data in arrays with metadata:
+/// - `sources[path] = [{ source_file: { id, ast }, build_id, profile, version }]`
+/// - `contracts[path][name] = [{ contract: { abi, evm, ... }, build_id, profile, version }]`
+/// - `build_infos = [{ source_id_to_path: { ... } }]`
+///
+/// This unwraps to the canonical flat shape:
+/// - `sources[path] = { id, ast }`
+/// - `contracts[path][name] = { abi, evm, ... }`
+/// - `source_id_to_path = { ... }`
+pub fn normalize_forge_output(mut forge_output: Value) -> Value {
+    let mut result = Map::new();
+
+    // Move errors out
+    let errors = forge_output
+        .get_mut("errors")
+        .map(Value::take)
+        .unwrap_or_else(|| json!([]));
+    result.insert("errors".to_string(), errors);
+
+    // Unwrap sources: [{ source_file: { id, ast } }] → { id, ast }
+    let mut normalized_sources = Map::new();
+    if let Some(sources) = forge_output
+        .get_mut("sources")
+        .and_then(|s| s.as_object_mut())
+    {
+        for (path, entries) in sources.iter_mut() {
+            if let Some(arr) = entries.as_array_mut() {
+                if let Some(first) = arr.first_mut() {
+                    if let Some(sf) = first.get_mut("source_file") {
+                        normalized_sources.insert(path.clone(), sf.take());
+                    }
+                }
+            }
+        }
+    }
     result.insert("sources".to_string(), Value::Object(normalized_sources));
 
-    // Normalize contracts: { path: { name: { ... } } } → { path: { name: [{ contract: { ... } }] } }
+    // Unwrap contracts: [{ contract: { ... } }] → { ... }
     let mut normalized_contracts = Map::new();
-
-    if let Some(contracts) = solc_output
+    if let Some(contracts) = forge_output
         .get_mut("contracts")
         .and_then(|c| c.as_object_mut())
     {
         for (path, names) in contracts.iter_mut() {
             let mut path_contracts = Map::new();
             if let Some(names_obj) = names.as_object_mut() {
-                for (name, contract_data) in names_obj.iter_mut() {
-                    path_contracts.insert(
-                        name.clone(),
-                        json!([{
-                            "contract": contract_data.take()
-                        }]),
-                    );
+                for (name, entries) in names_obj.iter_mut() {
+                    if let Some(arr) = entries.as_array_mut() {
+                        if let Some(first) = arr.first_mut() {
+                            if let Some(contract) = first.get_mut("contract") {
+                                path_contracts.insert(name.clone(), contract.take());
+                            }
+                        }
+                    }
                 }
             }
             normalized_contracts.insert(path.clone(), Value::Object(path_contracts));
         }
     }
-
     result.insert("contracts".to_string(), Value::Object(normalized_contracts));
 
-    // Construct build_infos with source_id_to_path
-    result.insert(
-        "build_infos".to_string(),
-        json!([{
-            "source_id_to_path": source_id_to_path
-        }]),
-    );
+    // Extract source_id_to_path from build_infos
+    let source_id_to_path = forge_output
+        .get_mut("build_infos")
+        .and_then(|bi| bi.as_array_mut())
+        .and_then(|arr| arr.first_mut())
+        .and_then(|info| info.get_mut("source_id_to_path"))
+        .map(Value::take)
+        .unwrap_or_else(|| json!({}));
+    result.insert("source_id_to_path".to_string(), source_id_to_path);
 
     Value::Object(result)
 }
 
-/// Run solc for a file and return output normalized to forge's shape.
+/// Run solc for a file and return normalized output.
 ///
 /// This is the main entry point used by the LSP.
 pub async fn solc_ast(file_path: &str, config: &FoundryConfig) -> Result<Value, RunnerError> {
@@ -294,18 +337,14 @@ mod tests {
 
         let normalized = normalize_solc_output(solc_output);
 
-        // Check sources are wrapped correctly
+        // Sources kept in solc-native shape: path -> { id, ast }
         let sources = normalized.get("sources").unwrap().as_object().unwrap();
         assert_eq!(sources.len(), 2);
 
         let foo = sources.get("src/Foo.sol").unwrap();
-        let foo_arr = foo.as_array().unwrap();
-        assert_eq!(foo_arr.len(), 1);
-        let source_file = foo_arr[0].get("source_file").unwrap();
-        assert_eq!(source_file.get("id").unwrap(), 0);
+        assert_eq!(foo.get("id").unwrap(), 0);
         assert_eq!(
-            source_file
-                .get("ast")
+            foo.get("ast")
                 .unwrap()
                 .get("nodeType")
                 .unwrap()
@@ -314,10 +353,8 @@ mod tests {
             "SourceUnit"
         );
 
-        // Check build_infos constructed
-        let build_infos = normalized.get("build_infos").unwrap().as_array().unwrap();
-        assert_eq!(build_infos.len(), 1);
-        let id_to_path = build_infos[0]
+        // Check source_id_to_path constructed
+        let id_to_path = normalized
             .get("source_id_to_path")
             .unwrap()
             .as_object()
@@ -349,13 +386,12 @@ mod tests {
 
         let normalized = normalize_solc_output(solc_output);
 
+        // Contracts kept in solc-native shape: path -> name -> { abi, evm, ... }
         let contracts = normalized.get("contracts").unwrap().as_object().unwrap();
         let foo_contracts = contracts.get("src/Foo.sol").unwrap().as_object().unwrap();
-        let foo = foo_contracts.get("Foo").unwrap().as_array().unwrap();
-        assert_eq!(foo.len(), 1);
+        let foo = foo_contracts.get("Foo").unwrap();
 
-        let contract = foo[0].get("contract").unwrap();
-        let method_ids = contract
+        let method_ids = foo
             .get("evm")
             .unwrap()
             .get("methodIdentifiers")
@@ -423,14 +459,13 @@ mod tests {
             normalized.get("errors").unwrap().as_array().unwrap().len(),
             0
         );
-        assert_eq!(
+        assert!(
             normalized
-                .get("build_infos")
+                .get("source_id_to_path")
                 .unwrap()
-                .as_array()
+                .as_object()
                 .unwrap()
-                .len(),
-            1
+                .is_empty()
         );
     }
 
