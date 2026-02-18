@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.1.20
+
+### Features
+
+- Tree-sitter enhanced goto definition (#66, #79)
+- Inlay hints v2 — tree-sitter positions + AST semantics (#61, #81)
+- Respect `foundry.toml` lint ignore and `lint_on_build` config (#84, #87)
+- Introduce `NodeId`/`FileId` newtypes and shared `SourceLoc` parser (#86)
+
+### Fixes
+
+- Goto definition returns wrong result after unsaved edits (#83)
+- Bound `foundry.toml` search at git repo root (#89)
+
 ## v0.1.19
 
 ### Refactor
