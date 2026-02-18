@@ -17,6 +17,21 @@ benchmarks:
   - initialize
   - textDocument/diagnostic
 
+methods:
+  textDocument/completion:
+    line: 102
+    col: 16
+    trigger: "."
+  textDocument/definition:
+    line: 3
+    col: 8
+  textDocument/declaration:
+    line: 4
+    col: 8
+  textDocument/rename:
+    line: 5
+    col: 8
+
 servers:
   - label: "#90"
     description: PR #90 — solc AST + diagnostics (default)
