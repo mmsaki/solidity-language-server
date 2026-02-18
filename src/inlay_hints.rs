@@ -6,6 +6,19 @@ use std::collections::HashMap;
 use tower_lsp::lsp_types::*;
 use tree_sitter::{Node, Parser};
 
+/// Where to place gas inlay hints on function definitions.
+/// Contracts always use the opening brace.
+#[allow(dead_code)]
+enum FnGasHintPosition {
+    /// Show after the opening `{` brace.
+    Opening,
+    /// Show after the closing `}` brace.
+    Closing,
+}
+
+/// Change this to switch function gas hint placement.
+const FN_GAS_HINT_POSITION: FnGasHintPosition = FnGasHintPosition::Closing;
+
 /// Parameter info resolved from the AST for a callable.
 #[derive(Debug, Clone)]
 struct ParamInfo {
@@ -69,11 +82,6 @@ pub fn inlay_hints(
     range: Range,
     live_source: &[u8],
 ) -> Vec<InlayHint> {
-    let sources = match build.ast.get("sources") {
-        Some(s) => s,
-        None => return vec![],
-    };
-
     let path_str = match uri.to_file_path() {
         Ok(p) => p.to_str().unwrap_or("").to_string(),
         Err(_) => return vec![],
@@ -85,11 +93,6 @@ pub fn inlay_hints(
         .find(|(k, _)| path_str.ends_with(k.as_str()))
     {
         Some((_, v)) => v.clone(),
-        None => return vec![],
-    };
-
-    let file_ast = match find_file_ast(sources, &abs) {
-        Some(a) => a,
         None => return vec![],
     };
 
@@ -109,14 +112,14 @@ pub fn inlay_hints(
     let mut hints = Vec::new();
     collect_ts_hints(tree.root_node(), &source_str, &range, &lookup, &mut hints);
 
-    // Gas inlay hints: show gas cost at function/contract definitions
+    // Gas inlay hints: use tree-sitter positions (tracks live buffer)
     if !build.gas_index.is_empty() {
-        collect_gas_hints(
-            file_ast,
-            sources,
-            &build.gas_index,
-            live_source,
+        collect_ts_gas_hints(
+            tree.root_node(),
+            &source_str,
             &range,
+            &build.gas_index,
+            &abs,
             &mut hints,
         );
     }
@@ -492,117 +495,145 @@ fn first_named_child(node: Node) -> Option<Node> {
     node.children(&mut cursor).find(|c| c.is_named())
 }
 
-// ── Gas inlay hints ──────────────────────────────────────────────────────
+// ── Gas inlay hints (tree-sitter based) ──────────────────────────────────
 
-/// Walk the AST for FunctionDefinition and ContractDefinition nodes,
-/// emitting gas cost hints at the end of the declaration line.
-fn collect_gas_hints(
-    file_ast: &Value,
-    sources: &Value,
-    gas_index: &gas::GasIndex,
-    source_bytes: &[u8],
+/// Walk tree-sitter nodes for function/contract definitions, emitting gas
+/// cost hints using **live buffer positions** so they track edits in real time.
+fn collect_ts_gas_hints(
+    node: Node,
+    source: &str,
     range: &Range,
+    gas_index: &gas::GasIndex,
+    abs_path: &str,
     hints: &mut Vec<InlayHint>,
 ) {
-    let nodes = match file_ast.get("nodes").and_then(|v| v.as_array()) {
-        Some(n) => n,
-        None => return,
-    };
-
-    for node in nodes {
-        collect_gas_hints_recursive(node, sources, gas_index, source_bytes, range, hints);
+    let node_start = node.start_position();
+    let node_end = node.end_position();
+    if (node_end.row as u32) < range.start.line || (node_start.row as u32) > range.end.line {
+        return;
     }
-}
 
-fn collect_gas_hints_recursive(
-    node: &Value,
-    sources: &Value,
-    gas_index: &gas::GasIndex,
-    source_bytes: &[u8],
-    range: &Range,
-    hints: &mut Vec<InlayHint>,
-) {
-    let node_type = node.get("nodeType").and_then(|v| v.as_str()).unwrap_or("");
-
-    match node_type {
-        "FunctionDefinition" => {
-            if let Some(hint) = gas_hint_for_function(node, sources, gas_index, source_bytes, range)
-            {
+    match node.kind() {
+        "function_definition" => {
+            if let Some(hint) = ts_gas_hint_for_function(node, source, range, gas_index, abs_path) {
                 hints.push(hint);
             }
         }
-        "ContractDefinition" => {
-            if let Some(hint) = gas_hint_for_contract(node, sources, gas_index, source_bytes, range)
-            {
+        "contract_declaration" | "library_declaration" | "interface_declaration" => {
+            if let Some(hint) = ts_gas_hint_for_contract(node, source, range, gas_index, abs_path) {
                 hints.push(hint);
             }
         }
         _ => {}
     }
 
-    // Recurse into children
-    if let Some(children) = node.get("nodes").and_then(|v| v.as_array()) {
-        for child in children {
-            collect_gas_hints_recursive(child, sources, gas_index, source_bytes, range, hints);
-        }
-    }
-    // Also check function body statements
-    if let Some(body) = node.get("body") {
-        if let Some(stmts) = body.get("statements").and_then(|v| v.as_array()) {
-            for stmt in stmts {
-                collect_gas_hints_recursive(stmt, sources, gas_index, source_bytes, range, hints);
-            }
-        }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        collect_ts_gas_hints(child, source, range, gas_index, abs_path, hints);
     }
 }
 
-/// Create a gas inlay hint for a function definition.
-fn gas_hint_for_function(
-    node: &Value,
-    sources: &Value,
-    gas_index: &gas::GasIndex,
-    source_bytes: &[u8],
-    range: &Range,
-) -> Option<InlayHint> {
-    // Find gas cost
-    let cost = if let Some(selector) = node.get("functionSelector").and_then(|v| v.as_str()) {
-        // External/public function — look up by selector
-        gas::gas_by_selector(gas_index, selector).map(|(_, c)| c.to_string())
-    } else {
-        // Internal function — look up by name in containing contract
-        let fn_name = node.get("name").and_then(|v| v.as_str())?;
-        let contract_key = gas::resolve_contract_key(sources, node, gas_index)?;
-        let contract_gas = gas_index.get(&contract_key)?;
+/// Extract the identifier (name) child from a tree-sitter node.
+fn ts_node_name<'a>(node: Node<'a>, source: &'a str) -> Option<&'a str> {
+    let mut cursor = node.walk();
+    node.children(&mut cursor)
+        .find(|c| c.kind() == "identifier" && c.is_named())
+        .map(|c| &source[c.byte_range()])
+}
 
-        let prefix = format!("{fn_name}(");
-        contract_gas
-            .internal
-            .iter()
-            .find(|(sig, _)| sig.starts_with(&prefix))
-            .map(|(_, c)| c.to_string())
-    }?;
+/// Find the opening `{` position of a body node.
+fn ts_body_open_brace(node: Node, body_kind: &str) -> Option<Position> {
+    let mut cursor = node.walk();
+    let body = node.children(&mut cursor).find(|c| c.kind() == body_kind)?;
+    let start = body.start_position();
+    Some(Position::new(start.row as u32, start.column as u32))
+}
 
-    // Position the hint at the end of the function signature line.
-    // Use the body's opening brace position (start of body src).
-    let body_src = node.get("body")?.get("src")?.as_str()?;
-    let body_loc = crate::types::SourceLoc::parse(body_src)?;
-    let text = String::from_utf8_lossy(source_bytes);
+/// Find the closing `}` position of a body node.
+fn ts_body_close_brace(node: Node, body_kind: &str) -> Option<Position> {
+    let mut cursor = node.walk();
+    let body = node.children(&mut cursor).find(|c| c.kind() == body_kind)?;
+    let end = body.end_position();
+    // end_position points one past the `}`, so column - 1
+    Some(Position::new(
+        end.row as u32,
+        end.column.saturating_sub(1) as u32,
+    ))
+}
 
-    // Bounds check — body offset must be within the live buffer
-    if body_loc.offset >= text.len() {
-        return None;
+/// Find the enclosing contract name for a function_definition node.
+fn ts_enclosing_contract_name<'a>(node: Node<'a>, source: &'a str) -> Option<&'a str> {
+    let mut parent = node.parent();
+    while let Some(p) = parent {
+        if p.kind() == "contract_declaration"
+            || p.kind() == "library_declaration"
+            || p.kind() == "interface_declaration"
+        {
+            return ts_node_name(p, source);
+        }
+        parent = p.parent();
     }
-    let pos = crate::utils::byte_offset_to_position(&text, body_loc.offset);
+    None
+}
 
-    // Check if position is within the visible range
-    if pos.line < range.start.line || pos.line > range.end.line {
+/// Find the gas index key matching a file path and contract name.
+fn find_gas_key<'a>(
+    gas_index: &'a gas::GasIndex,
+    abs_path: &str,
+    contract_name: &str,
+) -> Option<&'a str> {
+    let exact = format!("{abs_path}:{contract_name}");
+    if gas_index.contains_key(&exact) {
+        return Some(gas_index.get_key_value(&exact)?.0.as_str());
+    }
+    let file_name = std::path::Path::new(abs_path).file_name()?.to_str()?;
+    let suffix = format!("{file_name}:{contract_name}");
+    gas_index
+        .keys()
+        .find(|k| k.ends_with(&suffix))
+        .map(|k| k.as_str())
+}
+
+/// Create a gas inlay hint for a function definition using tree-sitter positions.
+fn ts_gas_hint_for_function(
+    node: Node,
+    source: &str,
+    range: &Range,
+    gas_index: &gas::GasIndex,
+    abs_path: &str,
+) -> Option<InlayHint> {
+    let fn_name = ts_node_name(node, source)?;
+    let contract_name = ts_enclosing_contract_name(node, source)?;
+    let gas_key = find_gas_key(gas_index, abs_path, contract_name)?;
+    let contract_gas = gas_index.get(gas_key)?;
+
+    let prefix = format!("{fn_name}(");
+    let cost = contract_gas
+        .external
+        .iter()
+        .find(|(sig, _)| sig.starts_with(&prefix))
+        .map(|(_, c)| c.as_str())
+        .or_else(|| {
+            contract_gas
+                .internal
+                .iter()
+                .find(|(sig, _)| sig.starts_with(&prefix))
+                .map(|(_, c)| c.as_str())
+        })?;
+
+    // Position: opening or closing brace based on FN_GAS_HINT_POSITION
+    let (brace_pos, offset) = match FN_GAS_HINT_POSITION {
+        FnGasHintPosition::Opening => (ts_body_open_brace(node, "function_body")?, 1),
+        FnGasHintPosition::Closing => (ts_body_close_brace(node, "function_body")?, 1),
+    };
+    if brace_pos.line < range.start.line || brace_pos.line > range.end.line {
         return None;
     }
 
     Some(InlayHint {
-        position: Position::new(pos.line, pos.character + 1),
+        position: Position::new(brace_pos.line, brace_pos.character + offset),
         kind: Some(InlayHintKind::TYPE),
-        label: InlayHintLabel::String(format!("{} {}", gas::GAS_ICON, gas::format_gas(&cost))),
+        label: InlayHintLabel::String(format!("{} {}", gas::GAS_ICON, gas::format_gas(cost))),
         text_edits: None,
         tooltip: Some(InlayHintTooltip::String("Estimated gas cost".to_string())),
         padding_left: Some(true),
@@ -611,46 +642,40 @@ fn gas_hint_for_function(
     })
 }
 
-/// Create a gas inlay hint for a contract definition (deploy cost).
-fn gas_hint_for_contract(
-    node: &Value,
-    sources: &Value,
-    gas_index: &gas::GasIndex,
-    source_bytes: &[u8],
+/// Create a gas inlay hint for a contract/library/interface definition.
+/// Always uses the opening brace.
+fn ts_gas_hint_for_contract(
+    node: Node,
+    source: &str,
     range: &Range,
+    gas_index: &gas::GasIndex,
+    abs_path: &str,
 ) -> Option<InlayHint> {
-    let contract_key = gas::resolve_contract_key(sources, node, gas_index)?;
-    let contract_gas = gas_index.get(&contract_key)?;
+    let contract_name = ts_node_name(node, source)?;
+    let gas_key = find_gas_key(gas_index, abs_path, contract_name)?;
+    let contract_gas = gas_index.get(gas_key)?;
 
-    let total_cost = contract_gas.creation.get("totalCost")?;
+    // Prefer totalCost, but when it's "infinite" show codeDepositCost instead
+    let display_cost = match contract_gas.creation.get("totalCost").map(|s| s.as_str()) {
+        Some("infinite") | None => contract_gas
+            .creation
+            .get("codeDepositCost")
+            .map(|s| s.as_str())?,
+        Some(total) => total,
+    };
 
-    let src = node.get("src").and_then(|v| v.as_str())?;
-    let loc = crate::types::SourceLoc::parse(src)?;
-    let text = String::from_utf8_lossy(source_bytes);
-
-    // Bounds check — the contract's src range must fit within the live buffer
-    let end = loc.offset + loc.length;
-    if end > text.len() {
-        return None;
-    }
-
-    // Find the opening brace of the contract body
-    let node_text = &text[loc.offset..end];
-    let brace_offset = node_text.find('{')?;
-    let abs_brace_offset = loc.offset + brace_offset;
-    let pos = crate::utils::byte_offset_to_position(&text, abs_brace_offset);
-
-    if pos.line < range.start.line || pos.line > range.end.line {
+    let brace_pos = ts_body_open_brace(node, "contract_body")?;
+    if brace_pos.line < range.start.line || brace_pos.line > range.end.line {
         return None;
     }
 
     Some(InlayHint {
-        position: Position::new(pos.line, pos.character + 1),
+        position: Position::new(brace_pos.line, brace_pos.character + 1),
         kind: Some(InlayHintKind::TYPE),
         label: InlayHintLabel::String(format!(
             "{} deploy: {}",
             gas::GAS_ICON,
-            gas::format_gas(total_cost)
+            gas::format_gas(display_cost)
         )),
         text_edits: None,
         tooltip: Some(InlayHintTooltip::String(format!(
@@ -698,18 +723,6 @@ fn get_parameter_names(decl: &Value) -> Option<Vec<String>> {
             })
             .collect(),
     )
-}
-
-/// Find the AST for a specific file by its absolutePath.
-fn find_file_ast<'a>(sources: &'a Value, abs_path: &str) -> Option<&'a Value> {
-    let sources_obj = sources.as_object()?;
-    for (_, source_data) in sources_obj {
-        let ast = source_data.get("ast")?;
-        if ast.get("absolutePath").and_then(|v| v.as_str()) == Some(abs_path) {
-            return Some(ast);
-        }
-    }
-    None
 }
 
 #[cfg(test)]
