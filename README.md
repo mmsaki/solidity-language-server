@@ -29,6 +29,12 @@ Or download a pre-built binary from the [latest release](https://github.com/mmsa
 
 See [FEATURES.md](FEATURES.md) for the full LSP feature set and roadmap.
 
+## Docs
+
+- [FEATURES.md](FEATURES.md) — full LSP feature set and roadmap
+- [CONTRIBUTING.md](CONTRIBUTING.md) — development setup, project structure, and how to contribute
+- [CHANGELOG.md](CHANGELOG.md) — release history
+
 ## Neovim
 
 ```lua
@@ -47,4 +53,14 @@ return {
     })
   end,
 }
+```
+
+## Verify Release Binaries
+
+Release binaries are GPG-signed. Download `checksums-sha256.txt`, `checksums-sha256.txt.asc`, and [`public-key.asc`](public-key.asc) from the [release](https://github.com/mmsaki/solidity-language-server/releases/latest):
+
+```sh
+gpg --import public-key.asc
+gpg --verify checksums-sha256.txt.asc checksums-sha256.txt
+sha256sum -c checksums-sha256.txt
 ```
