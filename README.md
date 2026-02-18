@@ -42,7 +42,7 @@ solidity-language-server --help                   # show all options
 | Flag | Values | Default | Description |
 |------|--------|---------|-------------|
 | `--version`, `-V` | | | Show version, commit hash, OS, and architecture |
-| `--use-solar` | | | Use solar compiler instead of forge |
+| `--use-forge` | | | Use forge build instead of solc for AST generation |
 | `--stdio` | | | Use stdio transport |
 
 ### Neovim
