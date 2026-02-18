@@ -1672,4 +1672,424 @@ mod tests {
         let node = find_node_by_id(sources, NodeId(1767)).unwrap();
         assert!(lookup_param_doc(&doc_index, node, sources).is_none());
     }
+
+    // ── DocIndex integration tests (poolmanager.json) ──
+
+    fn load_solc_fixture() -> Value {
+        let data = std::fs::read_to_string("poolmanager.json").expect("test fixture");
+        let raw: Value = serde_json::from_str(&data).expect("valid json");
+        crate::solc::normalize_solc_output(raw)
+    }
+
+    #[test]
+    fn test_doc_index_is_not_empty() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+        assert!(!index.is_empty(), "DocIndex should contain entries");
+    }
+
+    #[test]
+    fn test_doc_index_has_contract_entries() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // PoolManager has both title and notice
+        let pm_keys: Vec<_> = index
+            .keys()
+            .filter(|k| matches!(k, DocKey::Contract(s) if s.contains("PoolManager")))
+            .collect();
+        assert!(
+            !pm_keys.is_empty(),
+            "should have a Contract entry for PoolManager"
+        );
+
+        let pm_key = DocKey::Contract(
+            "/Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/PoolManager.sol:PoolManager".to_string(),
+        );
+        let entry = index.get(&pm_key).expect("PoolManager contract entry");
+        assert_eq!(entry.title.as_deref(), Some("PoolManager"));
+        assert_eq!(
+            entry.notice.as_deref(),
+            Some("Holds the state for all pools")
+        );
+    }
+
+    #[test]
+    fn test_doc_index_has_function_by_selector() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // initialize selector = 6276cbbe
+        let init_key = DocKey::Func(FuncSelector::new("6276cbbe"));
+        let entry = index
+            .get(&init_key)
+            .expect("should have initialize by selector");
+        assert_eq!(
+            entry.notice.as_deref(),
+            Some("Initialize the state for a given pool ID")
+        );
+        assert!(
+            entry
+                .details
+                .as_deref()
+                .unwrap_or("")
+                .contains("MAX_SWAP_FEE"),
+            "devdoc details should mention MAX_SWAP_FEE"
+        );
+        // params: key, sqrtPriceX96
+        let param_names: Vec<&str> = entry.params.iter().map(|(n, _)| n.as_str()).collect();
+        assert!(param_names.contains(&"key"), "should have param 'key'");
+        assert!(
+            param_names.contains(&"sqrtPriceX96"),
+            "should have param 'sqrtPriceX96'"
+        );
+        // returns: tick
+        let return_names: Vec<&str> = entry.returns.iter().map(|(n, _)| n.as_str()).collect();
+        assert!(return_names.contains(&"tick"), "should have return 'tick'");
+    }
+
+    #[test]
+    fn test_doc_index_swap_by_selector() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // swap selector = f3cd914c
+        let swap_key = DocKey::Func(FuncSelector::new("f3cd914c"));
+        let entry = index.get(&swap_key).expect("should have swap by selector");
+        assert!(
+            entry
+                .notice
+                .as_deref()
+                .unwrap_or("")
+                .contains("Swap against the given pool"),
+            "swap notice should describe swapping"
+        );
+        // devdoc params: key, params, hookData
+        assert!(
+            !entry.params.is_empty(),
+            "swap should have param documentation"
+        );
+    }
+
+    #[test]
+    fn test_doc_index_settle_by_selector() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // settle() selector = 11da60b4
+        let key = DocKey::Func(FuncSelector::new("11da60b4"));
+        let entry = index.get(&key).expect("should have settle by selector");
+        assert!(
+            entry.notice.is_some(),
+            "settle should have a notice from userdoc"
+        );
+    }
+
+    #[test]
+    fn test_doc_index_has_error_entries() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // AlreadyUnlocked() → keccak256("AlreadyUnlocked()")[0..4]
+        let selector = compute_selector("AlreadyUnlocked()");
+        let key = DocKey::Func(FuncSelector::new(&selector));
+        let entry = index.get(&key).expect("should have AlreadyUnlocked error");
+        assert!(
+            entry
+                .notice
+                .as_deref()
+                .unwrap_or("")
+                .contains("already unlocked"),
+            "AlreadyUnlocked notice: {:?}",
+            entry.notice
+        );
+    }
+
+    #[test]
+    fn test_doc_index_error_with_params() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // CurrenciesOutOfOrderOrEqual(address,address) has a notice
+        let selector = compute_selector("CurrenciesOutOfOrderOrEqual(address,address)");
+        let key = DocKey::Func(FuncSelector::new(&selector));
+        let entry = index
+            .get(&key)
+            .expect("should have CurrenciesOutOfOrderOrEqual error");
+        assert!(entry.notice.is_some(), "error should have notice");
+    }
+
+    #[test]
+    fn test_doc_index_has_event_entries() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // Count event entries
+        let event_count = index
+            .keys()
+            .filter(|k| matches!(k, DocKey::Event(_)))
+            .count();
+        assert!(event_count > 0, "should have event entries in the DocIndex");
+    }
+
+    #[test]
+    fn test_doc_index_swap_event() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // Swap event topic = keccak256("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)")
+        let topic =
+            compute_event_topic("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)");
+        let key = DocKey::Event(EventSelector::new(&topic));
+        let entry = index.get(&key).expect("should have Swap event");
+
+        // userdoc notice
+        assert!(
+            entry
+                .notice
+                .as_deref()
+                .unwrap_or("")
+                .contains("swaps between currency0 and currency1"),
+            "Swap event notice: {:?}",
+            entry.notice
+        );
+
+        // devdoc params (amount0, amount1, id, sender, sqrtPriceX96, etc.)
+        let param_names: Vec<&str> = entry.params.iter().map(|(n, _)| n.as_str()).collect();
+        assert!(
+            param_names.contains(&"amount0"),
+            "should have param 'amount0'"
+        );
+        assert!(
+            param_names.contains(&"sender"),
+            "should have param 'sender'"
+        );
+        assert!(param_names.contains(&"id"), "should have param 'id'");
+    }
+
+    #[test]
+    fn test_doc_index_initialize_event() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        let topic = compute_event_topic(
+            "Initialize(bytes32,address,address,uint24,int24,address,uint160,int24)",
+        );
+        let key = DocKey::Event(EventSelector::new(&topic));
+        let entry = index.get(&key).expect("should have Initialize event");
+        assert!(
+            !entry.params.is_empty(),
+            "Initialize event should have param docs"
+        );
+    }
+
+    #[test]
+    fn test_doc_index_no_state_variables_for_pool_manager() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // PoolManager has no devdoc.stateVariables, so no StateVar keys for it
+        let sv_count = index
+            .keys()
+            .filter(|k| matches!(k, DocKey::StateVar(s) if s.contains("PoolManager")))
+            .count();
+        assert_eq!(
+            sv_count, 0,
+            "PoolManager should have no state variable doc entries"
+        );
+    }
+
+    #[test]
+    fn test_doc_index_multiple_contracts() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // Should have contract entries for multiple contracts (ERC6909, Extsload, IPoolManager, etc.)
+        let contract_count = index
+            .keys()
+            .filter(|k| matches!(k, DocKey::Contract(_)))
+            .count();
+        assert!(
+            contract_count >= 5,
+            "should have at least 5 contract-level entries, got {contract_count}"
+        );
+    }
+
+    #[test]
+    fn test_doc_index_func_key_count() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        let func_count = index
+            .keys()
+            .filter(|k| matches!(k, DocKey::Func(_)))
+            .count();
+        // We have methods + errors keyed by selector across all 43 contracts
+        assert!(
+            func_count >= 30,
+            "should have at least 30 Func entries (methods + errors), got {func_count}"
+        );
+    }
+
+    #[test]
+    fn test_doc_index_format_initialize_entry() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        let key = DocKey::Func(FuncSelector::new("6276cbbe"));
+        let entry = index.get(&key).expect("initialize entry");
+        let formatted = format_doc_entry(entry);
+
+        assert!(
+            formatted.contains("Initialize the state for a given pool ID"),
+            "formatted should include notice"
+        );
+        assert!(
+            formatted.contains("**@dev**"),
+            "formatted should include dev section"
+        );
+        assert!(
+            formatted.contains("**Parameters:**"),
+            "formatted should include parameters"
+        );
+        assert!(
+            formatted.contains("`key`"),
+            "formatted should include key param"
+        );
+        assert!(
+            formatted.contains("**Returns:**"),
+            "formatted should include returns"
+        );
+        assert!(
+            formatted.contains("`tick`"),
+            "formatted should include tick return"
+        );
+    }
+
+    #[test]
+    fn test_doc_index_format_contract_entry() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        let key = DocKey::Contract(
+            "/Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/PoolManager.sol:PoolManager".to_string(),
+        );
+        let entry = index.get(&key).expect("PoolManager contract entry");
+        let formatted = format_doc_entry(entry);
+
+        assert!(
+            formatted.contains("**PoolManager**"),
+            "should include bold title"
+        );
+        assert!(
+            formatted.contains("Holds the state for all pools"),
+            "should include notice"
+        );
+    }
+
+    #[test]
+    fn test_doc_index_inherited_docs_resolved() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // Both PoolManager and IPoolManager define methods with the same selector.
+        // The last one written wins (PoolManager overwrites IPoolManager for same selector).
+        // Either way, swap(f3cd914c) should have full docs, not just "@inheritdoc".
+        let key = DocKey::Func(FuncSelector::new("f3cd914c"));
+        let entry = index.get(&key).expect("swap entry");
+        // The notice should be the resolved text, not "@inheritdoc IPoolManager"
+        let notice = entry.notice.as_deref().unwrap_or("");
+        assert!(
+            !notice.contains("@inheritdoc"),
+            "userdoc/devdoc should have resolved inherited docs, not raw @inheritdoc"
+        );
+    }
+
+    #[test]
+    fn test_compute_selector_known_values() {
+        // keccak256("AlreadyUnlocked()") first 4 bytes
+        let sel = compute_selector("AlreadyUnlocked()");
+        assert_eq!(sel.len(), 8, "selector should be 8 hex chars");
+
+        // Verify against a known selector from evm.methodIdentifiers
+        let init_sel =
+            compute_selector("initialize((address,address,uint24,int24,address),uint160)");
+        assert_eq!(
+            init_sel, "6276cbbe",
+            "computed initialize selector should match evm.methodIdentifiers"
+        );
+    }
+
+    #[test]
+    fn test_compute_event_topic_length() {
+        let topic =
+            compute_event_topic("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)");
+        assert_eq!(
+            topic.len(),
+            64,
+            "event topic should be 64 hex chars (32 bytes)"
+        );
+    }
+
+    #[test]
+    fn test_doc_index_error_count_poolmanager() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // PoolManager userdoc has 14 errors. Check that they're all indexed.
+        // Compute selectors for all 14 error signatures and verify they exist.
+        let error_sigs = [
+            "AlreadyUnlocked()",
+            "CurrenciesOutOfOrderOrEqual(address,address)",
+            "CurrencyNotSettled()",
+            "InvalidCaller()",
+            "ManagerLocked()",
+            "MustClearExactPositiveDelta()",
+            "NonzeroNativeValue()",
+            "PoolNotInitialized()",
+            "ProtocolFeeCurrencySynced()",
+            "ProtocolFeeTooLarge(uint24)",
+            "SwapAmountCannotBeZero()",
+            "TickSpacingTooLarge(int24)",
+            "TickSpacingTooSmall(int24)",
+            "UnauthorizedDynamicLPFeeUpdate()",
+        ];
+        let mut found = 0;
+        for sig in &error_sigs {
+            let selector = compute_selector(sig);
+            let key = DocKey::Func(FuncSelector::new(&selector));
+            if index.contains_key(&key) {
+                found += 1;
+            }
+        }
+        assert_eq!(
+            found,
+            error_sigs.len(),
+            "all 14 PoolManager errors should be in the DocIndex"
+        );
+    }
+
+    #[test]
+    fn test_doc_index_extsload_overloads_have_different_selectors() {
+        let ast = load_solc_fixture();
+        let index = build_doc_index(&ast);
+
+        // Three extsload overloads should each have their own selector entry
+        // extsload(bytes32) = 1e2eaeaf
+        // extsload(bytes32,uint256) = 35fd631a
+        // extsload(bytes32[]) = dbd035ff
+        let sel1 = DocKey::Func(FuncSelector::new("1e2eaeaf"));
+        let sel2 = DocKey::Func(FuncSelector::new("35fd631a"));
+        let sel3 = DocKey::Func(FuncSelector::new("dbd035ff"));
+
+        assert!(index.contains_key(&sel1), "extsload(bytes32) should exist");
+        assert!(
+            index.contains_key(&sel2),
+            "extsload(bytes32,uint256) should exist"
+        );
+        assert!(
+            index.contains_key(&sel3),
+            "extsload(bytes32[]) should exist"
+        );
+    }
 }
