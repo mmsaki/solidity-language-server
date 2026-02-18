@@ -167,6 +167,7 @@ pub fn format_natspec(text: &str, inherited_doc: Option<&str>) -> String {
             in_params = false;
             in_returns = false;
             lines.push(String::new());
+            lines.push("**@dev**".to_string());
             lines.push(format!("*{rest}*"));
         } else if let Some(rest) = line.strip_prefix("@param ") {
             if !in_params {
@@ -207,6 +208,18 @@ pub fn format_natspec(text: &str, inherited_doc: Option<&str>) -> String {
             } else {
                 let parent = line.strip_prefix("@inheritdoc ").unwrap_or("");
                 lines.push(format!("*Inherits documentation from `{parent}`*"));
+            }
+        } else if line.starts_with('@') {
+            // Any other tag (@custom:xyz, @dev, etc.)
+            in_params = false;
+            in_returns = false;
+            if let Some((tag, rest)) = line.split_once(' ') {
+                lines.push(String::new());
+                lines.push(format!("**{tag}**"));
+                lines.push(format!("*{rest}*"));
+            } else {
+                lines.push(String::new());
+                lines.push(format!("**{line}**"));
             }
         } else {
             // Continuation line
@@ -677,7 +690,17 @@ mod tests {
         let text = "@notice Do something\n @dev This is an implementation detail";
         let formatted = format_natspec(text, None);
         assert!(formatted.contains("Do something"));
+        assert!(formatted.contains("**@dev**"));
         assert!(formatted.contains("*This is an implementation detail*"));
+    }
+
+    #[test]
+    fn test_format_natspec_custom_tag() {
+        let text = "@notice Do something\n @custom:security Non-reentrant";
+        let formatted = format_natspec(text, None);
+        assert!(formatted.contains("Do something"));
+        assert!(formatted.contains("**@custom:security**"));
+        assert!(formatted.contains("*Non-reentrant*"));
     }
 
     #[test]
