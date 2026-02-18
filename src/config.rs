@@ -52,23 +52,47 @@ impl LintConfig {
     }
 }
 
-/// Walk up from `start` to find the nearest `foundry.toml`.
-pub fn find_foundry_toml(start: &Path) -> Option<PathBuf> {
-    let mut current = if start.is_file() {
-        start.parent()?.to_path_buf()
+/// Returns the root of the git repository containing `start`, if any.
+///
+/// This mirrors foundry's own `find_git_root` behavior: walk up ancestors
+/// until a directory containing `.git` is found.
+fn find_git_root(start: &Path) -> Option<PathBuf> {
+    let start = if start.is_file() {
+        start.parent()?
     } else {
-        start.to_path_buf()
+        start
+    };
+    start
+        .ancestors()
+        .find(|p| p.join(".git").exists())
+        .map(Path::to_path_buf)
+}
+
+/// Walk up from `start` to find the nearest `foundry.toml`, stopping at the
+/// git repository root (consistent with foundry's `find_project_root`).
+///
+/// See: <https://github.com/foundry-rs/foundry/blob/5389caefb5bfb035c547dffb4fd0f441a37e5371/crates/config/src/utils.rs#L62>
+pub fn find_foundry_toml(start: &Path) -> Option<PathBuf> {
+    let start_dir = if start.is_file() {
+        start.parent()?
+    } else {
+        start
     };
 
-    loop {
-        let candidate = current.join("foundry.toml");
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-        if !current.pop() {
-            return None;
-        }
-    }
+    let boundary = find_git_root(start_dir);
+
+    start_dir
+        .ancestors()
+        // Don't look outside of the git repo, matching foundry's behavior.
+        .take_while(|p| {
+            if let Some(boundary) = &boundary {
+                p.starts_with(boundary)
+            } else {
+                true
+            }
+        })
+        .find(|p| p.join("foundry.toml").is_file())
+        .map(|p| p.join("foundry.toml"))
 }
 
 /// Load the lint configuration from the nearest `foundry.toml` relative to
@@ -355,5 +379,76 @@ ignore = ["test/**/*"]
         let config = load_lint_config(&nested_file);
         assert_eq!(config.root, dir.path());
         assert_eq!(config.ignore_patterns.len(), 1);
+    }
+
+    #[test]
+    fn test_find_git_root() {
+        let dir = tempfile::tempdir().unwrap();
+        // Create a fake .git directory
+        fs::create_dir_all(dir.path().join(".git")).unwrap();
+        let nested = dir.path().join("sub/deep");
+        fs::create_dir_all(&nested).unwrap();
+
+        let root = find_git_root(&nested);
+        assert_eq!(root, Some(dir.path().to_path_buf()));
+    }
+
+    #[test]
+    fn test_find_foundry_toml_stops_at_git_boundary() {
+        // Layout:
+        //   tmp/
+        //     foundry.toml          <-- outside git repo, should NOT be found
+        //     repo/
+        //       .git/
+        //       sub/
+        //         [search starts here]
+        let dir = tempfile::tempdir().unwrap();
+
+        // foundry.toml outside the git repo
+        fs::write(dir.path().join("foundry.toml"), "[profile.default]").unwrap();
+
+        // git repo with no foundry.toml
+        let repo = dir.path().join("repo");
+        fs::create_dir_all(repo.join(".git")).unwrap();
+        fs::create_dir_all(repo.join("sub")).unwrap();
+
+        let found = find_foundry_toml(&repo.join("sub"));
+        // Should NOT find the foundry.toml above the .git boundary
+        assert_eq!(found, None);
+    }
+
+    #[test]
+    fn test_find_foundry_toml_within_git_boundary() {
+        // Layout:
+        //   tmp/
+        //     repo/
+        //       .git/
+        //       foundry.toml        <-- inside git repo, should be found
+        //       src/
+        //         [search starts here]
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path().join("repo");
+        fs::create_dir_all(repo.join(".git")).unwrap();
+        fs::create_dir_all(repo.join("src")).unwrap();
+        let toml_path = repo.join("foundry.toml");
+        fs::write(&toml_path, "[profile.default]").unwrap();
+
+        let found = find_foundry_toml(&repo.join("src"));
+        assert_eq!(found, Some(toml_path));
+    }
+
+    #[test]
+    fn test_find_foundry_toml_no_git_repo_still_walks_up() {
+        // When there's no .git directory at all, the search should still
+        // walk up (unbounded), matching foundry's behavior.
+        let dir = tempfile::tempdir().unwrap();
+        let toml_path = dir.path().join("foundry.toml");
+        fs::write(&toml_path, "[profile.default]").unwrap();
+
+        let nested = dir.path().join("a/b/c");
+        fs::create_dir_all(&nested).unwrap();
+
+        let found = find_foundry_toml(&nested);
+        assert_eq!(found, Some(toml_path));
     }
 }
