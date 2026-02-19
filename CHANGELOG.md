@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.1.22
+
+### Improvements
+
+- Use `svm-rs` as a library for solc version management (#106, #105)
+  - `svm::installed_versions()` for discovering installed solc versions
+  - `svm::version_binary()` for resolving solc binary paths
+  - `svm::install()` for auto-installing missing versions (async, native)
+  - No longer shells out to the `svm` CLI or manually walks the filesystem
+
 ## v0.1.21
 
 ### Features
@@ -7,7 +17,7 @@
 - Auto-detect solc version from `pragma solidity` and resolve matching binary (#93, #95)
   - Parses pragma constraints: exact (`0.8.26`), caret (`^0.8.0`), gte (`>=0.8.0`), range (`>=0.6.2 <0.9.0`)
   - Scans svm-rs and solc-select install directories for matching versions
-  - Auto-installs missing versions via `svm install` with user-visible progress
+  - Auto-installs missing versions via `svm-rs` library
   - Cross-platform support (macOS, Linux, Windows)
   - Cached version list (scanned once per session)
 - Solc version resolution respects both pragma and foundry.toml (#103)
