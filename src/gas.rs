@@ -9,8 +9,9 @@ use std::collections::HashMap;
 
 use crate::types::{FuncSelector, MethodId};
 
-/// Emoji prefix for gas estimate labels (inlay hints, code lens).
-pub const GAS_ICON: &str = "\u{1f525}";
+/// Sentinel comment to enable gas estimates for a function.
+/// Place `/// @custom:lsp-enable gas-estimates` above a function definition.
+pub const GAS_SENTINEL: &str = "@custom:lsp-enable gas-estimates";
 
 /// Gas estimates for a single contract.
 #[derive(Debug, Clone, Default)]

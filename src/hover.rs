@@ -1034,6 +1034,39 @@ fn format_parameters(params_node: Option<&Value>) -> String {
     parts.join(", ")
 }
 
+/// Check if the source text has the gas sentinel comment above a declaration.
+///
+/// Looks at the lines preceding the declaration's byte offset in the source
+/// for a comment containing `@lsp-enable gas-estimates`.
+fn source_has_gas_sentinel(source: &str, decl_node: &Value) -> bool {
+    let src_str = decl_node.get("src").and_then(|v| v.as_str()).unwrap_or("");
+    let offset = src_str
+        .split(':')
+        .next()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(0);
+
+    // Look at the text before this declaration for the sentinel
+    let preceding = &source[..offset.min(source.len())];
+    // Check last few lines before the declaration
+    for line in preceding.lines().rev().take(10) {
+        let trimmed = line.trim();
+        if trimmed.contains(gas::GAS_SENTINEL) {
+            return true;
+        }
+        // Stop if we hit a non-comment, non-empty line
+        if !trimmed.is_empty()
+            && !trimmed.starts_with("///")
+            && !trimmed.starts_with("//")
+            && !trimmed.starts_with('*')
+            && !trimmed.starts_with("/*")
+        {
+            break;
+        }
+    }
+    false
+}
+
 /// Build gas hover text for a function declaration.
 fn gas_hover_for_function(
     decl_node: &Value,
@@ -1191,12 +1224,15 @@ pub fn hover_info(
         parts.push(format!("Selector: `{}`", selector.to_prefixed()));
     }
 
-    // Gas estimates
+    // Gas estimates — only shown when `@lsp-enable gas-estimates` is present
     if !gas_index.is_empty() {
-        if let Some(gas_text) = gas_hover_for_function(decl_node, sources, gas_index) {
-            parts.push(gas_text);
-        } else if let Some(gas_text) = gas_hover_for_contract(decl_node, sources, gas_index) {
-            parts.push(gas_text);
+        let source_str = String::from_utf8_lossy(source_bytes);
+        if source_has_gas_sentinel(&source_str, decl_node) {
+            if let Some(gas_text) = gas_hover_for_function(decl_node, sources, gas_index) {
+                parts.push(gas_text);
+            } else if let Some(gas_text) = gas_hover_for_contract(decl_node, sources, gas_index) {
+                parts.push(gas_text);
+            }
         }
     }
 
