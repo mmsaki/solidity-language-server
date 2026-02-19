@@ -260,4 +260,3 @@ contract Shop {
     }
 }
 
-

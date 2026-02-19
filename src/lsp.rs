@@ -112,8 +112,12 @@ impl ForgeLsp {
                         let content = tokio::fs::read_to_string(&file_path)
                             .await
                             .unwrap_or_default();
-                        let build_diags =
-                            crate::build::build_output_to_diagnostics(&data, &file_path, &content);
+                        let build_diags = crate::build::build_output_to_diagnostics(
+                            &data,
+                            &file_path,
+                            &content,
+                            &foundry_cfg.ignored_error_codes,
+                        );
                         (Some(lint), Ok(build_diags), Ok(data))
                     }
                     Err(e) => {
@@ -148,8 +152,12 @@ impl ForgeLsp {
                         let content = tokio::fs::read_to_string(&file_path)
                             .await
                             .unwrap_or_default();
-                        let build_diags =
-                            crate::build::build_output_to_diagnostics(&data, &file_path, &content);
+                        let build_diags = crate::build::build_output_to_diagnostics(
+                            &data,
+                            &file_path,
+                            &content,
+                            &foundry_cfg.ignored_error_codes,
+                        );
                         (None, Ok(build_diags), Ok(data))
                     }
                     Err(e) => {
@@ -1505,6 +1513,7 @@ impl LanguageServer for ForgeLsp {
             &source_bytes,
             &cached_build.gas_index,
             &cached_build.doc_index,
+            &cached_build.hint_index,
         );
 
         if result.is_some() {

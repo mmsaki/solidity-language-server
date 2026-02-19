@@ -10,7 +10,7 @@ warmup: 2
 timeout: 10
 index_timeout: 15
 output: benchmarks
-report: benchmarks/v0.1.20.md
+report: benchmarks/v0.1.21.md
 
 benchmarks:
   - initialize
@@ -35,12 +35,12 @@ methods:
     trigger: "."
 
 servers:
-  - label: 0.1.20
+  - label: 0.1.21
     description: Local branch build
     cmd: ./target/release/solidity-language-server
 
-  - label: 0.1.19
-    description: Local branch build
+  - label: 0.1.20
+    description: Previous release
     cmd: solidity-language-server
 
   - label: solc

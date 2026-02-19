@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 /// Project-level configuration extracted from `foundry.toml`.
 ///
 /// This includes both lint settings and compiler settings needed by the
-/// solc runner (solc version, remappings).
+/// solc runner (solc version, remappings, optimizer, via-IR, EVM version).
 #[derive(Debug, Clone)]
 pub struct FoundryConfig {
     /// The project root where `foundry.toml` was found.
@@ -14,6 +14,20 @@ pub struct FoundryConfig {
     /// Remappings from `[profile.default] remappings = [...]`.
     /// Empty if not specified (will fall back to `forge remappings`).
     pub remappings: Vec<String>,
+    /// Whether to compile via the Yul IR pipeline (`via_ir = true`).
+    /// Maps to `"viaIR": true` in the solc standard JSON settings.
+    pub via_ir: bool,
+    /// Whether the optimizer is enabled (`optimizer = true`).
+    pub optimizer: bool,
+    /// Number of optimizer runs (`optimizer_runs = 200`).
+    /// Only meaningful when `optimizer` is `true`.
+    pub optimizer_runs: u64,
+    /// Target EVM version (`evm_version = "cancun"`).
+    /// Maps to `"evmVersion"` in the solc standard JSON settings.
+    /// `None` means use solc's default.
+    pub evm_version: Option<String>,
+    /// Error codes to suppress from diagnostics (`ignored_error_codes = [2394, 5574]`).
+    pub ignored_error_codes: Vec<u64>,
 }
 
 impl Default for FoundryConfig {
@@ -22,6 +36,11 @@ impl Default for FoundryConfig {
             root: PathBuf::new(),
             solc_version: None,
             remappings: Vec::new(),
+            via_ir: false,
+            optimizer: false,
+            optimizer_runs: 200,
+            evm_version: None,
+            ignored_error_codes: Vec::new(),
         }
     }
 }
@@ -96,10 +115,52 @@ pub fn load_foundry_config_from_toml(toml_path: &Path) -> FoundryConfig {
         })
         .unwrap_or_default();
 
+    // Parse via_ir: `via_ir = true`
+    let via_ir = profile
+        .get("via_ir")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    // Parse optimizer: `optimizer = true`
+    let optimizer = profile
+        .get("optimizer")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    // Parse optimizer_runs: `optimizer_runs = 200`
+    let optimizer_runs = profile
+        .get("optimizer_runs")
+        .and_then(|v| v.as_integer())
+        .map(|v| v as u64)
+        .unwrap_or(200);
+
+    // Parse evm_version: `evm_version = "cancun"` or `evm_version = "osaka"`
+    let evm_version = profile
+        .get("evm_version")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    // Parse ignored_error_codes: `ignored_error_codes = [2394, 6321, 3860, 5574]`
+    let ignored_error_codes = profile
+        .get("ignored_error_codes")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_integer())
+                .map(|v| v as u64)
+                .collect()
+        })
+        .unwrap_or_default();
+
     FoundryConfig {
         root,
         solc_version,
         remappings,
+        via_ir,
+        optimizer,
+        optimizer_runs,
+        evm_version,
+        ignored_error_codes,
     }
 }
 
@@ -553,5 +614,82 @@ ignore = ["test/**/*"]
 
         let found = find_foundry_toml(&nested);
         assert_eq!(found, Some(toml_path));
+    }
+
+    // ── Compiler settings parsing ─────────────────────────────────────
+
+    #[test]
+    fn test_load_foundry_config_compiler_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        let toml_path = dir.path().join("foundry.toml");
+        fs::write(
+            &toml_path,
+            r#"
+[profile.default]
+src = "src"
+solc = '0.8.33'
+optimizer = true
+optimizer_runs = 9999999
+via_ir = true
+evm_version = 'osaka'
+ignored_error_codes = [2394, 6321, 3860, 5574, 2424, 8429, 4591]
+"#,
+        )
+        .unwrap();
+
+        let config = load_foundry_config_from_toml(&toml_path);
+        assert_eq!(config.solc_version, Some("0.8.33".to_string()));
+        assert!(config.optimizer);
+        assert_eq!(config.optimizer_runs, 9999999);
+        assert!(config.via_ir);
+        assert_eq!(config.evm_version, Some("osaka".to_string()));
+        assert_eq!(
+            config.ignored_error_codes,
+            vec![2394, 6321, 3860, 5574, 2424, 8429, 4591]
+        );
+    }
+
+    #[test]
+    fn test_load_foundry_config_defaults_when_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let toml_path = dir.path().join("foundry.toml");
+        fs::write(
+            &toml_path,
+            r#"
+[profile.default]
+src = "src"
+"#,
+        )
+        .unwrap();
+
+        let config = load_foundry_config_from_toml(&toml_path);
+        assert_eq!(config.solc_version, None);
+        assert!(!config.optimizer);
+        assert_eq!(config.optimizer_runs, 200);
+        assert!(!config.via_ir);
+        assert_eq!(config.evm_version, None);
+        assert!(config.ignored_error_codes.is_empty());
+    }
+
+    #[test]
+    fn test_load_foundry_config_partial_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        let toml_path = dir.path().join("foundry.toml");
+        fs::write(
+            &toml_path,
+            r#"
+[profile.default]
+via_ir = true
+evm_version = "cancun"
+"#,
+        )
+        .unwrap();
+
+        let config = load_foundry_config_from_toml(&toml_path);
+        assert!(config.via_ir);
+        assert!(!config.optimizer); // default false
+        assert_eq!(config.optimizer_runs, 200); // default
+        assert_eq!(config.evm_version, Some("cancun".to_string()));
+        assert!(config.ignored_error_codes.is_empty());
     }
 }

@@ -4,6 +4,7 @@ use tower_lsp::lsp_types::{Hover, HoverContents, MarkupContent, MarkupKind, Posi
 
 use crate::gas::{self, GasIndex};
 use crate::goto::{CHILD_KEYS, cache_ids, pos_to_bytes};
+use crate::inlay_hints::HintIndex;
 use crate::references::{byte_to_decl_via_external_refs, byte_to_id};
 use crate::types::{EventSelector, FuncSelector, MethodId, NodeId, Selector};
 
@@ -1126,6 +1127,7 @@ pub fn hover_info(
     source_bytes: &[u8],
     gas_index: &GasIndex,
     doc_index: &DocIndex,
+    hint_index: &HintIndex,
 ) -> Option<Hover> {
     let sources = ast_data.get("sources")?;
     let source_id_to_path = ast_data
@@ -1214,6 +1216,64 @@ pub fn hover_info(
         // Parameter/return value — show the @param/@return description from parent
         if !param_doc.is_empty() {
             parts.push(format!("---\n{param_doc}"));
+        }
+    }
+
+    // Call-site parameter doc: when the hovered node is used as an argument
+    // in a function call, show the @param doc from the called function's definition.
+    // Uses tree-sitter on the live buffer to find the enclosing call and argument
+    // index, then resolves via HintIndex for the param name and declaration id.
+    if let Some(hint_lookup) = hint_index.get(&abs_path) {
+        let source_str = String::from_utf8_lossy(source_bytes);
+        if let Some(tree) = crate::inlay_hints::ts_parse(&source_str) {
+            if let Some(ctx) =
+                crate::inlay_hints::ts_find_call_at_byte(tree.root_node(), &source_str, byte_pos)
+            {
+                if let Some(resolved) = hint_lookup.resolve_callsite_param(
+                    ctx.call_start_byte,
+                    ctx.name,
+                    ctx.arg_count,
+                    ctx.arg_index,
+                ) {
+                    // Look up @param doc using the declaration id
+                    let fn_decl = find_node_by_id(sources, NodeId(resolved.decl_id));
+                    let param_doc = fn_decl.and_then(|decl| {
+                        // Try DocIndex first (structured devdoc)
+                        if let Some(doc_entry) = lookup_doc_entry(doc_index, decl, sources) {
+                            for (pname, pdesc) in &doc_entry.params {
+                                if pname == &resolved.param_name {
+                                    return Some(pdesc.clone());
+                                }
+                            }
+                        }
+                        // Fallback: parse raw NatSpec on the function definition
+                        if let Some(doc_text) = extract_documentation(decl) {
+                            let resolved_doc = if doc_text.contains("@inheritdoc") {
+                                resolve_inheritdoc(sources, decl, &doc_text)
+                            } else {
+                                None
+                            };
+                            let text = resolved_doc.as_deref().unwrap_or(&doc_text);
+                            for line in text.lines() {
+                                let trimmed = line.trim().trim_start_matches('*').trim();
+                                if let Some(rest) = trimmed.strip_prefix("@param ") {
+                                    if let Some((name, desc)) = rest.split_once(' ') {
+                                        if name == resolved.param_name {
+                                            return Some(desc.to_string());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        None
+                    });
+                    if let Some(desc) = param_doc {
+                        if !desc.is_empty() {
+                            parts.push(format!("**@param `{}`** — {desc}", resolved.param_name));
+                        }
+                    }
+                }
+            }
         }
     }
 

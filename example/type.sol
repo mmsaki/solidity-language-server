@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.33;
+pragma solidity 0.8.34;
 
 string constant aNameGlobal = type(A).name;
 bytes4 constant iNameGlobal = type(I).interfaceId;
@@ -22,4 +22,8 @@ contract A {
     uint256 constant max = type(uint256).max;
     bytes constant creationCodeB = type(B).creationCode;
     bytes constant runtimeCodeB = type(B).runtimeCode;
+
+    function world() public pure returns (uint256) {
+        return 8;
+    }
 }

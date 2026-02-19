@@ -145,7 +145,7 @@ impl Runner for ForgeRunner {
             .await
             .map_err(|_| RunnerError::ReadError)?;
         let build_output = self.build(path_str).await?;
-        let diagnostics = build_output_to_diagnostics(&build_output, &path, &content);
+        let diagnostics = build_output_to_diagnostics(&build_output, &path, &content, &[]);
         Ok(diagnostics)
     }
 }
