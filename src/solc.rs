@@ -12,7 +12,7 @@ use std::sync::{Mutex, OnceLock};
 use tokio::process::Command;
 
 /// Cached list of installed solc versions. Populated on first access,
-/// invalidated after a successful `svm install`.
+/// invalidated after a successful `svm::install`.
 static INSTALLED_VERSIONS: OnceLock<Mutex<Vec<SemVer>>> = OnceLock::new();
 
 fn get_installed_versions() -> Vec<SemVer> {
@@ -23,6 +23,15 @@ fn get_installed_versions() -> Vec<SemVer> {
 fn invalidate_installed_versions() {
     if let Some(mutex) = INSTALLED_VERSIONS.get() {
         *mutex.lock().unwrap() = scan_installed_versions();
+    }
+}
+
+/// Convert a `semver::Version` (from svm-rs) to our lightweight `SemVer`.
+fn semver_to_local(v: &semver::Version) -> SemVer {
+    SemVer {
+        major: v.major as u32,
+        minor: v.minor as u32,
+        patch: v.patch as u32,
     }
 }
 
@@ -170,88 +179,24 @@ fn version_to_install(constraint: &PragmaConstraint) -> Option<String> {
     }
 }
 
-/// Run `svm install {version}` to auto-install a solc version.
+/// Install a solc version using svm-rs library.
 ///
 /// Returns `true` if the install succeeded.
 async fn svm_install(version: &str) -> bool {
-    let result = Command::new("svm")
-        .arg("install")
-        .arg(version)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .status()
-        .await;
-
-    matches!(result, Ok(status) if status.success())
+    let ver = match semver::Version::parse(version) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    svm::install(&ver).await.is_ok()
 }
 
-/// All directories where solc versions may be installed.
-///
-/// Each entry is `(dir, binary_name_fn)` where `dir` contains version
-/// subdirectories and `binary_name_fn` produces the binary filename.
-///
-/// Locations checked:
-/// - svm-rs (forge): `{data_dir}/svm/{ver}/solc-{ver}` (platform-specific)
-///   - macOS: `~/Library/Application Support/svm/`
-///   - Linux: `~/.svm/`
-///   - Windows: `%APPDATA%\svm\`
-/// - solc-select: `~/.solc-select/artifacts/solc-{ver}/solc-{ver}`
-fn svm_data_dirs() -> Vec<PathBuf> {
-    let mut dirs = Vec::new();
-
-    if let Some(home) = home_dir() {
-        // svm-rs: platform-specific data directory
-        #[cfg(target_os = "macos")]
-        dirs.push(home.join("Library/Application Support/svm"));
-
-        #[cfg(target_os = "linux")]
-        dirs.push(home.join(".svm"));
-
-        #[cfg(target_os = "windows")]
-        if let Some(appdata) = std::env::var_os("APPDATA") {
-            dirs.push(PathBuf::from(appdata).join("svm"));
-        }
-
-        // Also check ~/.svm on all platforms (some setups use this)
-        let dot_svm = home.join(".svm");
-        if !dirs.contains(&dot_svm) {
-            dirs.push(dot_svm);
-        }
-
-        // solc-select (pip-based, common on all Unix)
-        dirs.push(home.join(".solc-select").join("artifacts"));
-    }
-
-    dirs
-}
-
-/// Look up a solc binary by version, checking all known install locations.
+/// Look up a solc binary by version string using `svm::version_binary()`.
 fn find_solc_binary(version: &str) -> Option<PathBuf> {
-    for dir in svm_data_dirs() {
-        // svm-rs layout: {dir}/{version}/solc-{version}
-        let svm_path = dir.join(version).join(format!("solc-{version}"));
-        if svm_path.is_file() {
-            return Some(svm_path);
-        }
-
-        // solc-select layout: {dir}/solc-{version}/solc-{version}
-        let select_path = dir
-            .join(format!("solc-{version}"))
-            .join(format!("solc-{version}"));
-        if select_path.is_file() {
-            return Some(select_path);
-        }
+    let path = svm::version_binary(version);
+    if path.is_file() {
+        return Some(path);
     }
-
     None
-}
-
-/// Try to get the user's home directory (cross-platform).
-fn home_dir() -> Option<PathBuf> {
-    // $HOME works on macOS/Linux, USERPROFILE on Windows
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
 }
 
 // ── Pragma parsing ────────────────────────────────────────────────────────
@@ -367,32 +312,15 @@ pub fn list_installed_versions() -> Vec<SemVer> {
     get_installed_versions()
 }
 
-/// Scan the filesystem for installed solc versions from all known locations.
+/// Scan the filesystem for installed solc versions using `svm::installed_versions()`.
 ///
 /// Returns sorted, deduplicated versions (ascending).
 fn scan_installed_versions() -> Vec<SemVer> {
-    let mut versions = Vec::new();
-
-    for dir in svm_data_dirs() {
-        if let Ok(entries) = std::fs::read_dir(&dir) {
-            for entry in entries.flatten() {
-                let name = match entry.file_name().into_string() {
-                    Ok(n) => n,
-                    Err(_) => continue,
-                };
-                // svm-rs: directory named "0.8.26"
-                // solc-select: directory named "solc-0.8.26"
-                let version_str = name.strip_prefix("solc-").unwrap_or(&name);
-                if let Some(ver) = SemVer::parse(version_str) {
-                    versions.push(ver);
-                }
-            }
-        }
-    }
-
-    versions.sort();
-    versions.dedup();
-    versions
+    svm::installed_versions()
+        .unwrap_or_default()
+        .iter()
+        .map(semver_to_local)
+        .collect()
 }
 
 /// Find the best matching installed version for a pragma constraint.
