@@ -29,9 +29,13 @@ fn invalidate_installed_versions() {
 /// Resolve the path to the solc binary.
 ///
 /// Resolution order:
-/// 1. If `foundry.toml` specifies a solc version, use it (project config wins).
-/// 2. Parse `pragma solidity` from the source file and find a matching
-///    installed version via svm/solc-select directories.
+/// 1. Parse `pragma solidity` from the source file.
+///    - **Exact pragma** (`=0.7.6`): always use the file's version — foundry.toml
+///      cannot override an exact pragma without breaking compilation.
+///    - **Wildcard pragma** (`^0.8.0`, `>=0.8.0`, `>=0.6.2 <0.9.0`): if
+///      `foundry.toml` specifies a solc version that satisfies the constraint,
+///      use it. Otherwise pick the latest matching installed version.
+/// 2. If no pragma, use the `foundry.toml` solc version if set.
 /// 3. If no match is installed, auto-install via `svm install`.
 /// 4. Fall back to whatever `solc` is on `$PATH`.
 pub async fn resolve_solc_binary(
@@ -39,27 +43,35 @@ pub async fn resolve_solc_binary(
     file_source: Option<&str>,
     client: Option<&tower_lsp::Client>,
 ) -> PathBuf {
-    // 1. foundry.toml solc version takes precedence — skip pragma detection
-    if let Some(ref version) = config.solc_version
-        && let Some(path) = find_solc_binary(version)
-    {
-        if let Some(c) = client {
-            c.log_message(
-                tower_lsp::lsp_types::MessageType::INFO,
-                format!(
-                    "solc: using foundry.toml version {version} → {}",
-                    path.display()
-                ),
-            )
-            .await;
-        }
-        return path;
-    }
-
-    // 2. Try pragma from the file being compiled
+    // 1. Try pragma from the file being compiled
     if let Some(source) = file_source
         && let Some(constraint) = parse_pragma(source)
     {
+        // For exact pragmas, always honour the file — foundry.toml can't override
+        // without causing a compilation failure.
+        // For wildcard pragmas, prefer the foundry.toml version if it satisfies
+        // the constraint. This mirrors `forge build` behaviour where the project
+        // config picks the version but the pragma must still be satisfied.
+        if !matches!(constraint, PragmaConstraint::Exact(_)) {
+            if let Some(ref config_ver) = config.solc_version
+                && let Some(parsed) = SemVer::parse(config_ver)
+                && version_satisfies(&parsed, &constraint)
+                && let Some(path) = find_solc_binary(config_ver)
+            {
+                if let Some(c) = client {
+                    c.log_message(
+                        tower_lsp::lsp_types::MessageType::INFO,
+                        format!(
+                            "solc: foundry.toml {config_ver} satisfies pragma {constraint:?} → {}",
+                            path.display()
+                        ),
+                    )
+                    .await;
+                }
+                return path;
+            }
+        }
+
         let installed = get_installed_versions();
         if let Some(version) = find_matching_version(&constraint, &installed)
             && let Some(path) = find_solc_binary(&version.to_string())
@@ -77,7 +89,7 @@ pub async fn resolve_solc_binary(
             return path;
         }
 
-        // 3. No matching version installed — try auto-install via svm
+        // No matching version installed — try auto-install via svm
         let install_version = version_to_install(&constraint);
         if let Some(ref ver_str) = install_version {
             if let Some(c) = client {
@@ -115,7 +127,24 @@ pub async fn resolve_solc_binary(
         }
     }
 
-    // 4. Fall back to system solc
+    // 2. No pragma — use foundry.toml version if available
+    if let Some(ref version) = config.solc_version
+        && let Some(path) = find_solc_binary(version)
+    {
+        if let Some(c) = client {
+            c.log_message(
+                tower_lsp::lsp_types::MessageType::INFO,
+                format!(
+                    "solc: no pragma, using foundry.toml version {version} → {}",
+                    path.display()
+                ),
+            )
+            .await;
+        }
+        return path;
+    }
+
+    // 3. Fall back to system solc
     if let Some(c) = client {
         c.log_message(
             tower_lsp::lsp_types::MessageType::INFO,
@@ -443,7 +472,52 @@ pub async fn resolve_remappings(config: &FoundryConfig) -> Vec<String> {
 }
 
 /// Build the `--standard-json` input for solc.
-pub fn build_standard_json_input(file_path: &str, remappings: &[String]) -> Value {
+///
+/// Reads compiler settings from the `FoundryConfig` (parsed from `foundry.toml`)
+/// and maps them to the solc standard JSON `settings` object:
+///
+/// - `optimizer` / `optimizer_runs` → `settings.optimizer.enabled` / `settings.optimizer.runs`
+/// - `via_ir` → `settings.viaIR`
+/// - `evm_version` → `settings.evmVersion`
+pub fn build_standard_json_input(
+    file_path: &str,
+    remappings: &[String],
+    config: &FoundryConfig,
+) -> Value {
+    let mut settings = json!({
+        "remappings": remappings,
+        "outputSelection": {
+            "*": {
+                "*": [
+                    "abi",
+                    "devdoc",
+                    "userdoc",
+                    "evm.methodIdentifiers",
+                    "evm.gasEstimates"
+                ],
+                "": ["ast"]
+            }
+        }
+    });
+
+    // Optimizer settings
+    if config.optimizer {
+        settings["optimizer"] = json!({
+            "enabled": true,
+            "runs": config.optimizer_runs
+        });
+    }
+
+    // Via IR pipeline
+    if config.via_ir {
+        settings["viaIR"] = json!(true);
+    }
+
+    // EVM version
+    if let Some(ref evm_version) = config.evm_version {
+        settings["evmVersion"] = json!(evm_version);
+    }
+
     json!({
         "language": "Solidity",
         "sources": {
@@ -451,21 +525,7 @@ pub fn build_standard_json_input(file_path: &str, remappings: &[String]) -> Valu
                 "urls": [file_path]
             }
         },
-        "settings": {
-            "remappings": remappings,
-            "outputSelection": {
-                "*": {
-                    "*": [
-                        "abi",
-                        "devdoc",
-                        "userdoc",
-                        "evm.methodIdentifiers",
-                        "evm.gasEstimates"
-                    ],
-                    "": ["ast"]
-                }
-            }
-        }
+        "settings": settings
     })
 }
 
@@ -709,7 +769,7 @@ pub async fn solc_ast(
         .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_else(|_| file_path.to_string());
 
-    let input = build_standard_json_input(&rel_path, &remappings);
+    let input = build_standard_json_input(&rel_path, &remappings, config);
     let raw_output = run_solc(&solc_binary, &input, &config.root).await?;
     Ok(normalize_solc_output(raw_output, Some(&config.root)))
 }
@@ -888,12 +948,14 @@ mod tests {
 
     #[test]
     fn test_build_standard_json_input() {
+        let config = FoundryConfig::default();
         let input = build_standard_json_input(
             "/path/to/Foo.sol",
             &[
                 "ds-test/=lib/forge-std/lib/ds-test/src/".to_string(),
                 "forge-std/=lib/forge-std/src/".to_string(),
             ],
+            &config,
         );
 
         let sources = input.get("sources").unwrap().as_object().unwrap();
@@ -905,6 +967,39 @@ mod tests {
 
         let output_sel = settings.get("outputSelection").unwrap();
         assert!(output_sel.get("*").is_some());
+
+        // Default config: no optimizer, no viaIR, no evmVersion
+        assert!(settings.get("optimizer").is_none());
+        assert!(settings.get("viaIR").is_none());
+        assert!(settings.get("evmVersion").is_none());
+    }
+
+    #[test]
+    fn test_build_standard_json_input_with_config() {
+        let config = FoundryConfig {
+            optimizer: true,
+            optimizer_runs: 9999999,
+            via_ir: true,
+            evm_version: Some("osaka".to_string()),
+            ..Default::default()
+        };
+        let input = build_standard_json_input("/path/to/Foo.sol", &[], &config);
+
+        let settings = input.get("settings").unwrap();
+
+        // Optimizer
+        let optimizer = settings.get("optimizer").unwrap();
+        assert_eq!(optimizer.get("enabled").unwrap().as_bool().unwrap(), true);
+        assert_eq!(optimizer.get("runs").unwrap().as_u64().unwrap(), 9999999);
+
+        // Via IR
+        assert_eq!(settings.get("viaIR").unwrap().as_bool().unwrap(), true);
+
+        // EVM version
+        assert_eq!(
+            settings.get("evmVersion").unwrap().as_str().unwrap(),
+            "osaka"
+        );
     }
 
     #[tokio::test]

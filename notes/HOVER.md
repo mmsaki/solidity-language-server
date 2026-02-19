@@ -426,6 +426,109 @@ cat pool-manager-ast.json | jq '.. | objects | select(.id == 1029) | {id, name, 
 cat pool-manager-ast.json | jq '.. | objects | select(.id == 1167) | {id, name, nodeType}'
 ```
 
+## Foundry Config Support
+
+The LSP reads compiler settings from `foundry.toml` and passes them to `solc --standard-json`. Without this, projects that require `via_ir = true` or specific optimizer/EVM settings fail to compile (e.g. "Stack too deep" errors).
+
+### Settings read from `[profile.default]`
+
+| foundry.toml key | solc standard JSON key | Default |
+|------------------|----------------------|---------|
+| `solc` / `solc_version` | (binary selection) | pragma-based |
+| `remappings` | `settings.remappings` | `forge remappings` fallback |
+| `via_ir` | `settings.viaIR` | `false` |
+| `optimizer` | `settings.optimizer.enabled` | `false` |
+| `optimizer_runs` | `settings.optimizer.runs` | `200` |
+| `evm_version` | `settings.evmVersion` | solc default |
+| `ignored_error_codes` | (diagnostic filtering) | `[5574, 3860]` hardcoded |
+
+### Example: EkuboProtocol/evm-contracts
+
+```toml
+[profile.default]
+solc = '0.8.33'
+optimizer = true
+optimizer_runs = 9999999
+via_ir = true
+evm_version = 'osaka'
+ignored_error_codes = [2394, 6321, 3860, 5574, 2424, 8429, 4591]
+```
+
+Without `via_ir = true` and `optimizer = true`, solc fails with:
+```
+Compiler error (libsolidity/codegen/LValue.cpp:54): Stack too deep.
+Try compiling with `--via-ir` (cli) or the equivalent `viaIR: true` (standard JSON)
+while enabling the optimizer.
+```
+
+### Ignored error codes
+
+Default suppressed codes (hardcoded):
+- `5574` — contract code size exceeds limit
+- `3860` — contract initcode size exceeds limit
+
+User-configured codes from `ignored_error_codes` in `foundry.toml` are suppressed in addition to the defaults.
+
+### Config reload
+
+The config is loaded on `initialize` and reloaded automatically when `foundry.toml` changes (via file watcher). Settings take effect on the next compilation (file save/open).
+
+## Known Limitations
+
+### Multi-line `@dev` is flattened by solc
+
+Solc's `devdoc.details` concatenates multi-line `@dev` content into a single string, stripping newlines. The raw AST `documentation.text` preserves newlines, but we prefer devdoc as the source of truth (it handles `@inheritdoc` resolution and structured `@param`/`@return` parsing).
+
+**Source:**
+```solidity
+/// @dev Core uses a custom storage layout to avoid keccak's where possible.
+///      For certain storage values, the pool id is used as a base offset and
+///      we allocate the following relative offsets (starting from the pool id) as:
+///        0: pool state
+///        [FPL_OFFSET, FPL_OFFSET + 1]: fees per liquidity
+```
+
+**AST `documentation.text`** (preserves newlines):
+```
+@dev Core uses a custom storage layout...\n      For certain storage values...
+```
+
+**devdoc `details`** (flattened — this is what we display):
+```
+Core uses a custom storage layout...      For certain storage values...
+```
+
+This is a solc limitation, not ours. Users who want formatted multi-line output in hover should use separate `@dev` tags or accept the single-line rendering.
+
+### Struct member NatSpec not captured
+
+Solc does NOT populate `documentation` on struct member `VariableDeclaration` nodes — they are always `null` in the AST, even when `///` comments exist above each field. The struct-level `StructDefinition` node does have documentation, but individual member docs are lost. Neither `userdoc` nor `devdoc` contain struct member docs.
+
+```solidity
+struct PoolKey {
+    /// @notice The lower currency of the pool
+    Currency currency0;  // ← AST node has documentation: null
+}
+```
+
+### Free functions have no gas estimates or devdoc
+
+Free functions (defined at file level, outside any contract/library) exist in the AST but produce no `contracts` entry in solc output. This means:
+
+- **No gas estimates** — solc only generates gas estimates for contract/library members
+- **No devdoc/userdoc** — these are per-contract, so free functions get none
+- **No ABI or method identifiers**
+
+Hover still works for free functions via the raw AST `documentation.text` fallback (Path B), but gas info and structured doc formatting are unavailable.
+
+**Example:** `src/math/twamm.sol` in EkuboProtocol defines 7 free functions (`computeSaleRate`, `addSaleRateDelta`, etc.). Solc returns `contracts` output only for imported libraries (e.g. `FixedPointMathLib`), not for the free functions themselves.
+
+```sh
+# Verify: solc contracts output has no entry for free functions
+cat solc-output.json | jq '.contracts["src/math/twamm.sol"]'
+# → null (no contract/library defined in this file)
+```
+
 ## Performance
 
 - Uses `ast_cache` (Arc-based) — no forge calls on hover

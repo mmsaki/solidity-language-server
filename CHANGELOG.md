@@ -8,9 +8,22 @@
   - Parses pragma constraints: exact (`0.8.26`), caret (`^0.8.0`), gte (`>=0.8.0`), range (`>=0.6.2 <0.9.0`)
   - Scans svm-rs and solc-select install directories for matching versions
   - Auto-installs missing versions via `svm install` with user-visible progress
-  - Resolution order: `foundry.toml` version > pragma match > auto-install > system `solc`
   - Cross-platform support (macOS, Linux, Windows)
   - Cached version list (scanned once per session)
+- Solc version resolution respects both pragma and foundry.toml (#103)
+  - Exact pragmas (`=0.7.6`) always honoured — foundry.toml cannot override
+  - Wildcard pragmas (`^0.8.0`) use foundry.toml version if it satisfies the constraint
+  - No pragma falls back to foundry.toml, then system solc
+- Foundry config support for compiler settings (#103)
+  - Reads `via_ir`, `optimizer`, `optimizer_runs`, `evm_version` from `foundry.toml`
+  - Passes settings to solc standard JSON (`viaIR`, `optimizer`, `evmVersion`)
+  - Reads `ignored_error_codes` to suppress matching diagnostics
+  - Fixes "Stack too deep" errors for projects requiring `via_ir` (e.g. EkuboProtocol/evm-contracts)
+- Callsite parameter documentation on hover (#103)
+  - Hovering over arguments in function/event calls shows `@param` doc from the called definition
+  - Uses tree-sitter on the live buffer to find enclosing call and argument index
+  - Resolves via `HintIndex` (exact offset or `(name, arg_count)` fallback) for param name and `decl_id`
+  - Looks up `@param` doc from `DocIndex` or raw NatSpec with `@inheritdoc` resolution
 - Gas estimates in hover, inlay hints, and code lens (#91, #94)
   - `GasIndex` built from solc contract output (creation + external/internal costs)
   - Hover shows gas cost for functions and deploy cost for contracts
@@ -43,7 +56,7 @@
 
 ### Tests
 
-- 385 total tests, 0 warnings
+- 423 total tests, 0 warnings
 
 ## v0.1.20
 

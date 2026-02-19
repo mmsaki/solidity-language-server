@@ -35,6 +35,17 @@ struct CallSite {
     info: ParamInfo,
     /// Function/event name (for matching with tree-sitter).
     name: String,
+    /// The AST node id of the called function/event declaration (for DocIndex lookup).
+    decl_id: u64,
+}
+
+/// Resolved callsite info returned to hover for param doc lookup.
+#[derive(Debug, Clone)]
+pub struct ResolvedCallSite {
+    /// The parameter name at the given argument index.
+    pub param_name: String,
+    /// The AST node id of the called function/event declaration.
+    pub decl_id: u64,
 }
 
 /// Both lookup strategies: exact byte-offset match and (name, arg_count) fallback.
@@ -43,8 +54,37 @@ struct CallSite {
 pub struct HintLookup {
     /// Primary: byte_offset → CallSite (exact match when AST offsets are fresh).
     by_offset: HashMap<usize, CallSite>,
-    /// Fallback: (name, arg_count) → ParamInfo (works even with stale offsets).
-    by_name: HashMap<(String, usize), ParamInfo>,
+    /// Fallback: (name, arg_count) → CallSite (works even with stale offsets).
+    by_name: HashMap<(String, usize), CallSite>,
+}
+
+impl HintLookup {
+    /// Resolve callsite parameter info for hover.
+    ///
+    /// Given a call's byte offset (from tree-sitter), the function name,
+    /// the argument count, and the 0-based argument index, returns a
+    /// `ResolvedCallSite` with the parameter name and declaration id.
+    pub fn resolve_callsite_param(
+        &self,
+        call_offset: usize,
+        func_name: &str,
+        arg_count: usize,
+        arg_index: usize,
+    ) -> Option<ResolvedCallSite> {
+        let site = lookup_call_site(self, call_offset, func_name, arg_count)?;
+        let param_idx = arg_index + site.info.skip;
+        if param_idx >= site.info.names.len() {
+            return None;
+        }
+        let param_name = &site.info.names[param_idx];
+        if param_name.is_empty() {
+            return None;
+        }
+        Some(ResolvedCallSite {
+            param_name: param_name.clone(),
+            decl_id: site.decl_id,
+        })
+    }
 }
 
 /// Pre-computed hint lookups for all files, keyed by absolutePath.
@@ -168,7 +208,7 @@ fn index_node_ids<'a>(node: &'a Value, index: &mut HashMap<u64, &'a Value>) {
 }
 
 /// Parse Solidity source with tree-sitter.
-fn ts_parse(source: &str) -> Option<tree_sitter::Tree> {
+pub fn ts_parse(source: &str) -> Option<tree_sitter::Tree> {
     let mut parser = Parser::new();
     parser
         .set_language(&tree_sitter_solidity::LANGUAGE.into())
@@ -198,49 +238,55 @@ fn collect_ast_calls(node: &Value, id_index: &HashMap<u64, &Value>, lookup: &mut
 
     match node_type {
         "FunctionCall" => {
-            if let Some((name, info)) = extract_call_info(node, id_index) {
+            if let Some(call_info) = extract_call_info(node, id_index) {
                 let arg_count = node
                     .get("arguments")
                     .and_then(|v| v.as_array())
                     .map(|a| a.len())
                     .unwrap_or(0);
+                let site = CallSite {
+                    info: ParamInfo {
+                        names: call_info.params.names,
+                        skip: call_info.params.skip,
+                    },
+                    name: call_info.name,
+                    decl_id: call_info.decl_id,
+                };
                 if let Some(offset) = parse_src_offset(node) {
-                    lookup.by_offset.insert(
-                        offset,
-                        CallSite {
-                            info: ParamInfo {
-                                names: info.names.clone(),
-                                skip: info.skip,
-                            },
-                            name: name.clone(),
-                        },
-                    );
+                    lookup.by_offset.insert(offset, site.clone());
                 }
-                lookup.by_name.entry((name, arg_count)).or_insert(info);
+
+                lookup
+                    .by_name
+                    .entry((site.name.clone(), arg_count))
+                    .or_insert(site);
             }
         }
         "EmitStatement" => {
             if let Some(event_call) = node.get("eventCall")
-                && let Some((name, info)) = extract_call_info(event_call, id_index)
+                && let Some(call_info) = extract_call_info(event_call, id_index)
             {
                 let arg_count = event_call
                     .get("arguments")
                     .and_then(|v| v.as_array())
                     .map(|a| a.len())
                     .unwrap_or(0);
+                let site = CallSite {
+                    info: ParamInfo {
+                        names: call_info.params.names,
+                        skip: call_info.params.skip,
+                    },
+                    name: call_info.name,
+                    decl_id: call_info.decl_id,
+                };
                 if let Some(offset) = parse_src_offset(node) {
-                    lookup.by_offset.insert(
-                        offset,
-                        CallSite {
-                            info: ParamInfo {
-                                names: info.names.clone(),
-                                skip: info.skip,
-                            },
-                            name: name.clone(),
-                        },
-                    );
+                    lookup.by_offset.insert(offset, site.clone());
                 }
-                lookup.by_name.entry((name, arg_count)).or_insert(info);
+
+                lookup
+                    .by_name
+                    .entry((site.name.clone(), arg_count))
+                    .or_insert(site);
             }
         }
         _ => {}
@@ -262,8 +308,18 @@ fn collect_ast_calls(node: &Value, id_index: &HashMap<u64, &Value>, lookup: &mut
     }
 }
 
+/// Resolved call info including the declaration id of the called function/event.
+struct CallInfo {
+    /// Function/event name.
+    name: String,
+    /// Parameter names and skip count.
+    params: ParamInfo,
+    /// The AST node id of the referenced declaration (for DocIndex lookup).
+    decl_id: u64,
+}
+
 /// Extract function/event name and parameter info from an AST FunctionCall node.
-fn extract_call_info(node: &Value, id_index: &HashMap<u64, &Value>) -> Option<(String, ParamInfo)> {
+fn extract_call_info(node: &Value, id_index: &HashMap<u64, &Value>) -> Option<CallInfo> {
     let args = node.get("arguments")?.as_array()?;
     if args.is_empty() {
         return None;
@@ -304,7 +360,11 @@ fn extract_call_info(node: &Value, id_index: &HashMap<u64, &Value>) -> Option<(S
         0
     };
 
-    Some((func_name, ParamInfo { names, skip }))
+    Some(CallInfo {
+        name: func_name,
+        params: ParamInfo { names, skip },
+        decl_id,
+    })
 }
 
 /// Extract the function/event name from an AST expression node.
@@ -329,18 +389,18 @@ fn is_member_access(expr: &Value) -> bool {
 
 // ── Tree-sitter walk ──────────────────────────────────────────────────────
 
-/// Look up param info: try exact byte-offset match first, fall back to (name, arg_count).
-fn lookup_info<'a>(
+/// Look up call site info: try exact byte-offset match first, fall back to (name, arg_count).
+fn lookup_call_site<'a>(
     lookup: &'a HintLookup,
     offset: usize,
     name: &str,
     arg_count: usize,
-) -> Option<&'a ParamInfo> {
+) -> Option<&'a CallSite> {
     // Exact match by byte offset (works when AST is fresh)
     if let Some(site) = lookup.by_offset.get(&offset)
         && site.name == name
     {
-        return Some(&site.info);
+        return Some(site);
     }
     // Fallback by (name, arg_count) (works with stale offsets after edits)
     lookup.by_name.get(&(name.to_string(), arg_count))
@@ -390,12 +450,12 @@ fn emit_call_hints(node: Node, source: &str, lookup: &HintLookup, hints: &mut Ve
         return;
     }
 
-    let info = match lookup_info(lookup, node.start_byte(), func_name, args.len()) {
-        Some(i) => i,
+    let site = match lookup_call_site(lookup, node.start_byte(), func_name, args.len()) {
+        Some(s) => s,
         None => return,
     };
 
-    emit_param_hints(&args, info, hints);
+    emit_param_hints(&args, &site.info, hints);
 }
 
 /// Emit parameter hints for an `emit_statement` node.
@@ -410,12 +470,12 @@ fn emit_emit_hints(node: Node, source: &str, lookup: &HintLookup, hints: &mut Ve
         return;
     }
 
-    let info = match lookup_info(lookup, node.start_byte(), event_name, args.len()) {
-        Some(i) => i,
+    let site = match lookup_call_site(lookup, node.start_byte(), event_name, args.len()) {
+        Some(s) => s,
         None => return,
     };
 
-    emit_param_hints(&args, info, hints);
+    emit_param_hints(&args, &site.info, hints);
 }
 
 /// Emit InlayHint items for each argument, using tree-sitter positions.
@@ -493,6 +553,66 @@ fn ts_call_arguments(node: Node) -> Vec<Node> {
 fn first_named_child(node: Node) -> Option<Node> {
     let mut cursor = node.walk();
     node.children(&mut cursor).find(|c| c.is_named())
+}
+
+/// Result of finding the enclosing call site at a byte position via tree-sitter.
+pub struct TsCallContext<'a> {
+    /// The function/event name.
+    pub name: &'a str,
+    /// 0-based index of the argument the cursor is on.
+    pub arg_index: usize,
+    /// Total number of arguments in the call.
+    pub arg_count: usize,
+    /// Start byte of the call_expression/emit_statement node (for HintIndex lookup).
+    pub call_start_byte: usize,
+}
+
+/// Find the enclosing `call_expression` or `emit_statement` for a given byte
+/// position in the live buffer using tree-sitter.
+///
+/// Returns `None` if the position is not inside a call argument.
+pub fn ts_find_call_at_byte<'a>(
+    root: tree_sitter::Node<'a>,
+    source: &'a str,
+    byte_pos: usize,
+) -> Option<TsCallContext<'a>> {
+    // Find the deepest node containing byte_pos
+    let mut node = root.descendant_for_byte_range(byte_pos, byte_pos)?;
+
+    // Walk up the tree to find a call_argument parent
+    loop {
+        if node.kind() == "call_argument" {
+            break;
+        }
+        node = node.parent()?;
+    }
+
+    // The call_argument's parent should be the call_expression or emit_statement
+    let call_node = node.parent()?;
+    let args = ts_call_arguments(call_node);
+    let arg_index = args.iter().position(|a| a.id() == node.id())?;
+
+    match call_node.kind() {
+        "call_expression" => {
+            let name = ts_call_function_name(call_node, source)?;
+            Some(TsCallContext {
+                name,
+                arg_index,
+                arg_count: args.len(),
+                call_start_byte: call_node.start_byte(),
+            })
+        }
+        "emit_statement" => {
+            let name = ts_emit_event_name(call_node, source)?;
+            Some(TsCallContext {
+                name,
+                arg_index,
+                arg_count: args.len(),
+                call_start_byte: call_node.start_byte(),
+            })
+        }
+        _ => None,
+    }
 }
 
 // ── Gas inlay hints (tree-sitter based) ──────────────────────────────────
@@ -879,5 +999,315 @@ contract Foo {
         for child in node.children(&mut cursor) {
             find_arg_positions(child, out);
         }
+    }
+
+    #[test]
+    fn test_ts_find_call_at_byte_first_arg() {
+        let source = r#"
+contract Foo {
+    function bar(uint x, uint y) public {}
+    function test() public {
+        bar(42, 99);
+    }
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+        // "42" is the first argument — find its byte offset
+        let pos_42 = source.find("42").unwrap();
+        let ctx = ts_find_call_at_byte(tree.root_node(), source, pos_42).unwrap();
+        assert_eq!(ctx.name, "bar");
+        assert_eq!(ctx.arg_index, 0);
+        assert_eq!(ctx.arg_count, 2);
+    }
+
+    #[test]
+    fn test_ts_find_call_at_byte_second_arg() {
+        let source = r#"
+contract Foo {
+    function bar(uint x, uint y) public {}
+    function test() public {
+        bar(42, 99);
+    }
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+        let pos_99 = source.find("99").unwrap();
+        let ctx = ts_find_call_at_byte(tree.root_node(), source, pos_99).unwrap();
+        assert_eq!(ctx.name, "bar");
+        assert_eq!(ctx.arg_index, 1);
+        assert_eq!(ctx.arg_count, 2);
+    }
+
+    #[test]
+    fn test_ts_find_call_at_byte_outside_call_returns_none() {
+        let source = r#"
+contract Foo {
+    function bar(uint x) public {}
+    function test() public {
+        uint z = 10;
+        bar(42);
+    }
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+        // "10" is a local variable assignment, not a call argument
+        let pos_10 = source.find("10").unwrap();
+        assert!(ts_find_call_at_byte(tree.root_node(), source, pos_10).is_none());
+    }
+
+    #[test]
+    fn test_ts_find_call_at_byte_member_call() {
+        let source = r#"
+contract Foo {
+    function test() public {
+        PRICE.addTax(TAX, TAX_BASE);
+    }
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+        let pos_tax = source.find("TAX,").unwrap();
+        let ctx = ts_find_call_at_byte(tree.root_node(), source, pos_tax).unwrap();
+        assert_eq!(ctx.name, "addTax");
+        assert_eq!(ctx.arg_index, 0);
+        assert_eq!(ctx.arg_count, 2);
+    }
+
+    #[test]
+    fn test_ts_find_call_at_byte_emit_statement() {
+        let source = r#"
+contract Foo {
+    event Purchase(address buyer, uint256 price);
+    function test() public {
+        emit Purchase(msg.sender, 100);
+    }
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+        let pos_100 = source.find("100").unwrap();
+        let ctx = ts_find_call_at_byte(tree.root_node(), source, pos_100).unwrap();
+        assert_eq!(ctx.name, "Purchase");
+        assert_eq!(ctx.arg_index, 1);
+        assert_eq!(ctx.arg_count, 2);
+    }
+
+    #[test]
+    fn test_ts_find_call_at_byte_multiline() {
+        let source = r#"
+contract Foo {
+    function bar(uint x, uint y, uint z) public {}
+    function test() public {
+        bar(
+            1,
+            2,
+            3
+        );
+    }
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+        // Find "2" — the second argument on its own line
+        // Need to be careful since "2" appears in the source in multiple places
+        let pos_2 = source.find("            2").unwrap() + 12; // skip whitespace
+        let ctx = ts_find_call_at_byte(tree.root_node(), source, pos_2).unwrap();
+        assert_eq!(ctx.name, "bar");
+        assert_eq!(ctx.arg_index, 1);
+        assert_eq!(ctx.arg_count, 3);
+    }
+
+    #[test]
+    fn test_resolve_callsite_param_basic() {
+        // Build a HintLookup manually with a known call site
+        let mut lookup = HintLookup {
+            by_offset: HashMap::new(),
+            by_name: HashMap::new(),
+        };
+        lookup.by_name.insert(
+            ("transfer".to_string(), 2),
+            CallSite {
+                info: ParamInfo {
+                    names: vec!["to".to_string(), "amount".to_string()],
+                    skip: 0,
+                },
+                name: "transfer".to_string(),
+                decl_id: 42,
+            },
+        );
+
+        // Resolve first argument
+        let result = lookup.resolve_callsite_param(0, "transfer", 2, 0).unwrap();
+        assert_eq!(result.param_name, "to");
+        assert_eq!(result.decl_id, 42);
+
+        // Resolve second argument
+        let result = lookup.resolve_callsite_param(0, "transfer", 2, 1).unwrap();
+        assert_eq!(result.param_name, "amount");
+        assert_eq!(result.decl_id, 42);
+    }
+
+    #[test]
+    fn test_resolve_callsite_param_with_skip() {
+        // Simulate a using-for library call where skip=1
+        let mut lookup = HintLookup {
+            by_offset: HashMap::new(),
+            by_name: HashMap::new(),
+        };
+        lookup.by_name.insert(
+            ("addTax".to_string(), 2),
+            CallSite {
+                info: ParamInfo {
+                    names: vec!["self".to_string(), "tax".to_string(), "base".to_string()],
+                    skip: 1,
+                },
+                name: "addTax".to_string(),
+                decl_id: 99,
+            },
+        );
+
+        // First arg maps to param index 1 (skip=1), which is "tax"
+        let result = lookup.resolve_callsite_param(0, "addTax", 2, 0).unwrap();
+        assert_eq!(result.param_name, "tax");
+
+        // Second arg maps to param index 2, which is "base"
+        let result = lookup.resolve_callsite_param(0, "addTax", 2, 1).unwrap();
+        assert_eq!(result.param_name, "base");
+    }
+
+    #[test]
+    fn test_resolve_callsite_param_out_of_bounds() {
+        let mut lookup = HintLookup {
+            by_offset: HashMap::new(),
+            by_name: HashMap::new(),
+        };
+        lookup.by_name.insert(
+            ("foo".to_string(), 1),
+            CallSite {
+                info: ParamInfo {
+                    names: vec!["x".to_string()],
+                    skip: 0,
+                },
+                name: "foo".to_string(),
+                decl_id: 1,
+            },
+        );
+
+        // Arg index 1 is out of bounds for a single-param function
+        assert!(lookup.resolve_callsite_param(0, "foo", 1, 1).is_none());
+    }
+
+    #[test]
+    fn test_resolve_callsite_param_unknown_function() {
+        let lookup = HintLookup {
+            by_offset: HashMap::new(),
+            by_name: HashMap::new(),
+        };
+        assert!(lookup.resolve_callsite_param(0, "unknown", 1, 0).is_none());
+    }
+
+    #[test]
+    fn test_ts_find_call_at_byte_emit_member_access() {
+        // Simulates: emit ModifyLiquidity(id, msg.sender, params.tickLower, ...);
+        // Hovering on "tickLower" (the member name in params.tickLower) should
+        // resolve to arg_index=2 of the ModifyLiquidity emit.
+        let source = r#"
+contract Foo {
+    event ModifyLiquidity(uint id, address sender, int24 tickLower, int24 tickUpper);
+    function test() public {
+        emit ModifyLiquidity(id, msg.sender, params.tickLower, params.tickUpper);
+    }
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+        // Find "tickLower" inside "params.tickLower" — the first occurrence after "params."
+        let params_tick = source.find("params.tickLower,").unwrap();
+        let tick_lower_pos = params_tick + "params.".len(); // points at "tickLower"
+
+        let ctx = ts_find_call_at_byte(tree.root_node(), source, tick_lower_pos).unwrap();
+        assert_eq!(ctx.name, "ModifyLiquidity");
+        assert_eq!(
+            ctx.arg_index, 2,
+            "params.tickLower is the 3rd argument (index 2)"
+        );
+        assert_eq!(ctx.arg_count, 4);
+    }
+
+    #[test]
+    fn test_ts_find_call_at_byte_member_access_on_property() {
+        // Hovering on "sender" in "msg.sender" as an argument
+        let source = r#"
+contract Foo {
+    event Transfer(address from, address to);
+    function test() public {
+        emit Transfer(msg.sender, addr);
+    }
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+        let sender_pos = source.find("sender").unwrap();
+        let ctx = ts_find_call_at_byte(tree.root_node(), source, sender_pos).unwrap();
+        assert_eq!(ctx.name, "Transfer");
+        assert_eq!(ctx.arg_index, 0, "msg.sender is the 1st argument");
+    }
+
+    #[test]
+    fn test_ts_find_call_at_byte_emit_all_args() {
+        // Verify each argument position in an emit with member accesses
+        let source = r#"
+contract Foo {
+    event ModifyLiquidity(uint id, address sender, int24 tickLower, int24 tickUpper);
+    function test() public {
+        emit ModifyLiquidity(id, msg.sender, params.tickLower, params.tickUpper);
+    }
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+
+        // arg 0: "id"
+        let pos_id = source.find("(id,").unwrap() + 1;
+        let ctx = ts_find_call_at_byte(tree.root_node(), source, pos_id).unwrap();
+        assert_eq!(ctx.name, "ModifyLiquidity");
+        assert_eq!(ctx.arg_index, 0);
+
+        // arg 1: "msg.sender" — hover on "msg"
+        let pos_msg = source.find("msg.sender").unwrap();
+        let ctx = ts_find_call_at_byte(tree.root_node(), source, pos_msg).unwrap();
+        assert_eq!(ctx.arg_index, 1);
+
+        // arg 2: "params.tickLower" — hover on "tickLower"
+        let pos_tl = source.find("params.tickLower").unwrap() + "params.".len();
+        let ctx = ts_find_call_at_byte(tree.root_node(), source, pos_tl).unwrap();
+        assert_eq!(ctx.arg_index, 2);
+
+        // arg 3: "params.tickUpper" — hover on "params"
+        let pos_tu = source.find("params.tickUpper").unwrap();
+        let ctx = ts_find_call_at_byte(tree.root_node(), source, pos_tu).unwrap();
+        assert_eq!(ctx.arg_index, 3);
+    }
+
+    #[test]
+    fn test_ts_find_call_at_byte_nested_call_arg() {
+        // When an argument is itself a function call, hovering inside
+        // the inner call should find the inner call, not the outer.
+        let source = r#"
+contract Foo {
+    function inner(uint x) public returns (uint) {}
+    function outer(uint a, uint b) public {}
+    function test() public {
+        outer(inner(42), 99);
+    }
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+
+        // "42" is an arg to inner(), not outer()
+        let pos_42 = source.find("42").unwrap();
+        let ctx = ts_find_call_at_byte(tree.root_node(), source, pos_42).unwrap();
+        assert_eq!(ctx.name, "inner");
+        assert_eq!(ctx.arg_index, 0);
+
+        // "99" is an arg to outer()
+        let pos_99 = source.find("99").unwrap();
+        let ctx = ts_find_call_at_byte(tree.root_node(), source, pos_99).unwrap();
+        assert_eq!(ctx.name, "outer");
+        assert_eq!(ctx.arg_index, 1);
     }
 }

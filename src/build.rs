@@ -3,19 +3,39 @@ use serde_json::Value;
 use std::path::Path;
 use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, NumberOrString, Range};
 
-pub fn ignored_error_code_warning(value: &serde_json::Value) -> bool {
+/// Default error codes that are always suppressed (contract-size and
+/// code-size warnings that are noisy for LSP users).
+const DEFAULT_IGNORED_CODES: &[&str] = &["5574", "3860"];
+
+/// Check whether a solc error should be suppressed based on its error code.
+///
+/// Suppresses the hardcoded defaults plus any codes provided in `extra_codes`
+/// (from `foundry.toml` `ignored_error_codes`).
+pub fn ignored_error_code_warning(value: &serde_json::Value, extra_codes: &[u64]) -> bool {
     let error_code = value
         .get("errorCode")
         .and_then(|v| v.as_str())
         .unwrap_or_default();
 
-    error_code == "5574" || error_code == "3860"
+    if DEFAULT_IGNORED_CODES.contains(&error_code) {
+        return true;
+    }
+
+    // Check user-configured ignored codes from foundry.toml
+    if let Ok(code_num) = error_code.parse::<u64>() {
+        if extra_codes.contains(&code_num) {
+            return true;
+        }
+    }
+
+    false
 }
 
 pub fn build_output_to_diagnostics(
     forge_output: &serde_json::Value,
     path: impl AsRef<Path>,
     content: &str,
+    ignored_error_codes: &[u64],
 ) -> Vec<Diagnostic> {
     let Some(errors) = forge_output.get("errors").and_then(|v| v.as_array()) else {
         return Vec::new();
@@ -23,7 +43,7 @@ pub fn build_output_to_diagnostics(
     let path = path.as_ref();
     errors
         .iter()
-        .filter_map(|err| parse_diagnostic(err, path, content))
+        .filter_map(|err| parse_diagnostic(err, path, content, ignored_error_codes))
         .collect()
 }
 
@@ -43,8 +63,13 @@ fn source_location_matches(source_path: &str, path: &Path) -> bool {
     }
 }
 
-fn parse_diagnostic(err: &Value, path: &Path, content: &str) -> Option<Diagnostic> {
-    if ignored_error_code_warning(err) {
+fn parse_diagnostic(
+    err: &Value,
+    path: &Path,
+    content: &str,
+    ignored_error_codes: &[u64],
+) -> Option<Diagnostic> {
+    if ignored_error_code_warning(err, ignored_error_codes) {
         return None;
     }
     let source_file = err

@@ -90,7 +90,7 @@ async fn test_diagnostic_offsets_match_source() {
     let expected_end_byte = 82;
     let expected_start_pos = byte_offset_to_position(&source_code, expected_start_byte);
     let expected_end_pos = byte_offset_to_position(&source_code, expected_end_byte);
-    let diagnostics = build_output_to_diagnostics(&build_output, &contract_path, &source_code);
+    let diagnostics = build_output_to_diagnostics(&build_output, &contract_path, &source_code, &[]);
     assert!(!diagnostics.is_empty(), "no diagnostics found");
 
     let diag = &diagnostics[0];
@@ -112,7 +112,7 @@ async fn test_build_output_to_diagnostics_from_file() {
         .await
         .expect("Compiler build failed");
 
-    let diagnostics = build_output_to_diagnostics(&build_output, &contract_path, &source_code);
+    let diagnostics = build_output_to_diagnostics(&build_output, &contract_path, &source_code, &[]);
     assert!(!diagnostics.is_empty(), "Expected at least one diagnostic");
 
     let diag = &diagnostics[0];
@@ -131,7 +131,7 @@ async fn test_ignored_code_for_tests() {
             "file": "test/ERC6909Claims.t.sol"
         }
     });
-    assert!(ignored_error_code_warning(&error_json));
+    assert!(ignored_error_code_warning(&error_json, &[]));
 
     let error_json_non_test = serde_json::json!({
         "errorCode": "5574",
@@ -140,7 +140,7 @@ async fn test_ignored_code_for_tests() {
         }
     });
     // These codes are now ignored for all .sol files, not just test files
-    assert!(ignored_error_code_warning(&error_json_non_test));
+    assert!(ignored_error_code_warning(&error_json_non_test, &[]));
 
     let error_json_other_code = serde_json::json!({
         "errorCode": "1234",
@@ -148,7 +148,31 @@ async fn test_ignored_code_for_tests() {
             "file": "test/ERC6909Claims.t.sol"
         }
     });
-    assert!(!ignored_error_code_warning(&error_json_other_code));
+    assert!(!ignored_error_code_warning(&error_json_other_code, &[]));
+
+    // User-configured ignored codes from foundry.toml
+    let error_json_custom = serde_json::json!({
+        "errorCode": "2394",
+        "sourceLocation": {
+            "file": "src/Core.sol"
+        }
+    });
+    assert!(ignored_error_code_warning(
+        &error_json_custom,
+        &[2394, 6321]
+    ));
+
+    // Code not in the user list and not in defaults
+    let error_json_not_ignored = serde_json::json!({
+        "errorCode": "9999",
+        "sourceLocation": {
+            "file": "src/Core.sol"
+        }
+    });
+    assert!(!ignored_error_code_warning(
+        &error_json_not_ignored,
+        &[2394, 6321]
+    ));
 }
 
 // ---------------------------------------------------------------------------
@@ -201,7 +225,7 @@ async fn test_warning_only_build_should_succeed() {
         .expect("read source");
     let build_output = compiler.build(&file_path).await.expect("build failed");
 
-    let diagnostics = build_output_to_diagnostics(&build_output, &contract_path, &source_code);
+    let diagnostics = build_output_to_diagnostics(&build_output, &contract_path, &source_code, &[]);
 
     // There should be at least one warning (unused variable)
     assert!(
@@ -233,7 +257,7 @@ async fn test_error_build_should_fail() {
         .expect("read source");
     let build_output = compiler.build(&file_path).await.expect("build failed");
 
-    let diagnostics = build_output_to_diagnostics(&build_output, &contract_path, &source_code);
+    let diagnostics = build_output_to_diagnostics(&build_output, &contract_path, &source_code, &[]);
 
     assert!(!diagnostics.is_empty(), "expected errors");
     assert!(
@@ -291,7 +315,7 @@ fn test_source_location_matches_subdirectory_project() {
 
     let content = "0123456789\n0123456789\n0123456789\n";
     let path = std::path::Path::new("/repo/example/Shop.sol");
-    let diagnostics = build_output_to_diagnostics(&forge_output, path, content);
+    let diagnostics = build_output_to_diagnostics(&forge_output, path, content, &[]);
 
     assert!(
         !diagnostics.is_empty(),
