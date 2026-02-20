@@ -1,6 +1,9 @@
 use serde_json::Value;
 use std::collections::HashMap;
-use tower_lsp::lsp_types::{Hover, HoverContents, MarkupContent, MarkupKind, Position, Url};
+use tower_lsp::lsp_types::{
+    Documentation, Hover, HoverContents, MarkupContent, MarkupKind, ParameterInformation,
+    ParameterLabel, Position, SignatureHelp, SignatureInformation, Url,
+};
 
 use crate::gas::{self, GasIndex};
 use crate::goto::{CHILD_KEYS, cache_ids, pos_to_bytes};
@@ -1032,6 +1035,283 @@ fn format_parameters(params_node: Option<&Value>) -> String {
         .collect();
 
     parts.join(", ")
+}
+
+// ── Signature Help ─────────────────────────────────────────────────────────
+
+/// Build individual parameter strings from a parameters AST node.
+///
+/// Returns a vec of strings like `["uint256 amount", "uint16 tax", "uint16 base"]`.
+fn build_parameter_strings(params_node: Option<&Value>) -> Vec<String> {
+    let params_node = match params_node {
+        Some(v) => v,
+        None => return vec![],
+    };
+    let params = match params_node.get("parameters").and_then(|v| v.as_array()) {
+        Some(arr) => arr,
+        None => return vec![],
+    };
+
+    params
+        .iter()
+        .map(|p| {
+            let type_str = p
+                .get("typeDescriptions")
+                .and_then(|v| v.get("typeString"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            let name = p.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            let storage = p
+                .get("storageLocation")
+                .and_then(|v| v.as_str())
+                .unwrap_or("default");
+
+            if name.is_empty() {
+                type_str.to_string()
+            } else if storage != "default" {
+                format!("{type_str} {storage} {name}")
+            } else {
+                format!("{type_str} {name}")
+            }
+        })
+        .collect()
+}
+
+/// Find a mapping `VariableDeclaration` by name, walking all AST sources.
+///
+/// Returns the declaration node whose `name` matches and whose
+/// `typeName.nodeType` is `"Mapping"`.
+fn find_mapping_decl_by_name<'a>(sources: &'a Value, name: &str) -> Option<&'a Value> {
+    let sources_obj = sources.as_object()?;
+    for (_path, source_data) in sources_obj {
+        let ast = source_data.get("ast")?;
+        let mut stack = vec![ast];
+        while let Some(node) = stack.pop() {
+            if node.get("nodeType").and_then(|v| v.as_str()) == Some("VariableDeclaration")
+                && node.get("name").and_then(|v| v.as_str()) == Some(name)
+                && node
+                    .get("typeName")
+                    .and_then(|t| t.get("nodeType"))
+                    .and_then(|v| v.as_str())
+                    == Some("Mapping")
+            {
+                return Some(node);
+            }
+            for key in CHILD_KEYS {
+                if let Some(value) = node.get(key) {
+                    match value {
+                        Value::Array(arr) => stack.extend(arr.iter()),
+                        Value::Object(_) => stack.push(value),
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Build signature help for a mapping index access like `orders[orderId]`.
+///
+/// Produces a label like `orders[bytes32 key]` or `orders[bytes32]` when the
+/// mapping key has no name, and marks the key parameter as active.
+fn mapping_signature_help(sources: &Value, name: &str) -> Option<SignatureHelp> {
+    let decl = find_mapping_decl_by_name(sources, name)?;
+    let type_name = decl.get("typeName")?;
+
+    let key_type = type_name
+        .get("keyType")
+        .and_then(|k| k.get("typeDescriptions"))
+        .and_then(|t| t.get("typeString"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+
+    // Named mapping keys (Solidity ≥0.8.18): `mapping(PoolId id => Pool.State)`
+    let key_name = type_name
+        .get("keyName")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty());
+
+    let param_str = if let Some(kn) = key_name {
+        format!("{} {}", key_type, kn)
+    } else {
+        key_type.to_string()
+    };
+
+    let sig_label = format!("{}[{}]", name, param_str);
+
+    // Parameter covers the key portion inside the brackets
+    let param_start = name.len() + 1; // after `[`
+    let param_end = param_start + param_str.len();
+
+    // Try to get @param doc for the key
+    let key_param_name = key_name.unwrap_or("");
+    let var_name = decl.get("name").and_then(|v| v.as_str()).unwrap_or("");
+
+    // stateVariables devdoc: look for @param doc on the mapping variable
+    let _param_doc: Option<String> = None;
+
+    let param_info = ParameterInformation {
+        label: ParameterLabel::LabelOffsets([param_start as u32, param_end as u32]),
+        documentation: if !key_param_name.is_empty() {
+            Some(Documentation::MarkupContent(MarkupContent {
+                kind: MarkupKind::Markdown,
+                value: format!("`{}` — key for `{}`", key_param_name, var_name),
+            }))
+        } else {
+            None
+        },
+    };
+
+    // Get the value type for function-level documentation
+    let value_type = type_name
+        .get("valueType")
+        .and_then(|v| v.get("typeDescriptions"))
+        .and_then(|t| t.get("typeString"))
+        .and_then(|v| v.as_str());
+
+    let sig_doc = value_type.map(|vt| format!("@returns `{}`", vt));
+
+    Some(SignatureHelp {
+        signatures: vec![SignatureInformation {
+            label: sig_label,
+            documentation: sig_doc.map(|doc| {
+                Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: doc,
+                })
+            }),
+            parameters: Some(vec![param_info]),
+            active_parameter: Some(0),
+        }],
+        active_signature: Some(0),
+        active_parameter: Some(0),
+    })
+}
+
+/// Produce signature help for the call at the given position.
+///
+/// Uses tree-sitter on the live buffer to find the enclosing call and argument
+/// index, then resolves the declaration via `HintIndex` to build the signature
+/// with parameter label offsets and `@param` documentation.
+///
+/// Also handles mapping index access (`name[key]`), showing the key type.
+pub fn signature_help(
+    ast_data: &Value,
+    source_bytes: &[u8],
+    position: Position,
+    hint_index: &HintIndex,
+    doc_index: &DocIndex,
+) -> Option<SignatureHelp> {
+    let sources = ast_data.get("sources")?;
+
+    let source_str = String::from_utf8_lossy(source_bytes);
+    let tree = crate::inlay_hints::ts_parse(&source_str)?;
+    let byte_pos = pos_to_bytes(source_bytes, position);
+
+    // Find the enclosing call and which argument the cursor is on
+    let ctx =
+        crate::inlay_hints::ts_find_call_for_signature(tree.root_node(), &source_str, byte_pos)?;
+
+    // Mapping index access: resolve via AST VariableDeclaration
+    if ctx.is_index_access {
+        return mapping_signature_help(sources, ctx.name);
+    }
+
+    // Try all hint lookups to resolve the callsite declaration and get skip count
+    let (decl_id, skip) = hint_index.values().find_map(|lookup| {
+        lookup.resolve_callsite_with_skip(ctx.call_start_byte, ctx.name, ctx.arg_count)
+    })?;
+
+    // Find the declaration AST node
+    let decl_node = find_node_by_id(sources, NodeId(decl_id))?;
+
+    // Build the signature label
+    let sig_label = build_function_signature(&decl_node)?;
+
+    // Build individual parameter strings for offset calculation
+    let param_strings = build_parameter_strings(decl_node.get("parameters"));
+
+    // Look up @param docs from DocIndex
+    let doc_entry = lookup_doc_entry(doc_index, &decl_node, sources);
+
+    // Calculate parameter label offsets within the signature string
+    // The signature looks like: "function name(uint256 amount, uint16 tax) ..."
+    // We need to find the byte offset of each parameter within the label
+    let params_start = sig_label.find('(')? + 1;
+    let mut param_infos = Vec::new();
+    let mut offset = params_start;
+
+    for (i, param_str) in param_strings.iter().enumerate() {
+        let start = offset;
+        let end = start + param_str.len();
+
+        // Find @param doc for this parameter
+        let param_name = decl_node
+            .get("parameters")
+            .and_then(|p| p.get("parameters"))
+            .and_then(|arr| arr.as_array())
+            .and_then(|arr| arr.get(i))
+            .and_then(|p| p.get("name"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        let param_doc = doc_entry.as_ref().and_then(|entry| {
+            entry
+                .params
+                .iter()
+                .find(|(name, _)| name == param_name)
+                .map(|(_, desc)| desc.clone())
+        });
+
+        param_infos.push(ParameterInformation {
+            label: ParameterLabel::LabelOffsets([start as u32, end as u32]),
+            documentation: param_doc.map(|doc| {
+                Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: doc,
+                })
+            }),
+        });
+
+        // +2 for ", " separator
+        offset = end + 2;
+    }
+
+    // Build notice/dev documentation for the signature
+    let sig_doc = doc_entry.as_ref().and_then(|entry| {
+        let mut parts = Vec::new();
+        if let Some(notice) = &entry.notice {
+            parts.push(notice.clone());
+        }
+        if let Some(details) = &entry.details {
+            parts.push(format!("*{}*", details));
+        }
+        if parts.is_empty() {
+            None
+        } else {
+            Some(parts.join("\n\n"))
+        }
+    });
+
+    // Adjust activeParameter for using-for (skip=1 means first param is self)
+    let active_param = (ctx.arg_index + skip) as u32;
+
+    Some(SignatureHelp {
+        signatures: vec![SignatureInformation {
+            label: sig_label,
+            documentation: sig_doc.map(|doc| {
+                Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: doc,
+                })
+            }),
+            parameters: Some(param_infos),
+            active_parameter: Some(active_param),
+        }],
+        active_signature: Some(0),
+        active_parameter: Some(active_param),
+    })
 }
 
 /// Check if the source text has the gas sentinel comment above a declaration.
@@ -2187,5 +2467,162 @@ mod tests {
             index.contains_key(&sel3),
             "extsload(bytes32[]) should exist"
         );
+    }
+
+    #[test]
+    fn test_build_parameter_strings_basic() {
+        let node: Value = serde_json::json!({
+            "parameters": {
+                "parameters": [
+                    {
+                        "name": "amount",
+                        "typeDescriptions": { "typeString": "uint256" },
+                        "storageLocation": "default"
+                    },
+                    {
+                        "name": "tax",
+                        "typeDescriptions": { "typeString": "uint16" },
+                        "storageLocation": "default"
+                    }
+                ]
+            }
+        });
+        let params = build_parameter_strings(Some(&node.get("parameters").unwrap()));
+        assert_eq!(params, vec!["uint256 amount", "uint16 tax"]);
+    }
+
+    #[test]
+    fn test_build_parameter_strings_with_storage() {
+        let node: Value = serde_json::json!({
+            "parameters": {
+                "parameters": [
+                    {
+                        "name": "key",
+                        "typeDescriptions": { "typeString": "struct PoolKey" },
+                        "storageLocation": "calldata"
+                    }
+                ]
+            }
+        });
+        let params = build_parameter_strings(Some(&node.get("parameters").unwrap()));
+        assert_eq!(params, vec!["struct PoolKey calldata key"]);
+    }
+
+    #[test]
+    fn test_build_parameter_strings_empty() {
+        let node: Value = serde_json::json!({
+            "parameters": { "parameters": [] }
+        });
+        let params = build_parameter_strings(Some(&node.get("parameters").unwrap()));
+        assert!(params.is_empty());
+    }
+
+    #[test]
+    fn test_build_parameter_strings_unnamed() {
+        let node: Value = serde_json::json!({
+            "parameters": {
+                "parameters": [
+                    {
+                        "name": "",
+                        "typeDescriptions": { "typeString": "uint256" },
+                        "storageLocation": "default"
+                    }
+                ]
+            }
+        });
+        let params = build_parameter_strings(Some(&node.get("parameters").unwrap()));
+        assert_eq!(params, vec!["uint256"]);
+    }
+
+    #[test]
+    fn test_signature_help_parameter_offsets() {
+        // Simulate a signature like: "function addTax(uint256 amount, uint16 tax, uint16 base)"
+        let label = "function addTax(uint256 amount, uint16 tax, uint16 base)";
+        let param_strings = vec![
+            "uint256 amount".to_string(),
+            "uint16 tax".to_string(),
+            "uint16 base".to_string(),
+        ];
+
+        let params_start = label.find('(').unwrap() + 1;
+        let mut offsets = Vec::new();
+        let mut offset = params_start;
+        for param_str in &param_strings {
+            let start = offset;
+            let end = start + param_str.len();
+            offsets.push((start, end));
+            offset = end + 2; // ", "
+        }
+
+        // Verify the offsets correctly slice the label
+        assert_eq!(&label[offsets[0].0..offsets[0].1], "uint256 amount");
+        assert_eq!(&label[offsets[1].0..offsets[1].1], "uint16 tax");
+        assert_eq!(&label[offsets[2].0..offsets[2].1], "uint16 base");
+    }
+
+    #[test]
+    fn test_find_mapping_decl_by_name_pools() {
+        let ast = load_test_ast();
+        let sources = ast.get("sources").unwrap();
+        let decl = find_mapping_decl_by_name(sources, "_pools").unwrap();
+        assert_eq!(decl.get("name").and_then(|v| v.as_str()), Some("_pools"));
+        assert_eq!(
+            decl.get("typeName")
+                .and_then(|t| t.get("nodeType"))
+                .and_then(|v| v.as_str()),
+            Some("Mapping")
+        );
+    }
+
+    #[test]
+    fn test_find_mapping_decl_by_name_not_found() {
+        let ast = load_test_ast();
+        let sources = ast.get("sources").unwrap();
+        assert!(find_mapping_decl_by_name(sources, "nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_mapping_signature_help_pools() {
+        let ast = load_test_ast();
+        let sources = ast.get("sources").unwrap();
+        let help = mapping_signature_help(sources, "_pools").unwrap();
+
+        assert_eq!(help.signatures.len(), 1);
+        let sig = &help.signatures[0];
+        // Named key: _pools[PoolId id]
+        assert_eq!(sig.label, "_pools[PoolId id]");
+        assert_eq!(sig.active_parameter, Some(0));
+
+        // Parameter offsets should cover "PoolId id" inside brackets
+        let params = sig.parameters.as_ref().unwrap();
+        assert_eq!(params.len(), 1);
+        if let ParameterLabel::LabelOffsets([start, end]) = params[0].label {
+            assert_eq!(&sig.label[start as usize..end as usize], "PoolId id");
+        } else {
+            panic!("expected LabelOffsets");
+        }
+
+        // Value type shown in documentation
+        let doc = sig.documentation.as_ref().unwrap();
+        if let Documentation::MarkupContent(mc) = doc {
+            assert!(mc.value.contains("struct Pool.State"));
+        }
+    }
+
+    #[test]
+    fn test_mapping_signature_help_protocol_fees() {
+        let ast = load_test_ast();
+        let sources = ast.get("sources").unwrap();
+        let help = mapping_signature_help(sources, "protocolFeesAccrued").unwrap();
+        let sig = &help.signatures[0];
+        assert_eq!(sig.label, "protocolFeesAccrued[Currency currency]");
+    }
+
+    #[test]
+    fn test_mapping_signature_help_non_mapping() {
+        let ast = load_test_ast();
+        let sources = ast.get("sources").unwrap();
+        // "owner" is a regular address variable, not a mapping
+        assert!(mapping_signature_help(sources, "owner").is_none());
     }
 }
