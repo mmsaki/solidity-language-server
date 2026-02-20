@@ -27,6 +27,8 @@ Or download a pre-built binary from the [latest release](https://github.com/mmsa
 - **Document Symbols** / **Workspace Symbols** — outline and search
 - **Formatting** — via `forge fmt`
 - **Diagnostics** — from `solc` and `forge lint`
+- **Signature Help** — parameter info on function calls, event emits, and mapping access
+- **Inlay Hints** — parameter names and gas estimates
 
 See [FEATURES.md](FEATURES.md) for the full LSP feature set and roadmap.
 
@@ -54,6 +56,54 @@ return {
     })
   end,
 }
+```
+
+## Settings
+
+Settings are passed via `initializationOptions` or `didChangeConfiguration`. All settings are optional — defaults are shown below.
+
+```lua
+-- Neovim: lsp/forge_lsp.lua
+settings = {
+  ["solidity-language-server"] = {
+    inlayHints = {
+      -- Show parameter name hints on function/event/struct calls.
+      parameters = true,
+      -- Show gas cost hints on functions annotated with
+      -- `/// @custom:lsp-enable gas-estimates`.
+      gasEstimates = true,
+    },
+    lint = {
+      -- Master toggle for forge lint diagnostics.
+      enabled = true,
+      -- Filter lints by severity. Empty = all severities.
+      -- Values: "high", "med", "low", "info", "gas", "code-size"
+      severity = {},
+      -- Run only specific lint rules by ID. Empty = all rules.
+      -- Values: "incorrect-shift", "unchecked-call", "erc20-unchecked-transfer",
+      --   "divide-before-multiply", "unsafe-typecast", "pascal-case-struct",
+      --   "mixed-case-function", "mixed-case-variable", "screaming-snake-case-const",
+      --   "screaming-snake-case-immutable", "unused-import", "unaliased-plain-import",
+      --   "named-struct-fields", "unsafe-cheatcode", "asm-keccak256", "custom-errors",
+      --   "unwrapped-modifier-logic"
+      only = {},
+      -- Suppress specific lint rule IDs from diagnostics.
+      exclude = {},
+    },
+  },
+}
+```
+
+### Helix
+
+```toml
+# languages.toml
+[language-server.solidity-language-server.config]
+inlayHints.parameters = true
+inlayHints.gasEstimates = true
+lint.enabled = true
+lint.severity = ["high", "med"]
+lint.exclude = ["pascal-case-struct"]
 ```
 
 ## Verify Release Binaries
