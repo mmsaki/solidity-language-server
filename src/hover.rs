@@ -1170,7 +1170,7 @@ fn mapping_signature_help(sources: &Value, name: &str) -> Option<SignatureHelp> 
         .and_then(|t| t.get("typeString"))
         .and_then(|v| v.as_str());
 
-    let sig_doc = value_type.map(|vt| format!("→ `{}`", vt));
+    let sig_doc = value_type.map(|vt| format!("@returns `{}`", vt));
 
     Some(SignatureHelp {
         signatures: vec![SignatureInformation {
