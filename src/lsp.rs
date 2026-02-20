@@ -1,5 +1,5 @@
 use crate::completion;
-use crate::config::{self, FoundryConfig, LintConfig};
+use crate::config::{self, FoundryConfig, LintConfig, Settings};
 use crate::goto;
 use crate::hover;
 use crate::inlay_hints;
@@ -30,6 +30,8 @@ pub struct ForgeLsp {
     foundry_config: Arc<RwLock<FoundryConfig>>,
     /// Client capabilities received during initialization.
     client_capabilities: Arc<RwLock<Option<ClientCapabilities>>>,
+    /// Editor-provided settings (from `initializationOptions` / `didChangeConfiguration`).
+    settings: Arc<RwLock<Settings>>,
     /// Whether to use solc directly for AST generation (with forge fallback).
     use_solc: bool,
 }
@@ -47,6 +49,7 @@ impl ForgeLsp {
         let lint_config = Arc::new(RwLock::new(LintConfig::default()));
         let foundry_config = Arc::new(RwLock::new(FoundryConfig::default()));
         let client_capabilities = Arc::new(RwLock::new(None));
+        let settings = Arc::new(RwLock::new(Settings::default()));
         Self {
             client,
             compiler,
@@ -56,6 +59,7 @@ impl ForgeLsp {
             lint_config,
             foundry_config,
             client_capabilities,
+            settings,
             use_solc,
         }
     }
@@ -84,10 +88,13 @@ impl ForgeLsp {
             }
         };
 
-        // Check if linting should be skipped based on foundry.toml config.
-        let should_lint = {
+        // Check if linting should be skipped based on foundry.toml + editor settings.
+        let (should_lint, lint_settings) = {
             let lint_cfg = self.lint_config.read().await;
-            lint_cfg.should_lint(&file_path)
+            let settings = self.settings.read().await;
+            let enabled = lint_cfg.should_lint(&file_path) && settings.lint.enabled;
+            let ls = settings.lint.clone();
+            (enabled, ls)
         };
 
         // When use_solc is enabled, run solc once for both AST and diagnostics.
@@ -98,8 +105,10 @@ impl ForgeLsp {
             let solc_future = crate::solc::solc_ast(path_str, &foundry_cfg, Some(&self.client));
 
             if should_lint {
-                let (lint, solc) =
-                    tokio::join!(self.compiler.get_lint_diagnostics(&uri), solc_future);
+                let (lint, solc) = tokio::join!(
+                    self.compiler.get_lint_diagnostics(&uri, &lint_settings),
+                    solc_future
+                );
                 match solc {
                     Ok(data) => {
                         self.client
@@ -179,7 +188,7 @@ impl ForgeLsp {
             // forge-only pipeline (--use-forge)
             if should_lint {
                 let (lint, build, ast) = tokio::join!(
-                    self.compiler.get_lint_diagnostics(&uri),
+                    self.compiler.get_lint_diagnostics(&uri, &lint_settings),
                     self.compiler.get_build_diagnostics(&uri),
                     self.compiler.ast(path_str)
                 );
@@ -258,6 +267,16 @@ impl ForgeLsp {
         if let Some(lint_result) = lint_result {
             match lint_result {
                 Ok(mut lints) => {
+                    // Filter out excluded lint rules from editor settings.
+                    if !lint_settings.exclude.is_empty() {
+                        lints.retain(|d| {
+                            if let Some(NumberOrString::String(code)) = &d.code {
+                                !lint_settings.exclude.iter().any(|ex| ex == code)
+                            } else {
+                                true
+                            }
+                        });
+                    }
                     self.client
                         .log_message(
                             MessageType::INFO,
@@ -403,6 +422,22 @@ impl LanguageServer for ForgeLsp {
         {
             let mut caps = self.client_capabilities.write().await;
             *caps = Some(params.capabilities.clone());
+        }
+
+        // Read editor settings from initializationOptions.
+        if let Some(init_opts) = &params.initialization_options {
+            let s = config::parse_settings(init_opts);
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    format!(
+                        "settings: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}",
+                        s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude,
+                    ),
+                )
+                .await;
+            let mut settings = self.settings.write().await;
+            *settings = s;
         }
 
         // Load config from the workspace root's foundry.toml.
@@ -767,10 +802,25 @@ impl LanguageServer for ForgeLsp {
             .await;
     }
 
-    async fn did_change_configuration(&self, _: DidChangeConfigurationParams) {
+    async fn did_change_configuration(&self, params: DidChangeConfigurationParams) {
+        let s = config::parse_settings(&params.settings);
         self.client
-            .log_message(MessageType::INFO, "configuration changed.")
+            .log_message(
+                MessageType::INFO,
+                    format!(
+                    "settings updated: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}",
+                    s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude,
+                ),
+            )
             .await;
+        let mut settings = self.settings.write().await;
+        *settings = s;
+
+        // Refresh inlay hints so the editor re-requests them with new settings.
+        let client = self.client.clone();
+        tokio::spawn(async move {
+            let _ = client.inlay_hint_refresh().await;
+        });
     }
     async fn did_change_workspace_folders(&self, _: DidChangeWorkspaceFoldersParams) {
         self.client
@@ -1700,7 +1750,16 @@ impl LanguageServer for ForgeLsp {
             None => return Ok(None),
         };
 
-        let hints = inlay_hints::inlay_hints(&cached_build, &uri, range, &source_bytes);
+        let mut hints = inlay_hints::inlay_hints(&cached_build, &uri, range, &source_bytes);
+
+        // Filter hints based on settings.
+        let settings = self.settings.read().await;
+        if !settings.inlay_hints.parameters {
+            hints.retain(|h| h.kind != Some(InlayHintKind::PARAMETER));
+        }
+        if !settings.inlay_hints.gas_estimates {
+            hints.retain(|h| h.kind != Some(InlayHintKind::TYPE));
+        }
 
         if hints.is_empty() {
             self.client

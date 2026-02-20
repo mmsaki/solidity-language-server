@@ -1,5 +1,5 @@
 use crate::{
-    build::build_output_to_diagnostics, lint::lint_output_to_diagnostics,
+    build::build_output_to_diagnostics, config::LintSettings, lint::lint_output_to_diagnostics,
     solc::normalize_forge_output,
 };
 use serde::{Deserialize, Serialize};
@@ -16,23 +16,45 @@ pub struct ForgeRunner;
 #[async_trait]
 pub trait Runner: Send + Sync {
     async fn build(&self, file: &str) -> Result<serde_json::Value, RunnerError>;
-    async fn lint(&self, file: &str) -> Result<serde_json::Value, RunnerError>;
+    async fn lint(
+        &self,
+        file: &str,
+        lint_settings: &LintSettings,
+    ) -> Result<serde_json::Value, RunnerError>;
     async fn ast(&self, file: &str) -> Result<serde_json::Value, RunnerError>;
     async fn format(&self, file: &str) -> Result<String, RunnerError>;
     async fn get_build_diagnostics(&self, file: &Url) -> Result<Vec<Diagnostic>, RunnerError>;
-    async fn get_lint_diagnostics(&self, file: &Url) -> Result<Vec<Diagnostic>, RunnerError>;
+    async fn get_lint_diagnostics(
+        &self,
+        file: &Url,
+        lint_settings: &LintSettings,
+    ) -> Result<Vec<Diagnostic>, RunnerError>;
 }
 
 #[async_trait]
 impl Runner for ForgeRunner {
-    async fn lint(&self, file_path: &str) -> Result<serde_json::Value, RunnerError> {
-        let output = Command::new("forge")
-            .arg("lint")
+    async fn lint(
+        &self,
+        file_path: &str,
+        lint_settings: &LintSettings,
+    ) -> Result<serde_json::Value, RunnerError> {
+        let mut cmd = Command::new("forge");
+        cmd.arg("lint")
             .arg(file_path)
             .arg("--json")
-            .env("FOUNDRY_DISABLE_NIGHTLY_WARNING", "1")
-            .output()
-            .await?;
+            .env("FOUNDRY_DISABLE_NIGHTLY_WARNING", "1");
+
+        // Pass --severity flags from settings
+        for sev in &lint_settings.severity {
+            cmd.args(["--severity", sev]);
+        }
+
+        // Pass --only-lint flags from settings
+        for lint_id in &lint_settings.only {
+            cmd.args(["--only-lint", lint_id]);
+        }
+
+        let output = cmd.output().await?;
 
         let stderr_str = String::from_utf8_lossy(&output.stderr);
 
@@ -130,10 +152,14 @@ impl Runner for ForgeRunner {
         }
     }
 
-    async fn get_lint_diagnostics(&self, file: &Url) -> Result<Vec<Diagnostic>, RunnerError> {
+    async fn get_lint_diagnostics(
+        &self,
+        file: &Url,
+        lint_settings: &LintSettings,
+    ) -> Result<Vec<Diagnostic>, RunnerError> {
         let path: PathBuf = file.to_file_path().map_err(|_| RunnerError::InvalidUrl)?;
         let path_str = path.to_str().ok_or(RunnerError::InvalidUrl)?;
-        let lint_output = self.lint(path_str).await?;
+        let lint_output = self.lint(path_str, lint_settings).await?;
         let diagnostics = lint_output_to_diagnostics(&lint_output, path_str);
         Ok(diagnostics)
     }

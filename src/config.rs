@@ -1,4 +1,117 @@
+use serde::Deserialize;
 use std::path::{Path, PathBuf};
+
+// ── LSP Settings (from editor / initializationOptions) ─────────────────
+
+/// Top-level settings object sent by the editor.
+///
+/// Editors wrap settings under the server name key:
+/// ```lua
+/// settings = {
+///   ["solidity-language-server"] = {
+///     inlayHints = { parameters = true },
+///     lint = { enabled = true, exclude = { "pascal-case-struct" } },
+///   },
+/// }
+/// ```
+///
+/// All fields use `Option` with `#[serde(default)]` so that missing keys
+/// keep their defaults — the editor only needs to send overrides.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Settings {
+    #[serde(default)]
+    pub inlay_hints: InlayHintsSettings,
+    #[serde(default)]
+    pub lint: LintSettings,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            inlay_hints: InlayHintsSettings::default(),
+            lint: LintSettings::default(),
+        }
+    }
+}
+
+/// Inlay-hint settings.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InlayHintsSettings {
+    /// Show parameter-name hints on function/event/struct calls.
+    #[serde(default = "default_true")]
+    pub parameters: bool,
+    /// Show gas estimate hints on functions/contracts annotated with
+    /// `@custom:lsp-enable gas-estimates`.
+    #[serde(default = "default_true")]
+    pub gas_estimates: bool,
+}
+
+impl Default for InlayHintsSettings {
+    fn default() -> Self {
+        Self {
+            parameters: true,
+            gas_estimates: true,
+        }
+    }
+}
+
+/// Lint settings (overrides foundry.toml when provided).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LintSettings {
+    /// Master toggle for forge-lint diagnostics.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Filter lints by severity (e.g. `["high", "med", "gas"]`).
+    /// Maps to `forge lint --severity high --severity med --severity gas`.
+    /// Empty means all severities.
+    #[serde(default)]
+    pub severity: Vec<String>,
+    /// Run only specific lint rules by ID (e.g. `["incorrect-shift", "unchecked-call"]`).
+    /// Maps to `forge lint --only-lint incorrect-shift --only-lint unchecked-call`.
+    /// Empty means all rules.
+    #[serde(default)]
+    pub only: Vec<String>,
+    /// Lint rule names to exclude from diagnostics (post-hoc filtering).
+    /// These are filtered after `forge lint` runs.
+    #[serde(default)]
+    pub exclude: Vec<String>,
+}
+
+impl Default for LintSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            severity: Vec::new(),
+            only: Vec::new(),
+            exclude: Vec::new(),
+        }
+    }
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// Try to parse `Settings` from a `serde_json::Value`.
+///
+/// Handles both direct settings objects and the wrapped form where the
+/// editor nests under `"solidity-language-server"`:
+/// ```json
+/// { "solidity-language-server": { "inlayHints": { ... } } }
+/// ```
+pub fn parse_settings(value: &serde_json::Value) -> Settings {
+    // Try the wrapped form first
+    if let Some(inner) = value.get("solidity-language-server") {
+        if let Ok(s) = serde_json::from_value::<Settings>(inner.clone()) {
+            return s;
+        }
+    }
+    // Try direct form
+    serde_json::from_value::<Settings>(value.clone()).unwrap_or_default()
+}
 
 /// Project-level configuration extracted from `foundry.toml`.
 ///
@@ -691,5 +804,103 @@ evm_version = "cancun"
         assert_eq!(config.optimizer_runs, 200); // default
         assert_eq!(config.evm_version, Some("cancun".to_string()));
         assert!(config.ignored_error_codes.is_empty());
+    }
+
+    // ── Settings parsing ──────────────────────────────────────────────
+
+    #[test]
+    fn test_parse_settings_defaults() {
+        let value = serde_json::json!({});
+        let s = parse_settings(&value);
+        assert!(s.inlay_hints.parameters);
+        assert!(s.inlay_hints.gas_estimates);
+        assert!(s.lint.enabled);
+        assert!(s.lint.severity.is_empty());
+        assert!(s.lint.only.is_empty());
+        assert!(s.lint.exclude.is_empty());
+    }
+
+    #[test]
+    fn test_parse_settings_wrapped() {
+        let value = serde_json::json!({
+            "solidity-language-server": {
+                "inlayHints": { "parameters": false, "gasEstimates": false },
+                "lint": {
+                    "enabled": true,
+                    "severity": ["high", "med"],
+                    "only": ["incorrect-shift"],
+                    "exclude": ["pascal-case-struct", "mixed-case-variable"]
+                }
+            }
+        });
+        let s = parse_settings(&value);
+        assert!(!s.inlay_hints.parameters);
+        assert!(!s.inlay_hints.gas_estimates);
+        assert!(s.lint.enabled);
+        assert_eq!(s.lint.severity, vec!["high", "med"]);
+        assert_eq!(s.lint.only, vec!["incorrect-shift"]);
+        assert_eq!(
+            s.lint.exclude,
+            vec!["pascal-case-struct", "mixed-case-variable"]
+        );
+    }
+
+    #[test]
+    fn test_parse_settings_direct() {
+        let value = serde_json::json!({
+            "inlayHints": { "parameters": false },
+            "lint": { "enabled": false }
+        });
+        let s = parse_settings(&value);
+        assert!(!s.inlay_hints.parameters);
+        assert!(!s.lint.enabled);
+    }
+
+    #[test]
+    fn test_parse_settings_partial() {
+        let value = serde_json::json!({
+            "solidity-language-server": {
+                "lint": { "exclude": ["unused-import"] }
+            }
+        });
+        let s = parse_settings(&value);
+        // inlayHints not specified → defaults to true
+        assert!(s.inlay_hints.parameters);
+        assert!(s.inlay_hints.gas_estimates);
+        // lint.enabled not specified → defaults to true
+        assert!(s.lint.enabled);
+        assert!(s.lint.severity.is_empty());
+        assert!(s.lint.only.is_empty());
+        assert_eq!(s.lint.exclude, vec!["unused-import"]);
+    }
+
+    #[test]
+    fn test_parse_settings_empty_wrapped() {
+        let value = serde_json::json!({
+            "solidity-language-server": {}
+        });
+        let s = parse_settings(&value);
+        assert!(s.inlay_hints.parameters);
+        assert!(s.inlay_hints.gas_estimates);
+        assert!(s.lint.enabled);
+        assert!(s.lint.severity.is_empty());
+        assert!(s.lint.only.is_empty());
+        assert!(s.lint.exclude.is_empty());
+    }
+
+    #[test]
+    fn test_parse_settings_severity_only() {
+        let value = serde_json::json!({
+            "solidity-language-server": {
+                "lint": {
+                    "severity": ["high", "gas"],
+                    "only": ["incorrect-shift", "asm-keccak256"]
+                }
+            }
+        });
+        let s = parse_settings(&value);
+        assert_eq!(s.lint.severity, vec!["high", "gas"]);
+        assert_eq!(s.lint.only, vec!["incorrect-shift", "asm-keccak256"]);
+        assert!(s.lint.exclude.is_empty());
     }
 }
