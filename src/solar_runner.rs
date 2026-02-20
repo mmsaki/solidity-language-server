@@ -1,3 +1,4 @@
+use crate::config::LintSettings;
 use crate::runner::{Runner, RunnerError};
 use solar::{
     interface::{
@@ -79,7 +80,11 @@ impl Runner for SolarRunner {
         Ok(serde_json::Value::Object(serde_json::Map::new()))
     }
 
-    async fn lint(&self, _file: &str) -> Result<serde_json::Value, RunnerError> {
+    async fn lint(
+        &self,
+        _file: &str,
+        _lint_settings: &LintSettings,
+    ) -> Result<serde_json::Value, RunnerError> {
         // For solar, lint diagnostics are handled in get_lint_diagnostics
         // Return empty array for compatibility
         Ok(serde_json::Value::Array(Vec::new()))
@@ -172,7 +177,11 @@ impl Runner for SolarRunner {
         .map_err(|_| RunnerError::CommandError(Error::other("Task panicked")))?
     }
 
-    async fn get_lint_diagnostics(&self, _file: &Url) -> Result<Vec<Diagnostic>, RunnerError> {
+    async fn get_lint_diagnostics(
+        &self,
+        _file: &Url,
+        _lint_settings: &LintSettings,
+    ) -> Result<Vec<Diagnostic>, RunnerError> {
         let diagnostics = Vec::new();
         // TODO:
 
