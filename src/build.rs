@@ -22,10 +22,10 @@ pub fn ignored_error_code_warning(value: &serde_json::Value, extra_codes: &[u64]
     }
 
     // Check user-configured ignored codes from foundry.toml
-    if let Ok(code_num) = error_code.parse::<u64>() {
-        if extra_codes.contains(&code_num) {
-            return true;
-        }
+    if let Ok(code_num) = error_code.parse::<u64>()
+        && extra_codes.contains(&code_num)
+    {
+        return true;
     }
 
     false

@@ -2,4 +2,4 @@
 src = "."
 
 [profile.default.lint]
-lint_on_build = false
+# lint_on_build = false

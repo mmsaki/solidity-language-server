@@ -11,7 +11,7 @@ bytes constant runtimeCodeBGlobal = type(B).runtimeCode;
 contract B {}
 
 interface I {
-    function hello() external pure;
+    function heLLO() external pure;
     function world(int256) external pure;
 }
 

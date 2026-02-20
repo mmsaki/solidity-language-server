@@ -19,20 +19,12 @@ use std::path::{Path, PathBuf};
 /// keep their defaults — the editor only needs to send overrides.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct Settings {
     #[serde(default)]
     pub inlay_hints: InlayHintsSettings,
     #[serde(default)]
     pub lint: LintSettings,
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            inlay_hints: InlayHintsSettings::default(),
-            lint: LintSettings::default(),
-        }
-    }
 }
 
 /// Inlay-hint settings.
@@ -104,10 +96,10 @@ fn default_true() -> bool {
 /// ```
 pub fn parse_settings(value: &serde_json::Value) -> Settings {
     // Try the wrapped form first
-    if let Some(inner) = value.get("solidity-language-server") {
-        if let Ok(s) = serde_json::from_value::<Settings>(inner.clone()) {
-            return s;
-        }
+    if let Some(inner) = value.get("solidity-language-server")
+        && let Ok(s) = serde_json::from_value::<Settings>(inner.clone())
+    {
+        return s;
     }
     // Try direct form
     serde_json::from_value::<Settings>(value.clone()).unwrap_or_default()

@@ -61,24 +61,23 @@ pub async fn resolve_solc_binary(
         // For wildcard pragmas, prefer the foundry.toml version if it satisfies
         // the constraint. This mirrors `forge build` behaviour where the project
         // config picks the version but the pragma must still be satisfied.
-        if !matches!(constraint, PragmaConstraint::Exact(_)) {
-            if let Some(ref config_ver) = config.solc_version
-                && let Some(parsed) = SemVer::parse(config_ver)
-                && version_satisfies(&parsed, &constraint)
-                && let Some(path) = find_solc_binary(config_ver)
-            {
-                if let Some(c) = client {
-                    c.log_message(
-                        tower_lsp::lsp_types::MessageType::INFO,
-                        format!(
-                            "solc: foundry.toml {config_ver} satisfies pragma {constraint:?} → {}",
-                            path.display()
-                        ),
-                    )
-                    .await;
-                }
-                return path;
+        if !matches!(constraint, PragmaConstraint::Exact(_))
+            && let Some(ref config_ver) = config.solc_version
+            && let Some(parsed) = SemVer::parse(config_ver)
+            && version_satisfies(&parsed, &constraint)
+            && let Some(path) = find_solc_binary(config_ver)
+        {
+            if let Some(c) = client {
+                c.log_message(
+                    tower_lsp::lsp_types::MessageType::INFO,
+                    format!(
+                        "solc: foundry.toml {config_ver} satisfies pragma {constraint:?} → {}",
+                        path.display()
+                    ),
+                )
+                .await;
             }
+            return path;
         }
 
         let installed = get_installed_versions();
@@ -556,13 +555,13 @@ pub fn normalize_solc_output(mut solc_output: Value, project_root: Option<&Path>
                 let abs_key = resolve(&key);
 
                 // Update the AST absolutePath field to match
-                if let Some(ast) = source_data.get_mut("ast") {
-                    if let Some(abs_path) = ast.get("absolutePath").and_then(|v| v.as_str()) {
-                        let resolved = resolve(abs_path);
-                        ast.as_object_mut()
-                            .unwrap()
-                            .insert("absolutePath".to_string(), json!(resolved));
-                    }
+                if let Some(ast) = source_data.get_mut("ast")
+                    && let Some(abs_path) = ast.get("absolutePath").and_then(|v| v.as_str())
+                {
+                    let resolved = resolve(abs_path);
+                    ast.as_object_mut()
+                        .unwrap()
+                        .insert("absolutePath".to_string(), json!(resolved));
                 }
 
                 if let Some(id) = source_data.get("id") {
@@ -917,11 +916,11 @@ mod tests {
 
         // Optimizer
         let optimizer = settings.get("optimizer").unwrap();
-        assert_eq!(optimizer.get("enabled").unwrap().as_bool().unwrap(), true);
+        assert!(optimizer.get("enabled").unwrap().as_bool().unwrap());
         assert_eq!(optimizer.get("runs").unwrap().as_u64().unwrap(), 9999999);
 
         // Via IR
-        assert_eq!(settings.get("viaIR").unwrap().as_bool().unwrap(), true);
+        assert!(settings.get("viaIR").unwrap().as_bool().unwrap());
 
         // EVM version
         assert_eq!(

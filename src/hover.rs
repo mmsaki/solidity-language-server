@@ -1227,13 +1227,13 @@ pub fn signature_help(
     let decl_node = find_node_by_id(sources, NodeId(decl_id))?;
 
     // Build the signature label
-    let sig_label = build_function_signature(&decl_node)?;
+    let sig_label = build_function_signature(decl_node)?;
 
     // Build individual parameter strings for offset calculation
     let param_strings = build_parameter_strings(decl_node.get("parameters"));
 
     // Look up @param docs from DocIndex
-    let doc_entry = lookup_doc_entry(doc_index, &decl_node, sources);
+    let doc_entry = lookup_doc_entry(doc_index, decl_node, sources);
 
     // Calculate parameter label offsets within the signature string
     // The signature looks like: "function name(uint256 amount, uint16 tax) ..."
@@ -1541,54 +1541,51 @@ pub fn hover_info(
     // index, then resolves via HintIndex for the param name and declaration id.
     if let Some(hint_lookup) = hint_index.get(&abs_path) {
         let source_str = String::from_utf8_lossy(source_bytes);
-        if let Some(tree) = crate::inlay_hints::ts_parse(&source_str) {
-            if let Some(ctx) =
+        if let Some(tree) = crate::inlay_hints::ts_parse(&source_str)
+            && let Some(ctx) =
                 crate::inlay_hints::ts_find_call_at_byte(tree.root_node(), &source_str, byte_pos)
-            {
-                if let Some(resolved) = hint_lookup.resolve_callsite_param(
-                    ctx.call_start_byte,
-                    ctx.name,
-                    ctx.arg_count,
-                    ctx.arg_index,
-                ) {
-                    // Look up @param doc using the declaration id
-                    let fn_decl = find_node_by_id(sources, NodeId(resolved.decl_id));
-                    let param_doc = fn_decl.and_then(|decl| {
-                        // Try DocIndex first (structured devdoc)
-                        if let Some(doc_entry) = lookup_doc_entry(doc_index, decl, sources) {
-                            for (pname, pdesc) in &doc_entry.params {
-                                if pname == &resolved.param_name {
-                                    return Some(pdesc.clone());
-                                }
-                            }
-                        }
-                        // Fallback: parse raw NatSpec on the function definition
-                        if let Some(doc_text) = extract_documentation(decl) {
-                            let resolved_doc = if doc_text.contains("@inheritdoc") {
-                                resolve_inheritdoc(sources, decl, &doc_text)
-                            } else {
-                                None
-                            };
-                            let text = resolved_doc.as_deref().unwrap_or(&doc_text);
-                            for line in text.lines() {
-                                let trimmed = line.trim().trim_start_matches('*').trim();
-                                if let Some(rest) = trimmed.strip_prefix("@param ") {
-                                    if let Some((name, desc)) = rest.split_once(' ') {
-                                        if name == resolved.param_name {
-                                            return Some(desc.to_string());
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        None
-                    });
-                    if let Some(desc) = param_doc {
-                        if !desc.is_empty() {
-                            parts.push(format!("**@param `{}`** — {desc}", resolved.param_name));
+            && let Some(resolved) = hint_lookup.resolve_callsite_param(
+                ctx.call_start_byte,
+                ctx.name,
+                ctx.arg_count,
+                ctx.arg_index,
+            )
+        {
+            // Look up @param doc using the declaration id
+            let fn_decl = find_node_by_id(sources, NodeId(resolved.decl_id));
+            let param_doc = fn_decl.and_then(|decl| {
+                // Try DocIndex first (structured devdoc)
+                if let Some(doc_entry) = lookup_doc_entry(doc_index, decl, sources) {
+                    for (pname, pdesc) in &doc_entry.params {
+                        if pname == &resolved.param_name {
+                            return Some(pdesc.clone());
                         }
                     }
                 }
+                // Fallback: parse raw NatSpec on the function definition
+                if let Some(doc_text) = extract_documentation(decl) {
+                    let resolved_doc = if doc_text.contains("@inheritdoc") {
+                        resolve_inheritdoc(sources, decl, &doc_text)
+                    } else {
+                        None
+                    };
+                    let text = resolved_doc.as_deref().unwrap_or(&doc_text);
+                    for line in text.lines() {
+                        let trimmed = line.trim().trim_start_matches('*').trim();
+                        if let Some(rest) = trimmed.strip_prefix("@param ")
+                            && let Some((name, desc)) = rest.split_once(' ')
+                            && name == resolved.param_name
+                        {
+                            return Some(desc.to_string());
+                        }
+                    }
+                }
+                None
+            });
+            if let Some(desc) = param_doc
+                && !desc.is_empty()
+            {
+                parts.push(format!("**@param `{}`** — {desc}", resolved.param_name));
             }
         }
     }
@@ -2487,7 +2484,7 @@ mod tests {
                 ]
             }
         });
-        let params = build_parameter_strings(Some(&node.get("parameters").unwrap()));
+        let params = build_parameter_strings(Some(node.get("parameters").unwrap()));
         assert_eq!(params, vec!["uint256 amount", "uint16 tax"]);
     }
 
@@ -2504,7 +2501,7 @@ mod tests {
                 ]
             }
         });
-        let params = build_parameter_strings(Some(&node.get("parameters").unwrap()));
+        let params = build_parameter_strings(Some(node.get("parameters").unwrap()));
         assert_eq!(params, vec!["struct PoolKey calldata key"]);
     }
 
@@ -2513,7 +2510,7 @@ mod tests {
         let node: Value = serde_json::json!({
             "parameters": { "parameters": [] }
         });
-        let params = build_parameter_strings(Some(&node.get("parameters").unwrap()));
+        let params = build_parameter_strings(Some(node.get("parameters").unwrap()));
         assert!(params.is_empty());
     }
 
@@ -2530,7 +2527,7 @@ mod tests {
                 ]
             }
         });
-        let params = build_parameter_strings(Some(&node.get("parameters").unwrap()));
+        let params = build_parameter_strings(Some(node.get("parameters").unwrap()));
         assert_eq!(params, vec!["uint256"]);
     }
 

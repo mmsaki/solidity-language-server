@@ -134,7 +134,14 @@ contract Shop {
     function buy() public payable {
         if (shopClosed) revert ShopIsClosed();
         if (msg.value == PRICE) revert MissingTax();
-        uint256 expectedTotal = PRICE.addTax(TAX, TAX_BASE);
+        uint256 expectedTotal = PRICE.addTax(
+
+
+
+
+
+
+            TAX, TAX_BASE);
         if (msg.value < expectedTotal) revert InsufficientAmount();
         if (msg.value > expectedTotal) revert ExcessAmount();
         uint256 nonce = nonces[msg.sender];
@@ -145,6 +152,7 @@ contract Shop {
         emit BuyOrder(orderId, msg.value);
     }
 
+    /// @param orderId the id of the order
     function refund(bytes32 orderId) external {
         Transaction.Order memory order = orders[orderId];
 
