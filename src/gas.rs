@@ -11,7 +11,8 @@ use crate::types::{FuncSelector, MethodId};
 
 /// Sentinel comment to enable gas estimates for a function.
 /// Place `/// @custom:lsp-enable gas-estimates` above a function definition.
-pub const GAS_SENTINEL: &str = "@custom:lsp-enable gas-estimates";
+/// Also matches the shorter `/// lsp-enable gas-estimates` form.
+pub const GAS_SENTINEL: &str = "lsp-enable gas-estimates";
 
 /// Gas estimates for a single contract.
 #[derive(Debug, Clone, Default)]
