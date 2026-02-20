@@ -1,0 +1,28 @@
+# Signature Help benchmark
+# Position: Shop.sol line 137 col 45 — inside PRICE.addTax(TAX, TAX_BASE)
+# Cursor on first argument after `(`
+project: example
+file: Shop.sol
+line: 136
+col: 45
+
+iterations: 10
+warmup: 2
+timeout: 10
+index_timeout: 15
+output: benchmarks/signature-help
+report: benchmarks/signature-help/REPORT.md
+
+benchmarks:
+  - initialize
+  - textDocument/signatureHelp
+methods:
+  textDocument/signatureHelp:
+    line: 136
+    col: 45
+    trigger: "("
+
+servers:
+  - label: mmsaki
+    description: Local branch build
+    cmd: ./target/release/solidity-language-server

@@ -59,6 +59,31 @@ pub struct HintLookup {
 }
 
 impl HintLookup {
+    /// Resolve a callsite to get the declaration id and skip count.
+    ///
+    /// Returns `(decl_id, skip)` where skip is the number of leading
+    /// parameters to skip (1 for `using-for` library calls, 0 otherwise).
+    ///
+    /// For signature help, this uses a relaxed lookup: exact offset first,
+    /// then `(name, arg_count)`, then **name-only** fallback (ignoring arg
+    /// count, since the user may still be typing arguments).
+    pub fn resolve_callsite_with_skip(
+        &self,
+        call_offset: usize,
+        func_name: &str,
+        arg_count: usize,
+    ) -> Option<(u64, usize)> {
+        // Try exact match first
+        if let Some(site) = lookup_call_site(self, call_offset, func_name, arg_count) {
+            return Some((site.decl_id, site.info.skip));
+        }
+        // Fallback: match by name only (any arg count)
+        self.by_name
+            .iter()
+            .find(|((name, _), _)| name == func_name)
+            .map(|(_, site)| (site.decl_id, site.info.skip))
+    }
+
     /// Resolve callsite parameter info for hover.
     ///
     /// Given a call's byte offset (from tree-sitter), the function name,
@@ -565,6 +590,9 @@ pub struct TsCallContext<'a> {
     pub arg_count: usize,
     /// Start byte of the call_expression/emit_statement node (for HintIndex lookup).
     pub call_start_byte: usize,
+    /// True when context is a mapping/array index access (`name[key]`)
+    /// rather than a function/event call (`name(args)`).
+    pub is_index_access: bool,
 }
 
 /// Find the enclosing `call_expression` or `emit_statement` for a given byte
@@ -600,6 +628,7 @@ pub fn ts_find_call_at_byte<'a>(
                 arg_index,
                 arg_count: args.len(),
                 call_start_byte: call_node.start_byte(),
+                is_index_access: false,
             })
         }
         "emit_statement" => {
@@ -609,10 +638,219 @@ pub fn ts_find_call_at_byte<'a>(
                 arg_index,
                 arg_count: args.len(),
                 call_start_byte: call_node.start_byte(),
+                is_index_access: false,
             })
         }
         _ => None,
     }
+}
+
+/// Find the enclosing call for signature help at a byte position.
+///
+/// Unlike `ts_find_call_at_byte`, this handles:
+/// - Cursor right after `(` with no arguments yet
+/// - Cursor between `,` and next argument
+/// - Incomplete calls without closing `)`
+///
+/// Falls back to text-based scanning when tree-sitter can't produce a
+/// `call_expression` (e.g. broken syntax during typing).
+pub fn ts_find_call_for_signature<'a>(
+    root: tree_sitter::Node<'a>,
+    source: &'a str,
+    byte_pos: usize,
+) -> Option<TsCallContext<'a>> {
+    // First try the normal path (cursor is on an argument)
+    if let Some(ctx) = ts_find_call_at_byte(root, source, byte_pos) {
+        return Some(ctx);
+    }
+
+    // Walk up from the deepest node looking for a call_expression or array_access
+    let mut node = root.descendant_for_byte_range(byte_pos, byte_pos)?;
+    loop {
+        match node.kind() {
+            "call_expression" => {
+                let name = ts_call_function_name(node, source)?;
+                let arg_index = count_commas_before(source, node.start_byte(), byte_pos);
+                let args = ts_call_arguments(node);
+                let arg_count = args.len().max(arg_index + 1);
+                return Some(TsCallContext {
+                    name,
+                    arg_index,
+                    arg_count,
+                    call_start_byte: node.start_byte(),
+                    is_index_access: false,
+                });
+            }
+            "emit_statement" => {
+                let name = ts_emit_event_name(node, source)?;
+                let arg_index = count_commas_before(source, node.start_byte(), byte_pos);
+                let args = ts_call_arguments(node);
+                let arg_count = args.len().max(arg_index + 1);
+                return Some(TsCallContext {
+                    name,
+                    arg_index,
+                    arg_count,
+                    call_start_byte: node.start_byte(),
+                    is_index_access: false,
+                });
+            }
+            "array_access" => {
+                // Mapping/array index access: `name[key]`
+                let base_node = node.child_by_field_name("base")?;
+                // For member_expression (e.g. self.orders), use property name;
+                // for plain identifier, use the identifier text.
+                let name_node = if base_node.kind() == "member_expression" {
+                    base_node
+                        .child_by_field_name("property")
+                        .unwrap_or(base_node)
+                } else {
+                    base_node
+                };
+                let name = &source[name_node.byte_range()];
+                return Some(TsCallContext {
+                    name,
+                    arg_index: 0,
+                    arg_count: 1,
+                    call_start_byte: node.start_byte(),
+                    is_index_access: true,
+                });
+            }
+            "source_file" => break,
+            _ => {
+                node = node.parent()?;
+            }
+        }
+    }
+
+    // Fallback: scan backwards from cursor for `identifier(` pattern
+    if let Some(ctx) = find_call_by_text_scan(source, byte_pos) {
+        return Some(ctx);
+    }
+
+    // Fallback: scan backwards for `identifier[` (mapping/array access)
+    find_index_by_text_scan(source, byte_pos)
+}
+
+/// Scan backwards from `byte_pos` to find an enclosing `name(` call.
+///
+/// Looks for the nearest unmatched `(` before the cursor, then extracts
+/// the function name preceding it. Counts commas at depth 1 to determine
+/// the active argument index.
+fn find_call_by_text_scan<'a>(source: &'a str, byte_pos: usize) -> Option<TsCallContext<'a>> {
+    let before = &source[..byte_pos.min(source.len())];
+
+    // Find the nearest unmatched `(` by scanning backwards
+    let mut depth: i32 = 0;
+    let mut paren_pos = None;
+    for (i, ch) in before.char_indices().rev() {
+        match ch {
+            ')' => depth += 1,
+            '(' => {
+                if depth == 0 {
+                    paren_pos = Some(i);
+                    break;
+                }
+                depth -= 1;
+            }
+            _ => {}
+        }
+    }
+    let paren_pos = paren_pos?;
+
+    // Extract the function name before the `(`
+    // Walk backwards from paren_pos to find the identifier
+    let before_paren = &source[..paren_pos];
+    let name_end = before_paren.trim_end().len();
+    let name_start = before_paren[..name_end]
+        .rfind(|c: char| !c.is_alphanumeric() && c != '_')
+        .map(|i| i + 1)
+        .unwrap_or(0);
+    let name = &source[name_start..name_end];
+
+    if name.is_empty() || !name.chars().next()?.is_alphabetic() {
+        return None;
+    }
+
+    // Count commas between `(` and cursor at depth 0
+    let arg_index = count_commas_before(source, paren_pos, byte_pos);
+
+    Some(TsCallContext {
+        name,
+        arg_index,
+        arg_count: arg_index + 1,
+        call_start_byte: name_start,
+        is_index_access: false,
+    })
+}
+
+/// Scan backwards from `byte_pos` to find an enclosing `name[` index access.
+///
+/// Similar to `find_call_by_text_scan` but for `[` brackets instead of `(`.
+/// Returns a context with `is_index_access = true`.
+fn find_index_by_text_scan<'a>(source: &'a str, byte_pos: usize) -> Option<TsCallContext<'a>> {
+    let before = &source[..byte_pos.min(source.len())];
+
+    // Find the nearest unmatched `[` by scanning backwards
+    let mut depth: i32 = 0;
+    let mut bracket_pos = None;
+    for (i, c) in before.char_indices().rev() {
+        match c {
+            ']' => depth += 1,
+            '[' => {
+                if depth == 0 {
+                    bracket_pos = Some(i);
+                    break;
+                }
+                depth -= 1;
+            }
+            _ => {}
+        }
+    }
+    let bracket_pos = bracket_pos?;
+
+    // Extract the identifier name before the `[`
+    let before_bracket = &source[..bracket_pos];
+    let name_end = before_bracket.trim_end().len();
+    let name_start = before_bracket[..name_end]
+        .rfind(|c: char| !c.is_alphanumeric() && c != '_')
+        .map(|i| i + 1)
+        .unwrap_or(0);
+    let name = &source[name_start..name_end];
+
+    if name.is_empty() || !name.chars().next()?.is_alphabetic() {
+        return None;
+    }
+
+    Some(TsCallContext {
+        name,
+        arg_index: 0,
+        arg_count: 1,
+        call_start_byte: name_start,
+        is_index_access: true,
+    })
+}
+
+/// Count commas at depth 1 between `start` and `byte_pos` to determine argument index.
+fn count_commas_before(source: &str, start: usize, byte_pos: usize) -> usize {
+    let end = byte_pos.min(source.len());
+    let text = &source[start..end];
+
+    let mut count = 0;
+    let mut depth = 0;
+    let mut found_open = false;
+    for ch in text.chars() {
+        match ch {
+            '(' if !found_open => {
+                found_open = true;
+                depth = 1;
+            }
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            ',' if found_open && depth == 1 => count += 1,
+            _ => {}
+        }
+    }
+    count
 }
 
 // ── Gas inlay hints (tree-sitter based) ──────────────────────────────────
@@ -1394,5 +1632,114 @@ contract Foo {
         let ctx = ts_find_call_at_byte(tree.root_node(), source, pos_99).unwrap();
         assert_eq!(ctx.name, "outer");
         assert_eq!(ctx.arg_index, 1);
+    }
+
+    #[test]
+    fn test_ts_find_call_for_signature_incomplete_call() {
+        // Cursor right after `(` with no arguments yet
+        let source = r#"
+contract Foo {
+    function bar(uint x, uint y) public {}
+    function test() public {
+        bar(
+    }
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+        let pos = source.find("bar(").unwrap() + 4;
+        let ctx = ts_find_call_for_signature(tree.root_node(), source, pos).unwrap();
+        assert_eq!(ctx.name, "bar");
+        assert_eq!(ctx.arg_index, 0);
+    }
+
+    #[test]
+    fn test_ts_find_call_for_signature_after_comma() {
+        // Cursor right after `,` — on second argument
+        let source = r#"
+contract Foo {
+    function bar(uint x, uint y) public {}
+    function test() public {
+        bar(42,
+    }
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+        let pos = source.find("42,").unwrap() + 3;
+        let ctx = ts_find_call_for_signature(tree.root_node(), source, pos).unwrap();
+        assert_eq!(ctx.name, "bar");
+        assert_eq!(ctx.arg_index, 1);
+    }
+
+    #[test]
+    fn test_ts_find_call_for_signature_complete_call() {
+        // Normal complete call still works
+        let source = r#"
+contract Foo {
+    function bar(uint x, uint y) public {}
+    function test() public {
+        bar(42, 99);
+    }
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+        let pos = source.find("42").unwrap();
+        let ctx = ts_find_call_for_signature(tree.root_node(), source, pos).unwrap();
+        assert_eq!(ctx.name, "bar");
+        assert_eq!(ctx.arg_index, 0);
+    }
+
+    #[test]
+    fn test_ts_find_call_for_signature_member_call() {
+        // Member access call like PRICE.addTax(
+        let source = r#"
+contract Foo {
+    function test() public {
+        PRICE.addTax(
+    }
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+        let pos = source.find("addTax(").unwrap() + 7;
+        let ctx = ts_find_call_for_signature(tree.root_node(), source, pos).unwrap();
+        assert_eq!(ctx.name, "addTax");
+        assert_eq!(ctx.arg_index, 0);
+    }
+
+    #[test]
+    fn test_ts_find_call_for_signature_array_access() {
+        // Mapping index access like orders[orderId]
+        let source = r#"
+contract Foo {
+    mapping(bytes32 => uint256) public orders;
+    function test() public {
+        orders[orderId];
+    }
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+        // Cursor inside the brackets, on "orderId"
+        let pos = source.find("[orderId]").unwrap() + 1;
+        let ctx = ts_find_call_for_signature(tree.root_node(), source, pos).unwrap();
+        assert_eq!(ctx.name, "orders");
+        assert_eq!(ctx.arg_index, 0);
+        assert!(ctx.is_index_access);
+    }
+
+    #[test]
+    fn test_ts_find_call_for_signature_array_access_empty() {
+        // Cursor right after `[` with no key yet
+        let source = r#"
+contract Foo {
+    mapping(bytes32 => uint256) public orders;
+    function test() public {
+        orders[
+    }
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+        let pos = source.find("orders[").unwrap() + 7;
+        let ctx = ts_find_call_for_signature(tree.root_node(), source, pos).unwrap();
+        assert_eq!(ctx.name, "orders");
+        assert!(ctx.is_index_access);
     }
 }
