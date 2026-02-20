@@ -18,6 +18,7 @@ pragma solidity ^0.8.0;
 /// @title Transaction Library
 /// @author mmsaki
 /// @notice Utility library for computing tax and refund amounts on orders.
+/// @custom:lsp-enable gas-estimates
 library Transaction {
     /// @notice Represents a purchase order in the shop.
     /// @param buyer The address of the buyer who placed the order.
@@ -56,6 +57,7 @@ library Transaction {
 /// @author mmsaki
 /// @notice A simple e-commerce shop contract with tax, refunds, and two-step ownership transfer.
 /// @dev Uses the Transaction library for tax and refund calculations. Follows CEI pattern.
+/// @custom:lsp-enable gas-estimates
 contract Shop {
     using Transaction for uint256;
 

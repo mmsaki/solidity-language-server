@@ -714,6 +714,26 @@ fn find_gas_key<'a>(
         .map(|k| k.as_str())
 }
 
+/// Check if a tree-sitter node has a preceding comment containing the gas sentinel.
+///
+/// Looks at the previous named sibling for a comment node whose text contains
+/// `@lsp-enable gas-estimates`.
+fn has_gas_sentinel(node: Node, source: &str) -> bool {
+    let mut prev = node.prev_named_sibling();
+    while let Some(sibling) = prev {
+        if sibling.kind() == "comment" {
+            let text = &source[sibling.byte_range()];
+            if text.contains(gas::GAS_SENTINEL) {
+                return true;
+            }
+        } else {
+            break;
+        }
+        prev = sibling.prev_named_sibling();
+    }
+    false
+}
+
 /// Create a gas inlay hint for a function definition using tree-sitter positions.
 fn ts_gas_hint_for_function(
     node: Node,
@@ -722,6 +742,10 @@ fn ts_gas_hint_for_function(
     gas_index: &gas::GasIndex,
     abs_path: &str,
 ) -> Option<InlayHint> {
+    // Only show gas hints for functions annotated with @lsp-enable gas-estimates
+    if !has_gas_sentinel(node, source) {
+        return None;
+    }
     let fn_name = ts_node_name(node, source)?;
     let contract_name = ts_enclosing_contract_name(node, source)?;
     let gas_key = find_gas_key(gas_index, abs_path, contract_name)?;
@@ -753,7 +777,7 @@ fn ts_gas_hint_for_function(
     Some(InlayHint {
         position: Position::new(brace_pos.line, brace_pos.character + offset),
         kind: Some(InlayHintKind::TYPE),
-        label: InlayHintLabel::String(format!("{} {}", gas::GAS_ICON, gas::format_gas(cost))),
+        label: InlayHintLabel::String(format!("gas: {}", gas::format_gas(cost))),
         text_edits: None,
         tooltip: Some(InlayHintTooltip::String("Estimated gas cost".to_string())),
         padding_left: Some(true),
@@ -771,6 +795,10 @@ fn ts_gas_hint_for_contract(
     gas_index: &gas::GasIndex,
     abs_path: &str,
 ) -> Option<InlayHint> {
+    // Only show deploy cost for contracts annotated with @lsp-enable gas-estimates
+    if !has_gas_sentinel(node, source) {
+        return None;
+    }
     let contract_name = ts_node_name(node, source)?;
     let gas_key = find_gas_key(gas_index, abs_path, contract_name)?;
     let contract_gas = gas_index.get(gas_key)?;
@@ -792,11 +820,7 @@ fn ts_gas_hint_for_contract(
     Some(InlayHint {
         position: Position::new(brace_pos.line, brace_pos.character + 1),
         kind: Some(InlayHintKind::TYPE),
-        label: InlayHintLabel::String(format!(
-            "{} {} ",
-            gas::GAS_ICON,
-            gas::format_gas(display_cost)
-        )),
+        label: InlayHintLabel::String(format!("deploy: {} ", gas::format_gas(display_cost))),
         text_edits: None,
         tooltip: Some(InlayHintTooltip::String(format!(
             "Deploy cost — code deposit: {}, execution: {}",
@@ -848,6 +872,67 @@ fn get_parameter_names(decl: &Value) -> Option<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_gas_sentinel_present() {
+        let source = r#"
+contract Foo {
+    /// @custom:lsp-enable gas-estimates
+    function bar() public {}
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+        let root = tree.root_node();
+        // Find the function_definition node
+        let contract = root.child(0).unwrap();
+        let body = contract.child_by_field_name("body").unwrap();
+        let mut cursor = body.walk();
+        let fn_node = body
+            .children(&mut cursor)
+            .find(|c| c.kind() == "function_definition")
+            .unwrap();
+        assert!(has_gas_sentinel(fn_node, source));
+    }
+
+    #[test]
+    fn test_gas_sentinel_absent() {
+        let source = r#"
+contract Foo {
+    function bar() public {}
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+        let root = tree.root_node();
+        let contract = root.child(0).unwrap();
+        let body = contract.child_by_field_name("body").unwrap();
+        let mut cursor = body.walk();
+        let fn_node = body
+            .children(&mut cursor)
+            .find(|c| c.kind() == "function_definition")
+            .unwrap();
+        assert!(!has_gas_sentinel(fn_node, source));
+    }
+
+    #[test]
+    fn test_gas_sentinel_with_other_natspec() {
+        let source = r#"
+contract Foo {
+    /// @notice Does something
+    /// @custom:lsp-enable gas-estimates
+    function bar() public {}
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+        let root = tree.root_node();
+        let contract = root.child(0).unwrap();
+        let body = contract.child_by_field_name("body").unwrap();
+        let mut cursor = body.walk();
+        let fn_node = body
+            .children(&mut cursor)
+            .find(|c| c.kind() == "function_definition")
+            .unwrap();
+        assert!(has_gas_sentinel(fn_node, source));
+    }
 
     #[test]
     fn test_get_parameter_names() {
