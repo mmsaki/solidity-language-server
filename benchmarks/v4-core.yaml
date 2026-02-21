@@ -26,26 +26,8 @@ exclude:
   - textDocument/documentColor
 
 servers:
-  - label: mmsaki
-    link: https://github.com/mmsaki/solidity-language-server
-    cmd: solidity-language-server
-
-  - label: solc
-    link: https://docs.soliditylang.org
-    cmd: solc
-    args: ["--lsp"]
-
-  - label: nomicfoundation
-    link: https://github.com/NomicFoundation/hardhat-vscode
-    cmd: nomicfoundation-solidity-language-server
-    args: ["--stdio"]
-
-  - label: juanfranblanco
-    link: https://github.com/juanfranblanco/vscode-solidity
-    cmd: vscode-solidity-server
-    args: ["--stdio"]
-
-  - label: qiuxiang
-    link: https://github.com/qiuxiang/solidity-ls
-    cmd: solidity-ls
-    args: ["--stdio"]
+  - mmsaki@latest
+  - solc
+  - nomicfoundation
+  - juanfranblanco
+  - qiuxiang

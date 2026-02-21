@@ -14,6 +14,13 @@ col: 32
 output: benchmarks/shop
 report: README.md
 
+servers:
+  - mmsaki@latest
+  - solc
+  - qiuxiang
+  - juanfranblanco
+  - nomicfoundation
+
 exclude:
   - textDocument/typeDefinition
   - textDocument/implementation

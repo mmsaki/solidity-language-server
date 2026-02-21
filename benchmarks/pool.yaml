@@ -16,6 +16,13 @@ exclude:
   - textDocument/codeLens
   - textDocument/documentColor
 
+servers:
+  - mmsaki@latest
+  - solc
+  - qiuxiang
+  - juanfranblanco
+  - nomicfoundation
+
 methods:
   textDocument/definition:
     line: 102

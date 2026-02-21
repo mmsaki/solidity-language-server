@@ -13,7 +13,11 @@ index_timeout: 15
 response: full
 
 servers:
-  - mmsaki
+  - mmsaki@latest
+  - solc
+  - qiuxiang
+  - juanfranblanco
+  - nomicfoundation
 
 benchmarks:
   - all

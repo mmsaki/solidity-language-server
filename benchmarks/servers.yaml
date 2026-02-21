@@ -9,11 +9,19 @@ mmsaki:
   cmd: solidity-language-server
   link: https://github.com/mmsaki/solidity-language-server
   versions:
-    v0.1.24:
-      cmd: solidity-language-server
+    v0.1.17:
+      cmd: /Users/meek/.solidity-lsp/0.1.17/bin/solidity-language-server
+    v0.1.19:
+      cmd: /Users/meek/.solidity-lsp/0.1.19/bin/solidity-language-server
     v0.1.20:
-      cmd: solidity-language-server
-    local:
+      cmd: /Users/meek/.solidity-lsp/0.1.20/bin/solidity-language-server
+    v0.1.21:
+      cmd: /Users/meek/.solidity-lsp/0.1.21/bin/solidity-language-server
+    v0.1.22:
+      cmd: /Users/meek/.solidity-lsp/0.1.22/bin/solidity-language-server
+    v0.1.23:
+      cmd: /Users/meek/.solidity-lsp/0.1.23/bin/solidity-language-server
+    latest:
       cmd: ./target/release/solidity-language-server
 
 solc:
