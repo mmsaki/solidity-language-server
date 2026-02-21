@@ -1,13 +1,22 @@
 /target
 out
 cache
-bench/target
-benchmarks/*
-!benchmarks/*.yaml
-!benchmarks/*.md
-!benchmarks/Issue*
-benchmarks/Issue*/results
-!benchmarks/#90
-benchmarks/#90/partial
-DELTA.md
-v4-core
+/v4-core
+
+# Benchmark results (generated, not tracked)
+benchmarks/*/results.json
+benchmarks/*/README.md
+benchmarks/*/session.txt
+benchmarks/*/session.md
+benchmarks/*/partial
+benchmarks/*/*/results.json
+benchmarks/*/*/README.md
+benchmarks/*/*/session.txt
+benchmarks/*/*/session.md
+benchmarks/*/*/partial
+
+# Scratch files
+*.json
+!Cargo.lock
+!example/**/*.json
+!benchmarks/**/*.yaml

@@ -1,0 +1,10 @@
+include:
+  - initialize/config.yaml
+  - diagnostics/config.yaml
+  - definition/config.yaml
+  - hover/config.yaml
+  - references/config.yaml
+  - completion/config.yaml
+  - rename/config.yaml
+  - symbols/config.yaml
+  - formatting/config.yaml

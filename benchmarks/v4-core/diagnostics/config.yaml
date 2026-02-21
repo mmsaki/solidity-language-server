@@ -1,0 +1,39 @@
+project: v4-core
+file: src/libraries/Pool.sol
+line: 102
+col: 15
+iterations: 5
+warmup: 2
+timeout: 10
+index_timeout: 15
+output: benchmarks/v4-core/diagnostics
+report: README.md
+response: full
+
+benchmarks:
+  - textDocument/diagnostic
+
+servers:
+  - label: mmsaki
+    link: https://github.com/mmsaki/solidity-language-server
+    cmd: solidity-language-server
+
+  - label: solc
+    link: https://docs.soliditylang.org
+    cmd: solc
+    args: ["--lsp"]
+
+  - label: nomicfoundation
+    link: https://github.com/NomicFoundation/hardhat-vscode
+    cmd: nomicfoundation-solidity-language-server
+    args: ["--stdio"]
+
+  - label: juanfranblanco
+    link: https://github.com/juanfranblanco/vscode-solidity
+    cmd: vscode-solidity-server
+    args: ["--stdio"]
+
+  - label: qiuxiang
+    link: https://github.com/qiuxiang/solidity-ls
+    cmd: solidity-ls
+    args: ["--stdio"]
