@@ -133,6 +133,8 @@ pub struct FoundryConfig {
     pub evm_version: Option<String>,
     /// Error codes to suppress from diagnostics (`ignored_error_codes = [2394, 5574]`).
     pub ignored_error_codes: Vec<u64>,
+    /// Source directory relative to `root` (default: `src` for Foundry, `contracts` for Hardhat).
+    pub sources_dir: String,
 }
 
 impl Default for FoundryConfig {
@@ -146,6 +148,7 @@ impl Default for FoundryConfig {
             optimizer_runs: 200,
             evm_version: None,
             ignored_error_codes: Vec::new(),
+            sources_dir: "src".to_string(),
         }
     }
 }
@@ -245,6 +248,13 @@ pub fn load_foundry_config_from_toml(toml_path: &Path) -> FoundryConfig {
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
+    // Parse src: `src = "contracts"` (default: "src")
+    let sources_dir = profile
+        .get("src")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "src".to_string());
+
     // Parse ignored_error_codes: `ignored_error_codes = [2394, 6321, 3860, 5574]`
     let ignored_error_codes = profile
         .get("ignored_error_codes")
@@ -266,6 +276,7 @@ pub fn load_foundry_config_from_toml(toml_path: &Path) -> FoundryConfig {
         optimizer_runs,
         evm_version,
         ignored_error_codes,
+        sources_dir,
     }
 }
 

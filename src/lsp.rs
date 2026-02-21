@@ -40,6 +40,10 @@ pub struct ForgeLsp {
     semantic_token_cache: Arc<RwLock<HashMap<String, (String, Vec<SemanticToken>)>>>,
     /// Monotonic counter for generating unique result_ids.
     semantic_token_id: Arc<AtomicU64>,
+    /// Workspace root URI from `initialize`. Used for project-wide file discovery.
+    root_uri: Arc<RwLock<Option<Url>>>,
+    /// Whether background project indexing has already been triggered.
+    project_indexed: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl ForgeLsp {
@@ -69,6 +73,8 @@ impl ForgeLsp {
             use_solc,
             semantic_token_cache: Arc::new(RwLock::new(HashMap::new())),
             semantic_token_id: Arc::new(AtomicU64::new(0)),
+            root_uri: Arc::new(RwLock::new(None)),
+            project_indexed: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 
@@ -324,6 +330,72 @@ impl ForgeLsp {
             }
         }
 
+        // Trigger project index on first successful build of a source file.
+        // Skip for test (.t.sol) and script (.s.sol) files — their own compilation
+        // already pulls in the dependencies they need.
+        // This compiles all source files in a single solc invocation so that
+        // cross-file features (references, rename) discover the full project.
+        // Runs before publishing diagnostics so the cache is populated before
+        // the client can send any requests.
+        let is_test_or_script = path_str.ends_with(".t.sol") || path_str.ends_with(".s.sol");
+        if build_succeeded
+            && self.use_solc
+            && !is_test_or_script
+            && !self
+                .project_indexed
+                .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            self.project_indexed
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+            let foundry_config = self.foundry_config.read().await.clone();
+            let root_uri = self.root_uri.read().await.clone();
+
+            // Use the project root URI as the cache key for the global index.
+            let cache_key = root_uri.as_ref().map(|u| u.to_string());
+
+            if let Some(cache_key) = cache_key {
+                if foundry_config
+                    .root
+                    .join(&foundry_config.sources_dir)
+                    .is_dir()
+                {
+                    match crate::solc::solc_project_index(&foundry_config, Some(&self.client)).await
+                    {
+                        Ok(ast_data) => {
+                            let cached_build = Arc::new(crate::goto::CachedBuild::new(ast_data, 0));
+                            let source_count = cached_build.nodes.len();
+                            self.ast_cache.write().await.insert(cache_key, cached_build);
+                            self.client
+                                .log_message(
+                                    MessageType::INFO,
+                                    format!("project index: cached {} source files", source_count),
+                                )
+                                .await;
+                        }
+                        Err(e) => {
+                            self.client
+                                .log_message(
+                                    MessageType::WARNING,
+                                    format!("project index failed: {e}"),
+                                )
+                                .await;
+                        }
+                    }
+                } else {
+                    self.client
+                        .log_message(
+                            MessageType::INFO,
+                            format!(
+                                "project index: {}/{} not found, skipping",
+                                foundry_config.root.display(),
+                                foundry_config.sources_dir
+                            ),
+                        )
+                        .await;
+                }
+            }
+        }
+
         // publish diags with no version, so we are sure they get displayed
         self.client
             .publish_diagnostics(uri, all_diagnostics, None)
@@ -446,6 +518,12 @@ impl LanguageServer for ForgeLsp {
                 .await;
             let mut settings = self.settings.write().await;
             *settings = s;
+        }
+
+        // Store root URI for project-wide file discovery.
+        if let Some(uri) = params.root_uri.as_ref() {
+            let mut root = self.root_uri.write().await;
+            *root = Some(uri.clone());
         }
 
         // Load config from the workspace root's foundry.toml.

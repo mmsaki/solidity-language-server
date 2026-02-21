@@ -698,6 +698,7 @@ pub async fn solc_ast(
 
     let input = build_standard_json_input(&rel_path, &remappings, config);
     let raw_output = run_solc(&solc_binary, &input, &config.root).await?;
+
     Ok(normalize_solc_output(raw_output, Some(&config.root)))
 }
 
@@ -708,6 +709,146 @@ pub async fn solc_build(
     client: Option<&tower_lsp::Client>,
 ) -> Result<Value, RunnerError> {
     solc_ast(file_path, config, client).await
+}
+
+// ── Project-wide indexing ──────────────────────────────────────────────────
+
+/// Directories to skip when discovering source files.
+const SKIP_DIRS: &[&str] = &[
+    "test",
+    "tests",
+    "lib",
+    "node_modules",
+    "out",
+    "artifacts",
+    "cache",
+    "script",
+    "scripts",
+];
+
+/// Discover all Solidity source files under `config.root/config.sources_dir`.
+///
+/// Filters:
+/// - Only `*.sol` files
+/// - Skips `*.t.sol` (test) and `*.s.sol` (script) files
+/// - Skips directories listed in `SKIP_DIRS`
+pub fn discover_source_files(config: &FoundryConfig) -> Vec<PathBuf> {
+    let sources_path = config.root.join(&config.sources_dir);
+    if !sources_path.is_dir() {
+        return Vec::new();
+    }
+    let mut files = Vec::new();
+    discover_recursive(&sources_path, &mut files);
+    files.sort();
+    files
+}
+
+fn discover_recursive(dir: &Path, files: &mut Vec<PathBuf>) {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                if SKIP_DIRS.contains(&name) {
+                    continue;
+                }
+            }
+            discover_recursive(&path, files);
+        } else if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+            if name.ends_with(".sol") && !name.ends_with(".t.sol") && !name.ends_with(".s.sol") {
+                files.push(path);
+            }
+        }
+    }
+}
+
+/// Build a `--standard-json` input that compiles all given source files at once.
+///
+/// Each file is added as a source entry with a `urls` field (relative to project root).
+/// This produces a single AST covering the entire project in one solc invocation.
+///
+/// See [`build_standard_json_input`] for rationale on excluded settings.
+pub fn build_batch_standard_json_input(
+    source_files: &[PathBuf],
+    remappings: &[String],
+    config: &FoundryConfig,
+) -> Value {
+    let mut contract_outputs = vec!["abi", "devdoc", "userdoc", "evm.methodIdentifiers"];
+    if !config.via_ir {
+        contract_outputs.push("evm.gasEstimates");
+    }
+
+    let mut settings = json!({
+        "remappings": remappings,
+        "outputSelection": {
+            "*": {
+                "*": contract_outputs,
+                "": ["ast"]
+            }
+        }
+    });
+
+    if config.via_ir {
+        settings["viaIR"] = json!(true);
+    }
+    if let Some(ref evm_version) = config.evm_version {
+        settings["evmVersion"] = json!(evm_version);
+    }
+
+    let mut sources = serde_json::Map::new();
+    for file in source_files {
+        let rel_path = file
+            .strip_prefix(&config.root)
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_else(|_| file.to_string_lossy().into_owned());
+        sources.insert(rel_path.clone(), json!({ "urls": [rel_path] }));
+    }
+
+    json!({
+        "language": "Solidity",
+        "sources": sources,
+        "settings": settings
+    })
+}
+
+/// Run a project-wide solc compilation and return normalized output.
+///
+/// Discovers all source files, compiles them in a single `solc --standard-json`
+/// invocation, and returns the normalized AST data.
+pub async fn solc_project_index(
+    config: &FoundryConfig,
+    client: Option<&tower_lsp::Client>,
+) -> Result<Value, RunnerError> {
+    let source_files = discover_source_files(config);
+    if source_files.is_empty() {
+        return Err(RunnerError::CommandError(std::io::Error::other(
+            "no source files found for project index",
+        )));
+    }
+
+    if let Some(c) = client {
+        c.log_message(
+            tower_lsp::lsp_types::MessageType::INFO,
+            format!(
+                "project index: discovered {} source files in {}/",
+                source_files.len(),
+                config.sources_dir
+            ),
+        )
+        .await;
+    }
+
+    // Use the first file to detect pragma and resolve solc binary.
+    let first_source = std::fs::read_to_string(&source_files[0]).ok();
+    let solc_binary = resolve_solc_binary(config, first_source.as_deref(), client).await;
+    let remappings = resolve_remappings(config).await;
+
+    let input = build_batch_standard_json_input(&source_files, &remappings, config);
+    let raw_output = run_solc(&solc_binary, &input, &config.root).await?;
+    Ok(normalize_solc_output(raw_output, Some(&config.root)))
 }
 
 #[cfg(test)]
