@@ -11,3 +11,4 @@ benchmarks/*/
 *.json
 !Cargo.lock
 !example/**/*.json
+!poolmanager.json

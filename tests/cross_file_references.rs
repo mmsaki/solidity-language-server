@@ -5,12 +5,21 @@ use solidity_language_server::types::NodeId;
 use std::collections::HashSet;
 use std::fs;
 
-/// Load pool-manager-ast.json as a CachedBuild.
+/// Load poolmanager.json as a CachedBuild.
 fn load_cached_build() -> CachedBuild {
     let raw: Value =
-        serde_json::from_str(&fs::read_to_string("pool-manager-ast.json").unwrap()).unwrap();
-    let ast_data = solidity_language_server::solc::normalize_forge_output(raw);
+        serde_json::from_str(&fs::read_to_string("poolmanager.json").unwrap()).unwrap();
+    let ast_data = solidity_language_server::solc::normalize_solc_output(raw, None);
     CachedBuild::new(ast_data, 0)
+}
+
+/// Find the abs-path key that ends with the given suffix.
+fn find_key<'a>(build: &'a CachedBuild, suffix: &str) -> &'a str {
+    build
+        .nodes
+        .keys()
+        .find(|k| k.ends_with(suffix))
+        .unwrap_or_else(|| panic!("no key ending with {suffix}"))
 }
 
 // =============================================================================
@@ -47,9 +56,12 @@ fn test_cached_build_has_id_to_path_map() {
         !build.id_to_path_map.is_empty(),
         "CachedBuild should have id_to_path_map"
     );
-    assert_eq!(
-        build.id_to_path_map.get("23").map(|s| s.as_str()),
-        Some("src/libraries/Hooks.sol"),
+    // Hooks.sol has source id 22 in the solc fixture
+    let hooks_path = build.id_to_path_map.get("22").expect("id 22 should exist");
+    assert!(
+        hooks_path.ends_with("src/libraries/Hooks.sol"),
+        "id 22 should map to Hooks.sol, got: {}",
+        hooks_path
     );
 }
 
@@ -76,18 +88,14 @@ fn test_cached_build_preserves_raw_ast() {
 #[test]
 fn test_byte_to_id_finds_hooks_definition() {
     let build = load_cached_build();
+    let hooks_key = find_key(&build, "src/libraries/Hooks.sol");
 
-    // library Hooks: id=4422, src="1039:15471:23" in src/libraries/Hooks.sol
-    let node_id = references::byte_to_id(&build.nodes, "src/libraries/Hooks.sol", 1039);
+    // library Hooks: id=3530, src="1039:15471:22"
+    let node_id = references::byte_to_id(&build.nodes, hooks_key, 1039);
     assert!(node_id.is_some(), "should find node at byte 1039");
 
     let id = node_id.unwrap();
-    let node = build
-        .nodes
-        .get("src/libraries/Hooks.sol")
-        .unwrap()
-        .get(&id)
-        .unwrap();
+    let node = build.nodes.get(hooks_key).unwrap().get(&id).unwrap();
     assert!(
         node.src.starts_with("1039:"),
         "node src should start at 1039, got: {}",
@@ -104,7 +112,8 @@ fn test_byte_to_id_returns_none_for_unknown_path() {
 #[test]
 fn test_byte_to_id_returns_none_for_invalid_offset() {
     let build = load_cached_build();
-    assert!(references::byte_to_id(&build.nodes, "src/libraries/Hooks.sol", 999999).is_none());
+    let hooks_key = find_key(&build, "src/libraries/Hooks.sol");
+    assert!(references::byte_to_id(&build.nodes, hooks_key, 999999).is_none());
 }
 
 // =============================================================================
@@ -114,27 +123,25 @@ fn test_byte_to_id_returns_none_for_invalid_offset() {
 #[test]
 fn test_resolve_hooks_reference_from_pool_manager_node() {
     let build = load_cached_build();
+    let pm_key = find_key(&build, "src/PoolManager.sol");
+    let hooks_key = find_key(&build, "src/libraries/Hooks.sol");
 
-    // In PoolManager.sol, node id=553 is an Identifier "Hooks" at src="70:5:6"
-    // with referencedDeclaration=4422 (the library Hooks in Hooks.sol).
-    //
-    // The cross-file flow resolves this: cursor on node 553 → follow
-    // referencedDeclaration to 4422 → find 4422's src → extract (path, byte_offset).
-
+    // In PoolManager.sol, node id=2 is an Identifier "Hooks" at src="70:5:5"
+    // with referencedDeclaration=3530 (the library Hooks in Hooks.sol).
     let pm_nodes = build
         .nodes
-        .get("src/PoolManager.sol")
+        .get(pm_key)
         .expect("PoolManager.sol should be in nodes");
 
-    // Verify node 553 exists and points to 4422
-    let ref_node = pm_nodes.get(&NodeId(553)).expect("node 553 should exist");
-    assert_eq!(ref_node.referenced_declaration, Some(NodeId(4422)));
-    assert_eq!(ref_node.src, "70:5:6");
+    // Verify node 2 exists and points to 3530
+    let ref_node = pm_nodes.get(&NodeId(2)).expect("node 2 should exist");
+    assert_eq!(ref_node.referenced_declaration, Some(NodeId(3530)));
+    assert_eq!(ref_node.src, "70:5:5");
 
-    // Resolve the definition: find node 4422 across all files
+    // Resolve the definition: find node 3530 across all files
     let mut def_location = None;
     for (file_path, file_nodes) in &build.nodes {
-        if let Some(def_node) = file_nodes.get(&NodeId(4422)) {
+        if let Some(def_node) = file_nodes.get(&NodeId(3530)) {
             let parts: Vec<&str> = def_node.src.split(':').collect();
             if parts.len() == 3 {
                 let byte_offset: usize = parts[0].parse().unwrap();
@@ -144,24 +151,21 @@ fn test_resolve_hooks_reference_from_pool_manager_node() {
         }
     }
 
-    let (def_path, def_offset) = def_location.expect("should find definition node 4422");
-    assert_eq!(def_path, "src/libraries/Hooks.sol");
+    let (def_path, def_offset) = def_location.expect("should find definition node 3530");
+    assert_eq!(def_path, hooks_key);
     assert_eq!(def_offset, 1039);
 }
 
 #[test]
 fn test_cross_file_scan_finds_pool_manager_references_to_hooks() {
     let build = load_cached_build();
+    let pm_key = find_key(&build, "src/PoolManager.sol");
+    let hooks_key = find_key(&build, "src/libraries/Hooks.sol");
 
-    // Given the stable identity (src/libraries/Hooks.sol, byte 1039),
-    // use byte_to_id to re-resolve to this build's node ID, then scan
-    // for all nodes with referenced_declaration pointing to it.
-
-    let target_id = references::byte_to_id(&build.nodes, "src/libraries/Hooks.sol", 1039)
+    let target_id = references::byte_to_id(&build.nodes, hooks_key, 1039)
         .expect("byte_to_id should resolve Hooks definition");
 
-    // Follow referenced_declaration if needed (definition nodes won't have one)
-    let hooks_nodes = build.nodes.get("src/libraries/Hooks.sol").unwrap();
+    let hooks_nodes = build.nodes.get(hooks_key).unwrap();
     let node_info = hooks_nodes.get(&target_id).unwrap();
     let final_target = node_info.referenced_declaration.unwrap_or(target_id);
 
@@ -176,9 +180,9 @@ fn test_cross_file_scan_finds_pool_manager_references_to_hooks() {
         }
     }
 
-    // PoolManager.sol should have at least 3 references (ids 553, 623, 806)
+    // PoolManager.sol should have at least 3 references (ids 2, 72, 255)
     let pm_refs = refs_by_file
-        .get("src/PoolManager.sol")
+        .get(pm_key)
         .expect("PoolManager.sol should have references to Hooks");
     assert!(
         pm_refs.len() >= 3,
@@ -189,15 +193,15 @@ fn test_cross_file_scan_finds_pool_manager_references_to_hooks() {
 
     // Known node IDs from the AST
     assert!(
-        pm_refs.contains(&NodeId(553)),
+        pm_refs.contains(&NodeId(2)),
         "should contain Identifier at byte 70"
     );
     assert!(
-        pm_refs.contains(&NodeId(623)),
+        pm_refs.contains(&NodeId(72)),
         "should contain IdentifierPath at byte 4953"
     );
     assert!(
-        pm_refs.contains(&NodeId(806)),
+        pm_refs.contains(&NodeId(255)),
         "should contain Identifier at byte 6804"
     );
 }
@@ -205,10 +209,12 @@ fn test_cross_file_scan_finds_pool_manager_references_to_hooks() {
 #[test]
 fn test_cross_file_scan_finds_references_across_multiple_files() {
     let build = load_cached_build();
+    let pm_key = find_key(&build, "src/PoolManager.sol");
+    let hooks_key = find_key(&build, "src/libraries/Hooks.sol");
 
-    let target_id = references::byte_to_id(&build.nodes, "src/libraries/Hooks.sol", 1039)
+    let target_id = references::byte_to_id(&build.nodes, hooks_key, 1039)
         .expect("byte_to_id should resolve Hooks definition");
-    let hooks_nodes = build.nodes.get("src/libraries/Hooks.sol").unwrap();
+    let hooks_nodes = build.nodes.get(hooks_key).unwrap();
     let node_info = hooks_nodes.get(&target_id).unwrap();
     let final_target = node_info.referenced_declaration.unwrap_or(target_id);
 
@@ -224,11 +230,11 @@ fn test_cross_file_scan_finds_references_across_multiple_files() {
     }
 
     assert!(
-        ref_files.contains("src/PoolManager.sol"),
+        ref_files.contains(pm_key),
         "PoolManager.sol should reference Hooks"
     );
     assert!(
-        ref_files.contains("src/libraries/Hooks.sol"),
+        ref_files.contains(hooks_key),
         "Hooks.sol should have self-references"
     );
 }
@@ -243,10 +249,12 @@ fn test_end_to_end_cross_file_flow() {
     // 5. Scan for all references to the re-resolved target
 
     let build = load_cached_build();
+    let pm_key = find_key(&build, "src/PoolManager.sol");
+    let hooks_key = find_key(&build, "src/libraries/Hooks.sol");
 
-    // Step 1-2: Start at node 553 (Hooks usage in PoolManager.sol), follow to definition
-    let pm_nodes = build.nodes.get("src/PoolManager.sol").unwrap();
-    let usage_node = pm_nodes.get(&NodeId(553)).unwrap();
+    // Step 1-2: Start at node 2 (Hooks usage in PoolManager.sol), follow to definition
+    let pm_nodes = build.nodes.get(pm_key).unwrap();
+    let usage_node = pm_nodes.get(&NodeId(2)).unwrap();
     let def_id = usage_node
         .referenced_declaration
         .expect("usage should have referencedDeclaration");
@@ -262,7 +270,7 @@ fn test_end_to_end_cross_file_flow() {
             break;
         }
     }
-    assert_eq!(def_abs_path, "src/libraries/Hooks.sol");
+    assert_eq!(def_abs_path, hooks_key);
     assert_eq!(def_byte_offset, 1039);
 
     // Step 4: Re-resolve via byte_to_id (simulates cross-build bridging)
@@ -294,6 +302,6 @@ fn test_end_to_end_cross_file_flow() {
         "should find >= 4 total references, got {}",
         total_refs
     );
-    assert!(ref_files.contains("src/PoolManager.sol"));
-    assert!(ref_files.contains("src/libraries/Hooks.sol"));
+    assert!(ref_files.contains(pm_key));
+    assert!(ref_files.contains(hooks_key));
 }
