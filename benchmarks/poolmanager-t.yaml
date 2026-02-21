@@ -50,6 +50,13 @@ methods:
     col: 0
     # First 300 lines — imports through early test functions
 
+  textDocument/formatting:
+    didChange:
+      - file: ../example/PoolManager.t.unformatted.snapshot
+        line: 0
+        col: 0
+        # 10 extra blank lines at end — formatter should strip them
+
   textDocument/signatureHelp:
     line: 116
     col: 37
