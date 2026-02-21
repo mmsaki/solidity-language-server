@@ -3,20 +3,11 @@ out
 cache
 /v4-core
 
-# Benchmark results (generated, not tracked)
-benchmarks/*/results.json
-benchmarks/*/README.md
-benchmarks/*/session.txt
-benchmarks/*/session.md
-benchmarks/*/partial
-benchmarks/*/*/results.json
-benchmarks/*/*/README.md
-benchmarks/*/*/session.txt
-benchmarks/*/*/session.md
-benchmarks/*/*/partial
+# Benchmark results (generated)
+benchmarks/*/
+!benchmarks/*.yaml
 
-# Scratch files
+# Scratch
 *.json
 !Cargo.lock
 !example/**/*.json
-!benchmarks/**/*.yaml

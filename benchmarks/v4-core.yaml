@@ -1,23 +1,21 @@
+# Competition benchmark — v4-core Pool.sol (TickMath at line 102)
+#   lsp-bench -c benchmarks/v4-core.yaml
+
 project: v4-core
 file: src/libraries/Pool.sol
 line: 102
 col: 15
+
 iterations: 5
 warmup: 2
 timeout: 10
 index_timeout: 15
-output: benchmarks/v4-core/completion
+output: benchmarks/v4-core
 report: README.md
 response: full
 
 benchmarks:
-  - textDocument/completion
-
-methods:
-  textDocument/completion:
-    line: 109
-    col: 13
-    trigger: "."
+  - all
 
 servers:
   - label: mmsaki

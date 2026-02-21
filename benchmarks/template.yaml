@@ -1,0 +1,23 @@
+# Benchmark template — edit project, file, line, col and run:
+#   lsp-bench -c benchmarks/template.yaml
+
+project: v4-core
+file: src/libraries/Pool.sol
+line: 102
+col: 15
+
+iterations: 5
+warmup: 2
+timeout: 10
+index_timeout: 15
+output: benchmarks/results
+report: README.md
+response: full
+
+benchmarks:
+  - all
+
+servers:
+  - label: mmsaki
+    link: https://github.com/mmsaki/solidity-language-server
+    cmd: solidity-language-server
