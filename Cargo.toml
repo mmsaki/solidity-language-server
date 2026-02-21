@@ -8,7 +8,7 @@ readme = "README.md"
 homepage = "https://github.com/mmsaki/solidity-language-server"
 repository = "https://github.com/mmsaki/solidity-language-server"
 keywords = ["language-server", "solidity", "lsp"]
-exclude = ["pool-manager-ast.json", "v4-core"]
+exclude = ["poolmanager.json", "v4-core"]
 
 [dependencies]
 clap = { version = "4.5.53", features = ["derive"] }
@@ -29,5 +29,7 @@ tree-sitter = "0.26.5"
 tree-sitter-solidity = "1.2.13"
 tiny-keccak = { version = "2.0", features = ["keccak"] }
 hex = "0.4"
-svm = { package = "svm-rs", version = "0.5", default-features = false, features = ["rustls"] }
+svm = { package = "svm-rs", version = "0.5", default-features = false, features = [
+  "rustls",
+] }
 semver = "1"

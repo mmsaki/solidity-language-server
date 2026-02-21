@@ -4,13 +4,4 @@ cache
 /v4-core
 
 # Benchmark results (generated)
-benchmarks/*/
-!benchmarks/*.yaml
-!benchmarks/shop/
-benchmarks/shop/results.json
-
-# Scratch
-*.json
-!Cargo.lock
-!example/**/*.json
-!poolmanager.json
+benchmarks/**/*.json
