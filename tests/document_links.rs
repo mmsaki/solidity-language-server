@@ -4,21 +4,29 @@ use solidity_language_server::links;
 use std::fs;
 use tower_lsp::lsp_types::Url;
 
-/// The PoolManager source key in the fixture.
-const PM_KEY: &str = "/Users/meek/developer/uniswap/v4-core/src/PoolManager.sol";
+/// Find the PoolManager.sol source key dynamically from the fixture.
+fn pm_key(ast: &Value) -> String {
+    ast["sources"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .find(|k| k.ends_with("src/PoolManager.sol"))
+        .expect("fixture should contain PoolManager.sol")
+        .clone()
+}
 
 /// Load the fixture as a CachedBuild.
 fn load_build() -> CachedBuild {
     let raw: Value =
-        serde_json::from_str(&fs::read_to_string("pool-manager-ast.json").unwrap()).unwrap();
-    let ast = solidity_language_server::solc::normalize_forge_output(raw);
+        serde_json::from_str(&fs::read_to_string("poolmanager.json").unwrap()).unwrap();
+    let ast = solidity_language_server::solc::normalize_solc_output(raw, None);
     CachedBuild::new(ast, 0)
 }
 
 /// Extract ImportDirective nodes from the normalized fixture AST.
 /// Returns (src, file, absolutePath) tuples for verification.
-fn extract_imports(ast: &Value) -> Vec<(&str, &str, &str)> {
-    let nodes = ast["sources"][PM_KEY]["ast"]["nodes"].as_array().unwrap();
+fn extract_imports<'a>(ast: &'a Value, key: &str) -> Vec<(&'a str, &'a str, &'a str)> {
+    let nodes = ast["sources"][key]["ast"]["nodes"].as_array().unwrap();
     nodes
         .iter()
         .filter(|n| n["nodeType"].as_str() == Some("ImportDirective"))
@@ -104,9 +112,10 @@ fn import_links(
 #[test]
 fn test_returns_link_for_every_import() {
     let build = load_build();
-    let imports = extract_imports(&build.ast);
+    let key = pm_key(&build.ast);
+    let imports = extract_imports(&build.ast, &key);
     let source_bytes = build_source_bytes(&imports);
-    let uri = Url::from_file_path(PM_KEY).unwrap();
+    let uri = Url::from_file_path(&key).unwrap();
 
     let all_links = links::document_links(&build, &uri, &source_bytes);
     let ilinks = import_links(&all_links);
@@ -123,9 +132,10 @@ fn test_returns_link_for_every_import() {
 #[test]
 fn test_tooltips_match_absolute_paths() {
     let build = load_build();
-    let imports = extract_imports(&build.ast);
+    let key = pm_key(&build.ast);
+    let imports = extract_imports(&build.ast, &key);
     let source_bytes = build_source_bytes(&imports);
-    let uri = Url::from_file_path(PM_KEY).unwrap();
+    let uri = Url::from_file_path(&key).unwrap();
 
     let all_links = links::document_links(&build, &uri, &source_bytes);
     let ilinks = import_links(&all_links);
@@ -142,9 +152,10 @@ fn test_tooltips_match_absolute_paths() {
 #[test]
 fn test_targets_are_file_uris() {
     let build = load_build();
-    let imports = extract_imports(&build.ast);
+    let key = pm_key(&build.ast);
+    let imports = extract_imports(&build.ast, &key);
     let source_bytes = build_source_bytes(&imports);
-    let uri = Url::from_file_path(PM_KEY).unwrap();
+    let uri = Url::from_file_path(&key).unwrap();
 
     let all_links = links::document_links(&build, &uri, &source_bytes);
 
@@ -161,9 +172,10 @@ fn test_targets_are_file_uris() {
 #[test]
 fn test_import_range_length_matches_file_field() {
     let build = load_build();
-    let imports = extract_imports(&build.ast);
+    let key = pm_key(&build.ast);
+    let imports = extract_imports(&build.ast, &key);
     let source_bytes = build_source_bytes(&imports);
-    let uri = Url::from_file_path(PM_KEY).unwrap();
+    let uri = Url::from_file_path(&key).unwrap();
 
     let all_links = links::document_links(&build, &uri, &source_bytes);
     let ilinks = import_links(&all_links);
@@ -182,9 +194,10 @@ fn test_import_range_length_matches_file_field() {
 #[test]
 fn test_import_links_each_on_own_line() {
     let build = load_build();
-    let imports = extract_imports(&build.ast);
+    let key = pm_key(&build.ast);
+    let imports = extract_imports(&build.ast, &key);
     let source_bytes = build_source_bytes(&imports);
-    let uri = Url::from_file_path(PM_KEY).unwrap();
+    let uri = Url::from_file_path(&key).unwrap();
 
     let all_links = links::document_links(&build, &uri, &source_bytes);
     let ilinks = import_links(&all_links);
@@ -206,9 +219,10 @@ fn test_import_links_each_on_own_line() {
 #[test]
 fn test_links_are_in_ascending_line_order() {
     let build = load_build();
-    let imports = extract_imports(&build.ast);
+    let key = pm_key(&build.ast);
+    let imports = extract_imports(&build.ast, &key);
     let source_bytes = build_source_bytes(&imports);
-    let uri = Url::from_file_path(PM_KEY).unwrap();
+    let uri = Url::from_file_path(&key).unwrap();
 
     let all_links = links::document_links(&build, &uri, &source_bytes);
 
@@ -228,15 +242,22 @@ fn test_links_are_in_ascending_line_order() {
 #[test]
 fn test_first_import_hooks() {
     let build = load_build();
-    let imports = extract_imports(&build.ast);
+    let key = pm_key(&build.ast);
+    let imports = extract_imports(&build.ast, &key);
     let source_bytes = build_source_bytes(&imports);
-    let uri = Url::from_file_path(PM_KEY).unwrap();
+    let uri = Url::from_file_path(&key).unwrap();
 
     let all_links = links::document_links(&build, &uri, &source_bytes);
     let ilinks = import_links(&all_links);
     let first = ilinks[0];
 
-    assert_eq!(first.tooltip.as_deref(), Some("src/libraries/Hooks.sol"));
+    // Tooltip is the absolutePath from the AST (ends with this suffix)
+    let tooltip = first.tooltip.as_deref().unwrap();
+    assert!(
+        tooltip.ends_with("src/libraries/Hooks.sol"),
+        "first import tooltip should end with src/libraries/Hooks.sol, got: {}",
+        tooltip
+    );
     assert_eq!(first.range.start.line, 3);
     assert_eq!(first.range.end.line, 3);
     assert_eq!(first.range.end.character - first.range.start.character, 21);
@@ -245,17 +266,20 @@ fn test_first_import_hooks() {
 #[test]
 fn test_last_import_custom_revert() {
     let build = load_build();
-    let imports = extract_imports(&build.ast);
+    let key = pm_key(&build.ast);
+    let imports = extract_imports(&build.ast, &key);
     let source_bytes = build_source_bytes(&imports);
-    let uri = Url::from_file_path(PM_KEY).unwrap();
+    let uri = Url::from_file_path(&key).unwrap();
 
     let all_links = links::document_links(&build, &uri, &source_bytes);
     let ilinks = import_links(&all_links);
     let last = ilinks.last().unwrap();
 
-    assert_eq!(
-        last.tooltip.as_deref(),
-        Some("src/libraries/CustomRevert.sol")
+    let tooltip = last.tooltip.as_deref().unwrap();
+    assert!(
+        tooltip.ends_with("src/libraries/CustomRevert.sol"),
+        "last import tooltip should end with src/libraries/CustomRevert.sol, got: {}",
+        tooltip
     );
     assert_eq!(last.range.start.line, 27);
     assert_eq!(last.range.end.character - last.range.start.character, 28);
@@ -268,9 +292,10 @@ fn test_last_import_custom_revert() {
 #[test]
 fn test_reference_links_have_no_tooltip() {
     let build = load_build();
-    let imports = extract_imports(&build.ast);
+    let key = pm_key(&build.ast);
+    let imports = extract_imports(&build.ast, &key);
     let source_bytes = build_source_bytes(&imports);
-    let uri = Url::from_file_path(PM_KEY).unwrap();
+    let uri = Url::from_file_path(&key).unwrap();
 
     let all_links = links::document_links(&build, &uri, &source_bytes);
     let ref_links: Vec<_> = all_links.iter().filter(|l| l.tooltip.is_none()).collect();
@@ -303,7 +328,8 @@ fn test_empty_sources() {
 #[test]
 fn test_file_uri_mismatch_returns_empty() {
     let build = load_build();
-    let imports = extract_imports(&build.ast);
+    let key = pm_key(&build.ast);
+    let imports = extract_imports(&build.ast, &key);
     let source_bytes = build_source_bytes(&imports);
     let uri = Url::from_file_path("/tmp/nonexistent.sol").unwrap();
 

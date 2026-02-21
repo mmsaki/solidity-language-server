@@ -233,13 +233,6 @@ mod tests {
         crate::solc::normalize_solc_output(raw, None)
     }
 
-    /// Load pool-manager-ast.json (forge output) and normalize to canonical shape.
-    fn load_forge_fixture() -> Value {
-        let data = std::fs::read_to_string("pool-manager-ast.json").expect("test fixture");
-        let raw: Value = serde_json::from_str(&data).expect("valid json");
-        crate::solc::normalize_forge_output(raw)
-    }
-
     #[test]
     fn test_format_gas_number() {
         assert_eq!(format_gas("109"), "109");
@@ -399,14 +392,6 @@ mod tests {
         let index = build_gas_index(&data);
         let gas = gas_for_contract(&index, "src/Foo.sol", "Foo").unwrap();
         assert_eq!(gas.creation.get("codeDepositCost").unwrap(), "6924600");
-    }
-
-    #[test]
-    fn test_build_gas_index_from_forge_fixture() {
-        let ast = load_forge_fixture();
-        let index = build_gas_index(&ast);
-        // Forge fixture has no gasEstimates, just verify it doesn't crash
-        assert!(index.is_empty() || !index.is_empty());
     }
 
     #[test]
