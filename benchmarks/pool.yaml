@@ -33,3 +33,15 @@ methods:
     line: 149
     col: 15
     # liquidityDelta — ~13 usages within modifyLiquidity
+
+  textDocument/semanticTokens/range:
+    startLine: 0
+    startCol: 0
+    line: 200
+    col: 0
+    # First 200 lines — imports through modifyLiquidity
+
+  textDocument/signatureHelp:
+    line: 102
+    col: 15
+    # Inside TickMath call

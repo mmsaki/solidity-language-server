@@ -33,3 +33,15 @@ methods:
     line: 254
     col: 18
     # mockHooks — ~6 usages within test function scope
+
+  textDocument/semanticTokens/range:
+    startLine: 0
+    startCol: 0
+    line: 300
+    col: 0
+    # First 300 lines — imports through early test functions
+
+  textDocument/signatureHelp:
+    line: 116
+    col: 51
+    # Inside TickMath call

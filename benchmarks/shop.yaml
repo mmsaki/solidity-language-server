@@ -104,3 +104,15 @@ methods:
         line: 69
         col: 27
         # owner — both edits applied
+
+  textDocument/semanticTokens/range:
+    startLine: 0
+    startCol: 0
+    line: 100
+    col: 0
+    # First 100 lines — covers imports, Transaction library, and Shop contract header
+
+  textDocument/signatureHelp:
+    line: 159
+    col: 18
+    # Inside placeOrder — after function call open paren
