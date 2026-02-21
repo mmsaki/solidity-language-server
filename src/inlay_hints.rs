@@ -533,15 +533,36 @@ fn emit_param_hints(args: &[Node], info: &ParamInfo, hints: &mut Vec<InlayHint>)
 ///
 /// For `transfer(...)` → "transfer"
 /// For `PRICE.addTax(...)` → "addTax"
+/// For `router.swap{value: 100}(...)` → "swap"  (value modifier)
 fn ts_call_function_name<'a>(node: Node<'a>, source: &'a str) -> Option<&'a str> {
     let func_expr = node.child_by_field_name("function")?;
     // The expression wrapper has one named child
     let inner = first_named_child(func_expr)?;
-    match inner.kind() {
-        "identifier" => Some(&source[inner.byte_range()]),
+    extract_name_from_expr(inner, source)
+}
+
+/// Recursively extract the function/event name from an expression node.
+///
+/// tree-sitter-solidity parses `foo{value: 100}(args)` as a `call_expression`
+/// whose `function` field is a `struct_expression` (because the grammar lacks
+/// `function_call_options_expression`). We handle this by drilling into the
+/// struct_expression's `type` field to find the real function name.
+fn extract_name_from_expr<'a>(node: Node<'a>, source: &'a str) -> Option<&'a str> {
+    match node.kind() {
+        "identifier" => Some(&source[node.byte_range()]),
         "member_expression" => {
-            let prop = inner.child_by_field_name("property")?;
+            let prop = node.child_by_field_name("property")?;
             Some(&source[prop.byte_range()])
+        }
+        "struct_expression" => {
+            // foo{value: 100} → type field holds the actual callee expression
+            let type_expr = node.child_by_field_name("type")?;
+            extract_name_from_expr(type_expr, source)
+        }
+        "expression" => {
+            // tree-sitter wraps many nodes in an `expression` wrapper — unwrap it
+            let inner = first_named_child(node)?;
+            extract_name_from_expr(inner, source)
         }
         _ => None,
     }
@@ -758,14 +779,39 @@ fn find_call_by_text_scan<'a>(source: &'a str, byte_pos: usize) -> Option<TsCall
     let paren_pos = paren_pos?;
 
     // Extract the function name before the `(`
-    // Walk backwards from paren_pos to find the identifier
-    let before_paren = &source[..paren_pos];
-    let name_end = before_paren.trim_end().len();
-    let name_start = before_paren[..name_end]
-        .rfind(|c: char| !c.is_alphanumeric() && c != '_')
+    // If there's a `{...}` block before the paren (e.g. `swap{value: 100}(`),
+    // skip over it to find the real function name.
+    let mut scan_end = paren_pos;
+    let before_paren = source[..scan_end].trim_end();
+    if before_paren.ends_with('}') {
+        // Skip the `{...}` block by finding the matching `{`
+        let mut brace_depth: i32 = 0;
+        for (i, ch) in before_paren.char_indices().rev() {
+            match ch {
+                '}' => brace_depth += 1,
+                '{' => {
+                    brace_depth -= 1;
+                    if brace_depth == 0 {
+                        scan_end = i;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    let before_name = &source[..scan_end];
+    let name_end = before_name.trim_end().len();
+    let name_start = before_name[..name_end]
+        .rfind(|c: char| !c.is_alphanumeric() && c != '_' && c != '.')
         .map(|i| i + 1)
         .unwrap_or(0);
-    let name = &source[name_start..name_end];
+    // For member expressions like `router.swap`, take only the part after the last dot
+    let raw_name = &source[name_start..name_end];
+    let name = match raw_name.rfind('.') {
+        Some(dot) => &raw_name[dot + 1..],
+        None => raw_name,
+    };
 
     if name.is_empty() || !name.chars().next()?.is_alphabetic() {
         return None;
@@ -1217,6 +1263,83 @@ contract Foo {
         find_calls(tree.root_node(), source, &mut found);
         assert_eq!(found.len(), 1);
         assert_eq!(found[0], "addTax");
+    }
+
+    #[test]
+    fn test_ts_call_with_value_modifier() {
+        let source = r#"
+contract Foo {
+    function test() public {
+        router.swap{value: 100}(nativeKey, SWAP_PARAMS, testSettings, ZERO_BYTES);
+    }
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+        let mut found = Vec::new();
+        find_calls(tree.root_node(), source, &mut found);
+        assert_eq!(found.len(), 1, "should find one call");
+        assert_eq!(
+            found[0], "swap",
+            "should extract 'swap' through struct_expression"
+        );
+    }
+
+    #[test]
+    fn test_ts_call_simple_with_value_modifier() {
+        let source = r#"
+contract Foo {
+    function test() public {
+        foo{value: 1 ether}(42);
+    }
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+        let mut found = Vec::new();
+        find_calls(tree.root_node(), source, &mut found);
+        assert_eq!(found.len(), 1, "should find one call");
+        assert_eq!(
+            found[0], "foo",
+            "should extract 'foo' through struct_expression"
+        );
+    }
+
+    #[test]
+    fn test_ts_call_with_gas_modifier() {
+        let source = r#"
+contract Foo {
+    function test() public {
+        addr.call{gas: 5000, value: 1 ether}("");
+    }
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+        let mut found = Vec::new();
+        find_calls(tree.root_node(), source, &mut found);
+        assert_eq!(found.len(), 1, "should find one call");
+        assert_eq!(
+            found[0], "call",
+            "should extract 'call' through struct_expression"
+        );
+    }
+
+    #[test]
+    fn test_find_call_by_text_scan_with_value_modifier() {
+        // Simulate cursor inside args of `router.swap{value: 100}(arg1, |)`
+        let source = "router.swap{value: 100}(nativeKey, SWAP_PARAMS)";
+        // Place cursor after comma: position after "nativeKey, "
+        let byte_pos = source.find("SWAP_PARAMS").unwrap();
+        let ctx = find_call_by_text_scan(source, byte_pos).unwrap();
+        assert_eq!(ctx.name, "swap");
+        assert_eq!(ctx.arg_index, 1);
+    }
+
+    #[test]
+    fn test_find_call_by_text_scan_simple_value_modifier() {
+        let source = "foo{value: 1 ether}(42)";
+        let byte_pos = source.find("42").unwrap();
+        let ctx = find_call_by_text_scan(source, byte_pos).unwrap();
+        assert_eq!(ctx.name, "foo");
+        assert_eq!(ctx.arg_index, 0);
     }
 
     #[test]
