@@ -43,5 +43,5 @@ methods:
 
   textDocument/signatureHelp:
     line: 102
-    col: 15
-    # Inside TickMath call
+    col: 43
+    # Inside TickMath.getTickAtSqrtPrice(sqrtPriceX96)

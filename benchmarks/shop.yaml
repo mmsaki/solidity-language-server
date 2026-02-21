@@ -113,6 +113,6 @@ methods:
     # First 100 lines — covers imports, Transaction library, and Shop contract header
 
   textDocument/signatureHelp:
-    line: 159
-    col: 18
-    # Inside placeOrder — after function call open paren
+    line: 143
+    col: 12
+    # Inside addTax(TAX, TAX_BASE) — first argument position

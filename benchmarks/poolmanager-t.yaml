@@ -43,5 +43,5 @@ methods:
 
   textDocument/signatureHelp:
     line: 116
-    col: 51
-    # Inside TickMath call
+    col: 37
+    # Inside bound(sqrtPriceX96, TickMath.MIN_SQRT_PRICE, ...)
