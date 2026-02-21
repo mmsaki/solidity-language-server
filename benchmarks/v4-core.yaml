@@ -17,6 +17,14 @@ response: full
 benchmarks:
   - all
 
+exclude:
+  - textDocument/typeDefinition
+  - textDocument/implementation
+  - textDocument/foldingRange
+  - textDocument/selectionRange
+  - textDocument/codeLens
+  - textDocument/documentColor
+
 servers:
   - label: mmsaki
     link: https://github.com/mmsaki/solidity-language-server

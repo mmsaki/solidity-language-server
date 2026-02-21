@@ -6,6 +6,8 @@ cache
 # Benchmark results (generated)
 benchmarks/*/
 !benchmarks/*.yaml
+!benchmarks/shop/
+benchmarks/shop/results.json
 
 # Scratch
 *.json

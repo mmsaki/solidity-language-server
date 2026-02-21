@@ -1,11 +1,20 @@
 # Pool.sol — medium library (~613 lines, no viaIR)
 #   lsp-bench -c benchmarks/pool.yaml
 
+project: v4-core
 file: src/libraries/Pool.sol
 line: 102
 col: 15
 output: benchmarks/pool
 report: README.md
+
+exclude:
+  - textDocument/typeDefinition
+  - textDocument/implementation
+  - textDocument/foldingRange
+  - textDocument/selectionRange
+  - textDocument/codeLens
+  - textDocument/documentColor
 
 methods:
   textDocument/definition:
@@ -19,10 +28,10 @@ methods:
     # TickMath — ~18 references throughout the file
 
   textDocument/completion:
-    line: 105
-    col: 44
+    line: 110
+    col: 13
     trigger: "."
-    # Slot0.wrap(bytes32(0)). — completion on Slot0 user-defined type
+    # self. — completion on State storage struct members (slot0, liquidity, tickBitmap, etc.)
 
   textDocument/hover:
     line: 145
@@ -40,6 +49,13 @@ methods:
     line: 200
     col: 0
     # First 200 lines — imports through modifyLiquidity
+
+  textDocument/formatting:
+    didChange:
+      - file: ../example/Pool.unformatted.snapshot
+        line: 0
+        col: 0
+        # 10 extra blank lines at end — formatter should strip them
 
   textDocument/signatureHelp:
     line: 102

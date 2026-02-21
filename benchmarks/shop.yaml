@@ -5,6 +5,7 @@
 #   Shop.v2.snapshot — getPrice() added after constructor (+5 lines, shifts code below)
 #   Shop.v3.snapshot — cancelOrder() + event + error added at bottom (new usages of orderId, orders, owner)
 #   Shop.v4.snapshot — both edits combined (top + bottom)
+#   Shop.unformatted.snapshot — 10 extra blank lines at end (for formatting benchmark)
 
 project: example
 file: Shop.sol
@@ -12,6 +13,14 @@ line: 136
 col: 32
 output: benchmarks/shop
 report: README.md
+
+exclude:
+  - textDocument/typeDefinition
+  - textDocument/implementation
+  - textDocument/foldingRange
+  - textDocument/selectionRange
+  - textDocument/codeLens
+  - textDocument/documentColor
 
 methods:
   textDocument/definition:
@@ -111,6 +120,13 @@ methods:
     line: 100
     col: 0
     # First 100 lines — covers imports, Transaction library, and Shop contract header
+
+  textDocument/formatting:
+    didChange:
+      - file: Shop.unformatted.snapshot
+        line: 0
+        col: 0
+        # 10 extra blank lines at end — formatter should strip them
 
   textDocument/signatureHelp:
     line: 143
