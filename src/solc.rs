@@ -403,39 +403,39 @@ pub async fn resolve_remappings(config: &FoundryConfig) -> Vec<String> {
 /// Reads compiler settings from the `FoundryConfig` (parsed from `foundry.toml`)
 /// and maps them to the solc standard JSON `settings` object:
 ///
-/// - `optimizer` / `optimizer_runs` → `settings.optimizer.enabled` / `settings.optimizer.runs`
 /// - `via_ir` → `settings.viaIR`
 /// - `evm_version` → `settings.evmVersion`
+///
+/// Note: `optimizer` is intentionally excluded — it adds ~3s and doesn't
+/// affect AST/ABI/doc quality.
+///
+/// `evm.gasEstimates` is conditionally included: when `via_ir` is **off**,
+/// gas estimates cost only ~0.7s (legacy pipeline) and enable gas inlay
+/// hints. When `via_ir` is **on**, requesting gas estimates forces solc
+/// through the full Yul IR codegen pipeline, inflating cold start from
+/// ~1.8s to ~14s — so they are excluded.
 pub fn build_standard_json_input(
     file_path: &str,
     remappings: &[String],
     config: &FoundryConfig,
 ) -> Value {
+    // Base contract-level outputs: ABI, docs, method selectors.
+    // Gas estimates are only included when viaIR is off (see doc comment).
+    let mut contract_outputs = vec!["abi", "devdoc", "userdoc", "evm.methodIdentifiers"];
+    if !config.via_ir {
+        contract_outputs.push("evm.gasEstimates");
+    }
+
     let mut settings = json!({
         "remappings": remappings,
         "outputSelection": {
             "*": {
-                "*": [
-                    "abi",
-                    "devdoc",
-                    "userdoc",
-                    "evm.methodIdentifiers",
-                    "evm.gasEstimates"
-                ],
+                "*": contract_outputs,
                 "": ["ast"]
             }
         }
     });
 
-    // Optimizer settings
-    if config.optimizer {
-        settings["optimizer"] = json!({
-            "enabled": true,
-            "runs": config.optimizer_runs
-        });
-    }
-
-    // Via IR pipeline
     if config.via_ir {
         settings["viaIR"] = json!(true);
     }
@@ -899,6 +899,15 @@ mod tests {
         assert!(settings.get("optimizer").is_none());
         assert!(settings.get("viaIR").is_none());
         assert!(settings.get("evmVersion").is_none());
+
+        // Without viaIR, gasEstimates is included (~0.7s, enables gas hints)
+        let outputs = settings["outputSelection"]["*"]["*"].as_array().unwrap();
+        let output_names: Vec<&str> = outputs.iter().map(|v| v.as_str().unwrap()).collect();
+        assert!(output_names.contains(&"evm.gasEstimates"));
+        assert!(output_names.contains(&"abi"));
+        assert!(output_names.contains(&"devdoc"));
+        assert!(output_names.contains(&"userdoc"));
+        assert!(output_names.contains(&"evm.methodIdentifiers"));
     }
 
     #[test]
@@ -914,13 +923,16 @@ mod tests {
 
         let settings = input.get("settings").unwrap();
 
-        // Optimizer
-        let optimizer = settings.get("optimizer").unwrap();
-        assert!(optimizer.get("enabled").unwrap().as_bool().unwrap());
-        assert_eq!(optimizer.get("runs").unwrap().as_u64().unwrap(), 9999999);
+        // Optimizer is never passed — adds ~3s and doesn't affect AST/ABI/docs
+        assert!(settings.get("optimizer").is_none());
 
-        // Via IR
+        // viaIR IS passed when config has it (some contracts require it to compile)
         assert!(settings.get("viaIR").unwrap().as_bool().unwrap());
+
+        // With viaIR, gasEstimates is excluded (would cause 14s cold start)
+        let outputs = settings["outputSelection"]["*"]["*"].as_array().unwrap();
+        let output_names: Vec<&str> = outputs.iter().map(|v| v.as_str().unwrap()).collect();
+        assert!(!output_names.contains(&"evm.gasEstimates"));
 
         // EVM version
         assert_eq!(

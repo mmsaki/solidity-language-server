@@ -479,6 +479,14 @@ impl LanguageServer for ForgeLsp {
                     ),
                 )
                 .await;
+            if foundry_cfg.via_ir {
+                self.client
+                    .log_message(
+                        MessageType::WARNING,
+                        "via_ir is enabled in foundry.toml — gas estimate inlay hints are disabled to avoid slow compilation",
+                    )
+                    .await;
+            }
             let mut fc = self.foundry_config.write().await;
             *fc = foundry_cfg;
         }
@@ -876,6 +884,14 @@ impl LanguageServer for ForgeLsp {
                         ),
                     )
                     .await;
+                if foundry_cfg.via_ir {
+                    self.client
+                        .log_message(
+                            MessageType::WARNING,
+                            "via_ir is enabled in foundry.toml — gas estimate inlay hints are disabled to avoid slow compilation",
+                        )
+                        .await;
+                }
                 let mut fc = self.foundry_config.write().await;
                 *fc = foundry_cfg;
                 break;
