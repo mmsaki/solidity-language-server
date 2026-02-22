@@ -25,7 +25,7 @@ Benchmarked against `v4-core` — `src/libraries/Pool.sol`.
 
 ## Summary
 
-| Method | [mmsaki v0.1.24](https://github.com/mmsaki/solidity-language-server) solidity-language-server 0.1.24+commit.9746134.macos.aarch64 | [solc](https://docs.soliditylang.org) 0.8.26+commit.8a97fa7a.Darwin.appleclang | [qiuxiang](https://github.com/qiuxiang/solidity-ls) solidity-ls 0.5.4 | [juanfranblanco](https://github.com/juanfranblanco/vscode-solidity) vscode-solidity-server 0.0.187 | [nomicfoundation](https://github.com/NomicFoundation/hardhat-vscode) @nomicfoundation/solidity-language-server 0.8.25 |
+| Method | [mmsaki v0.1.24](https://github.com/mmsaki/solidity-language-server) | [solc](https://docs.soliditylang.org) | [qiuxiang](https://github.com/qiuxiang/solidity-ls) | [juanfranblanco](https://github.com/juanfranblanco/vscode-solidity) | [nomicfoundation](https://github.com/NomicFoundation/hardhat-vscode) |
 |--------|----------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------|-----------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------|
 | [initialize](#initialize) | 7.1ms ⚡ | 109.9ms | 110.1ms | 537.4ms | 878.2ms |
 | [textDocument/diagnostic](#textdocumentdiagnostic) | 509.5ms | 183.2ms ⚡ | 258.0ms | crash | 941.3ms |
