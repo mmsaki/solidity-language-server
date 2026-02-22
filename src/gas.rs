@@ -164,6 +164,7 @@ pub fn resolve_contract_key(
     sources: &Value,
     decl_node: &Value,
     index: &GasIndex,
+    id_index: Option<&crate::hover::IdIndex>,
 ) -> Option<String> {
     let node_type = decl_node.get("nodeType").and_then(|v| v.as_str())?;
 
@@ -173,16 +174,24 @@ pub fn resolve_contract_key(
         let scope_id = decl_node.get("scope").and_then(|v| v.as_u64())?;
         (name.to_string(), scope_id)
     } else {
-        // Walk up to containing contract
+        // Walk up to containing contract — O(1) when id_index is available
         let scope_id = decl_node.get("scope").and_then(|v| v.as_u64())?;
-        let scope_node = crate::hover::find_node_by_id(sources, crate::types::NodeId(scope_id))?;
+        let scope_node = if let Some(idx) = id_index {
+            idx.get(&scope_id)?
+        } else {
+            crate::hover::find_node_by_id(sources, crate::types::NodeId(scope_id))?
+        };
         let contract_name = scope_node.get("name").and_then(|v| v.as_str())?;
         let source_id = scope_node.get("scope").and_then(|v| v.as_u64())?;
         (contract_name.to_string(), source_id)
     };
 
-    // Find the SourceUnit to get the absolute path
-    let source_unit = crate::hover::find_node_by_id(sources, crate::types::NodeId(source_id))?;
+    // Find the SourceUnit to get the absolute path — O(1) when id_index is available
+    let source_unit = if let Some(idx) = id_index {
+        idx.get(&source_id)?
+    } else {
+        crate::hover::find_node_by_id(sources, crate::types::NodeId(source_id))?
+    };
     let abs_path = source_unit.get("absolutePath").and_then(|v| v.as_str())?;
 
     // Build the exact key

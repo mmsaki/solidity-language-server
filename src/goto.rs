@@ -106,6 +106,9 @@ pub struct CachedBuild {
     pub path_to_abs: HashMap<String, String>,
     pub external_refs: ExternalRefs,
     pub id_to_path_map: HashMap<String, String>,
+    /// O(1) node-id → raw AST node lookup. Built once, replaces the O(N)
+    /// `find_node_by_id` that walked the entire AST per call.
+    pub id_index: HashMap<u64, Value>,
     /// Pre-built gas index from contract output. Built once, reused by
     /// hover, inlay hints, and code lens.
     pub gas_index: crate::gas::GasIndex,
@@ -154,16 +157,62 @@ impl CachedBuild {
 
         let doc_index = crate::hover::build_doc_index(&ast);
 
+        let id_index = if let Some(sources) = ast.get("sources") {
+            build_id_index_owned(sources)
+        } else {
+            HashMap::new()
+        };
+
         Self {
             ast,
             nodes,
             path_to_abs,
             external_refs,
             id_to_path_map,
+            id_index,
             gas_index,
             hint_index,
             doc_index,
             build_version,
+        }
+    }
+
+    /// O(1) lookup of a raw AST node by its id.
+    pub fn find_node(&self, id: NodeId) -> Option<&Value> {
+        self.id_index.get(&id.0)
+    }
+}
+
+/// Build a flat node-id → owned AST node index from all sources.
+///
+/// Clones each node `Value` so the index is self-contained and does not
+/// borrow from the AST. Built once in `CachedBuild::new()`.
+fn build_id_index_owned(sources: &Value) -> HashMap<u64, Value> {
+    let mut index = HashMap::new();
+    if let Some(obj) = sources.as_object() {
+        for (_, source_data) in obj {
+            if let Some(ast) = source_data.get("ast") {
+                collect_nodes_owned(ast, &mut index);
+            }
+        }
+    }
+    index
+}
+
+/// Recursively collect all nodes with an `id` field, cloning each into the index.
+fn collect_nodes_owned(node: &Value, index: &mut HashMap<u64, Value>) {
+    if let Some(id) = node.get("id").and_then(|v| v.as_u64()) {
+        index.insert(id, node.clone());
+    }
+    for key in CHILD_KEYS {
+        if let Some(child) = node.get(*key) {
+            if let Some(arr) = child.as_array() {
+                for item in arr {
+                    collect_nodes_owned(item, index);
+                }
+            } else if child.is_object() {
+                collect_nodes_owned(child, index);
+            }
         }
     }
 }

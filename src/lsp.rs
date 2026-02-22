@@ -1678,15 +1678,7 @@ impl LanguageServer for ForgeLsp {
             None => return Ok(None),
         };
 
-        let result = hover::hover_info(
-            &cached_build.ast,
-            &uri,
-            position,
-            &source_bytes,
-            &cached_build.gas_index,
-            &cached_build.doc_index,
-            &cached_build.hint_index,
-        );
+        let result = hover::hover_info(&cached_build, &uri, position, &source_bytes);
 
         if result.is_some() {
             self.client
@@ -1733,13 +1725,7 @@ impl LanguageServer for ForgeLsp {
             None => return Ok(None),
         };
 
-        let result = hover::signature_help(
-            &cached_build.ast,
-            &source_bytes,
-            position,
-            &cached_build.hint_index,
-            &cached_build.doc_index,
-        );
+        let result = hover::signature_help(&cached_build, &source_bytes, position);
 
         Ok(result)
     }

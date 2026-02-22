@@ -6,10 +6,12 @@ use tower_lsp::lsp_types::{
 };
 
 use crate::gas::{self, GasIndex};
-use crate::goto::{CHILD_KEYS, cache_ids, pos_to_bytes};
-use crate::inlay_hints::HintIndex;
+use crate::goto::{CHILD_KEYS, pos_to_bytes};
 use crate::references::{byte_to_decl_via_external_refs, byte_to_id};
 use crate::types::{EventSelector, FuncSelector, MethodId, NodeId, Selector};
+
+/// Type alias for the pre-built node-id → raw AST node index.
+pub type IdIndex = HashMap<u64, Value>;
 
 // ── DocIndex — pre-built userdoc/devdoc lookup ─────────────────────────────
 
@@ -380,6 +382,7 @@ pub fn lookup_doc_entry(
     doc_index: &DocIndex,
     decl_node: &Value,
     sources: &Value,
+    id_index: Option<&IdIndex>,
 ) -> Option<DocEntry> {
     let node_type = decl_node.get("nodeType").and_then(|v| v.as_str())?;
 
@@ -398,7 +401,7 @@ pub fn lookup_doc_entry(
                 let var_name = decl_node.get("name").and_then(|v| v.as_str())?;
                 // Find containing contract via scope
                 let scope_id = decl_node.get("scope").and_then(|v| v.as_u64())?;
-                let scope_node = find_node_by_id(sources, NodeId(scope_id))?;
+                let scope_node = find_node_fast(id_index, sources, scope_id)?;
                 let contract_name = scope_node.get("name").and_then(|v| v.as_str())?;
 
                 // Need to find the path — walk source units
@@ -412,7 +415,7 @@ pub fn lookup_doc_entry(
             // Fallback: try method by name
             let fn_name = decl_node.get("name").and_then(|v| v.as_str())?;
             let scope_id = decl_node.get("scope").and_then(|v| v.as_u64())?;
-            let scope_node = find_node_by_id(sources, NodeId(scope_id))?;
+            let scope_node = find_node_fast(id_index, sources, scope_id)?;
             let contract_name = scope_node.get("name").and_then(|v| v.as_str())?;
             let path = find_source_path_for_node(sources, scope_id)?;
             let key = DocKey::Method(format!("{path}:{contract_name}:{fn_name}"));
@@ -456,6 +459,7 @@ pub fn lookup_param_doc(
     doc_index: &DocIndex,
     decl_node: &Value,
     sources: &Value,
+    id_index: Option<&IdIndex>,
 ) -> Option<String> {
     let node_type = decl_node.get("nodeType").and_then(|v| v.as_str())?;
     if node_type != "VariableDeclaration" {
@@ -469,7 +473,7 @@ pub fn lookup_param_doc(
 
     // Walk up to the parent via scope
     let scope_id = decl_node.get("scope").and_then(|v| v.as_u64())?;
-    let parent_node = find_node_by_id(sources, NodeId(scope_id))?;
+    let parent_node = find_node_fast(id_index, sources, scope_id)?;
     let parent_type = parent_node.get("nodeType").and_then(|v| v.as_str())?;
 
     // Only handle function/error/event parents
@@ -497,7 +501,7 @@ pub fn lookup_param_doc(
     };
 
     // Try DocIndex first (structured devdoc)
-    if let Some(parent_doc) = lookup_doc_entry(doc_index, parent_node, sources) {
+    if let Some(parent_doc) = lookup_doc_entry(doc_index, parent_node, sources, id_index) {
         if is_return {
             // Look in returns
             for (rname, rdesc) in &parent_doc.returns {
@@ -519,7 +523,7 @@ pub fn lookup_param_doc(
     if let Some(doc_text) = extract_documentation(parent_node) {
         // Resolve @inheritdoc if present
         let resolved = if doc_text.contains("@inheritdoc") {
-            resolve_inheritdoc(sources, parent_node, &doc_text)
+            resolve_inheritdoc(sources, parent_node, &doc_text, id_index)
         } else {
             None
         };
@@ -631,6 +635,20 @@ pub fn format_doc_entry(entry: &DocEntry) -> String {
     lines.join("\n")
 }
 
+/// O(1) lookup when an `id_index` is available, falling back to the O(N)
+/// `find_node_by_id` walk when it is not.
+fn find_node_fast<'a>(
+    id_index: Option<&'a IdIndex>,
+    sources: &'a Value,
+    id: u64,
+) -> Option<&'a Value> {
+    if let Some(idx) = id_index {
+        idx.get(&id)
+    } else {
+        find_node_by_id(sources, NodeId(id))
+    }
+}
+
 /// Find the raw AST node with the given id by walking all sources.
 pub fn find_node_by_id(sources: &Value, target_id: NodeId) -> Option<&Value> {
     let sources_obj = sources.as_object()?;
@@ -705,10 +723,11 @@ pub fn extract_selector(node: &Value) -> Option<Selector> {
 /// 3. Find the parent contract in `baseContracts` of the scope contract
 /// 4. Match by selector in the parent's child nodes
 /// 5. Return the matched parent node's documentation
-pub fn resolve_inheritdoc<'a>(
-    sources: &'a Value,
-    decl_node: &'a Value,
+pub fn resolve_inheritdoc(
+    sources: &Value,
+    decl_node: &Value,
     doc_text: &str,
+    id_index: Option<&IdIndex>,
 ) -> Option<String> {
     // Parse "@inheritdoc ParentName"
     let parent_name = doc_text
@@ -725,8 +744,8 @@ pub fn resolve_inheritdoc<'a>(
     // Get the scope (containing contract id)
     let scope_id = decl_node.get("scope").and_then(|v| v.as_u64())?;
 
-    // Find the scope contract
-    let scope_contract = find_node_by_id(sources, NodeId(scope_id))?;
+    // Find the scope contract — O(1) when id_index is available
+    let scope_contract = find_node_fast(id_index, sources, scope_id)?;
 
     // Find the parent contract in baseContracts by name
     let base_contracts = scope_contract
@@ -746,8 +765,8 @@ pub fn resolve_inheritdoc<'a>(
         }
     })?;
 
-    // Find the parent contract node
-    let parent_contract = find_node_by_id(sources, NodeId(parent_id))?;
+    // Find the parent contract node — O(1) when id_index is available
+    let parent_contract = find_node_fast(id_index, sources, parent_id)?;
 
     // Search parent's children for matching selector
     let parent_nodes = parent_contract.get("nodes").and_then(|v| v.as_array())?;
@@ -1197,13 +1216,14 @@ fn mapping_signature_help(sources: &Value, name: &str) -> Option<SignatureHelp> 
 ///
 /// Also handles mapping index access (`name[key]`), showing the key type.
 pub fn signature_help(
-    ast_data: &Value,
+    cached_build: &crate::goto::CachedBuild,
     source_bytes: &[u8],
     position: Position,
-    hint_index: &HintIndex,
-    doc_index: &DocIndex,
 ) -> Option<SignatureHelp> {
-    let sources = ast_data.get("sources")?;
+    let sources = cached_build.ast.get("sources")?;
+    let hint_index = &cached_build.hint_index;
+    let doc_index = &cached_build.doc_index;
+    let id_index = &cached_build.id_index;
 
     let source_str = String::from_utf8_lossy(source_bytes);
     let tree = crate::inlay_hints::ts_parse(&source_str)?;
@@ -1223,8 +1243,8 @@ pub fn signature_help(
         lookup.resolve_callsite_with_skip(ctx.call_start_byte, ctx.name, ctx.arg_count)
     })?;
 
-    // Find the declaration AST node
-    let decl_node = find_node_by_id(sources, NodeId(decl_id))?;
+    // Find the declaration AST node — O(1) lookup
+    let decl_node = id_index.get(&decl_id)?;
 
     // Build the signature label
     let sig_label = build_function_signature(decl_node)?;
@@ -1233,7 +1253,7 @@ pub fn signature_help(
     let param_strings = build_parameter_strings(decl_node.get("parameters"));
 
     // Look up @param docs from DocIndex
-    let doc_entry = lookup_doc_entry(doc_index, decl_node, sources);
+    let doc_entry = lookup_doc_entry(doc_index, decl_node, sources, Some(id_index));
 
     // Calculate parameter label offsets within the signature string
     // The signature looks like: "function name(uint256 amount, uint16 tax) ..."
@@ -1352,6 +1372,7 @@ fn gas_hover_for_function(
     decl_node: &Value,
     sources: &Value,
     gas_index: &GasIndex,
+    id_index: Option<&IdIndex>,
 ) -> Option<String> {
     let node_type = decl_node.get("nodeType").and_then(|v| v.as_str())?;
     if node_type != "FunctionDefinition" {
@@ -1368,7 +1389,7 @@ fn gas_hover_for_function(
 
     // Try by name (internal functions)
     let fn_name = decl_node.get("name").and_then(|v| v.as_str())?;
-    let contract_key = gas::resolve_contract_key(sources, decl_node, gas_index)?;
+    let contract_key = gas::resolve_contract_key(sources, decl_node, gas_index, id_index)?;
     let contract_gas = gas_index.get(&contract_key)?;
 
     // Match by name prefix in internal gas estimates
@@ -1387,13 +1408,14 @@ fn gas_hover_for_contract(
     decl_node: &Value,
     sources: &Value,
     gas_index: &GasIndex,
+    id_index: Option<&IdIndex>,
 ) -> Option<String> {
     let node_type = decl_node.get("nodeType").and_then(|v| v.as_str())?;
     if node_type != "ContractDefinition" {
         return None;
     }
 
-    let contract_key = gas::resolve_contract_key(sources, decl_node, gas_index)?;
+    let contract_key = gas::resolve_contract_key(sources, decl_node, gas_index, id_index)?;
     let contract_gas = gas_index.get(&contract_key)?;
 
     let mut lines = Vec::new();
@@ -1434,25 +1456,20 @@ fn gas_hover_for_contract(
 
 /// Produce hover information for the symbol at the given position.
 pub fn hover_info(
-    ast_data: &Value,
+    cached_build: &crate::goto::CachedBuild,
     file_uri: &Url,
     position: Position,
     source_bytes: &[u8],
-    gas_index: &GasIndex,
-    doc_index: &DocIndex,
-    hint_index: &HintIndex,
 ) -> Option<Hover> {
-    let sources = ast_data.get("sources")?;
-    let source_id_to_path = ast_data
-        .get("source_id_to_path")
-        .and_then(|v| v.as_object())?;
-
-    let id_to_path: HashMap<String, String> = source_id_to_path
-        .iter()
-        .map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
-        .collect();
-
-    let (nodes, path_to_abs, external_refs) = cache_ids(sources);
+    let sources = cached_build.ast.get("sources")?;
+    let nodes = &cached_build.nodes;
+    let path_to_abs = &cached_build.path_to_abs;
+    let external_refs = &cached_build.external_refs;
+    let id_to_path = &cached_build.id_to_path_map;
+    let id_index = &cached_build.id_index;
+    let gas_index = &cached_build.gas_index;
+    let doc_index = &cached_build.doc_index;
+    let hint_index = &cached_build.hint_index;
 
     // Resolve the file path
     let file_path = file_uri.to_file_path().ok()?;
@@ -1467,8 +1484,8 @@ pub fn hover_info(
     let byte_pos = pos_to_bytes(source_bytes, position);
 
     // Resolve: first try Yul external refs, then normal node lookup
-    let node_id = byte_to_decl_via_external_refs(&external_refs, &id_to_path, &abs_path, byte_pos)
-        .or_else(|| byte_to_id(&nodes, &abs_path, byte_pos))?;
+    let node_id = byte_to_decl_via_external_refs(external_refs, id_to_path, &abs_path, byte_pos)
+        .or_else(|| byte_to_id(nodes, &abs_path, byte_pos))?;
 
     // Get the NodeInfo for this node
     let node_info = nodes
@@ -1478,8 +1495,8 @@ pub fn hover_info(
     // Follow referenced_declaration to the declaration node
     let decl_id = node_info.referenced_declaration.unwrap_or(node_id);
 
-    // Find the raw AST node for the declaration
-    let decl_node = find_node_by_id(sources, decl_id)?;
+    // Find the raw AST node for the declaration — O(1) lookup
+    let decl_node = cached_build.find_node(decl_id)?;
 
     // Build hover content
     let mut parts: Vec<String> = Vec::new();
@@ -1504,31 +1521,35 @@ pub fn hover_info(
         parts.push(format!("Selector: `{}`", selector.to_prefixed()));
     }
 
+    let id_idx = Some(id_index);
+
     // Gas estimates — only shown when `@lsp-enable gas-estimates` is present
     if !gas_index.is_empty() {
         let source_str = String::from_utf8_lossy(source_bytes);
         if source_has_gas_sentinel(&source_str, decl_node) {
-            if let Some(gas_text) = gas_hover_for_function(decl_node, sources, gas_index) {
+            if let Some(gas_text) = gas_hover_for_function(decl_node, sources, gas_index, id_idx) {
                 parts.push(gas_text);
-            } else if let Some(gas_text) = gas_hover_for_contract(decl_node, sources, gas_index) {
+            } else if let Some(gas_text) =
+                gas_hover_for_contract(decl_node, sources, gas_index, id_idx)
+            {
                 parts.push(gas_text);
             }
         }
     }
 
     // Documentation — try userdoc/devdoc first, fall back to AST docs
-    if let Some(doc_entry) = lookup_doc_entry(doc_index, decl_node, sources) {
+    if let Some(doc_entry) = lookup_doc_entry(doc_index, decl_node, sources, id_idx) {
         let formatted = format_doc_entry(&doc_entry);
         if !formatted.is_empty() {
             parts.push(format!("---\n{formatted}"));
         }
     } else if let Some(doc_text) = extract_documentation(decl_node) {
-        let inherited_doc = resolve_inheritdoc(sources, decl_node, &doc_text);
+        let inherited_doc = resolve_inheritdoc(sources, decl_node, &doc_text, id_idx);
         let formatted = format_natspec(&doc_text, inherited_doc.as_deref());
         if !formatted.is_empty() {
             parts.push(format!("---\n{formatted}"));
         }
-    } else if let Some(param_doc) = lookup_param_doc(doc_index, decl_node, sources) {
+    } else if let Some(param_doc) = lookup_param_doc(doc_index, decl_node, sources, id_idx) {
         // Parameter/return value — show the @param/@return description from parent
         if !param_doc.is_empty() {
             parts.push(format!("---\n{param_doc}"));
@@ -1551,11 +1572,11 @@ pub fn hover_info(
                 ctx.arg_index,
             )
         {
-            // Look up @param doc using the declaration id
-            let fn_decl = find_node_by_id(sources, NodeId(resolved.decl_id));
+            // Look up @param doc using the declaration id — O(1) lookup
+            let fn_decl = id_index.get(&resolved.decl_id);
             let param_doc = fn_decl.and_then(|decl| {
                 // Try DocIndex first (structured devdoc)
-                if let Some(doc_entry) = lookup_doc_entry(doc_index, decl, sources) {
+                if let Some(doc_entry) = lookup_doc_entry(doc_index, decl, sources, id_idx) {
                     for (pname, pdesc) in &doc_entry.params {
                         if pname == &resolved.param_name {
                             return Some(pdesc.clone());
@@ -1565,7 +1586,7 @@ pub fn hover_info(
                 // Fallback: parse raw NatSpec on the function definition
                 if let Some(doc_text) = extract_documentation(decl) {
                     let resolved_doc = if doc_text.contains("@inheritdoc") {
-                        resolve_inheritdoc(sources, decl, &doc_text)
+                        resolve_inheritdoc(sources, decl, &doc_text, id_idx)
                     } else {
                         None
                     };
@@ -1875,7 +1896,7 @@ mod tests {
         let doc_text = extract_documentation(decl).unwrap();
         assert!(doc_text.contains("@inheritdoc"));
 
-        let resolved = resolve_inheritdoc(sources, decl, &doc_text).unwrap();
+        let resolved = resolve_inheritdoc(sources, decl, &doc_text, None).unwrap();
         assert!(resolved.contains("@notice"));
         assert!(resolved.contains("Swap against the given pool"));
     }
@@ -1888,7 +1909,7 @@ mod tests {
         let decl = find_node_by_id(sources, NodeId(330)).unwrap();
         let doc_text = extract_documentation(decl).unwrap();
 
-        let resolved = resolve_inheritdoc(sources, decl, &doc_text).unwrap();
+        let resolved = resolve_inheritdoc(sources, decl, &doc_text, None).unwrap();
         assert!(resolved.contains("Initialize the state"));
         assert!(resolved.contains("@param key"));
     }
@@ -1901,7 +1922,7 @@ mod tests {
         // extsload(bytes32) — id=1306, selector "1e2eaeaf"
         let decl = find_node_by_id(sources, NodeId(1306)).unwrap();
         let doc_text = extract_documentation(decl).unwrap();
-        let resolved = resolve_inheritdoc(sources, decl, &doc_text).unwrap();
+        let resolved = resolve_inheritdoc(sources, decl, &doc_text, None).unwrap();
         assert!(resolved.contains("granular pool state"));
         // Should match the single-slot overload doc
         assert!(resolved.contains("@param slot"));
@@ -1909,13 +1930,13 @@ mod tests {
         // extsload(bytes32, uint256) — id=1319, selector "35fd631a"
         let decl2 = find_node_by_id(sources, NodeId(1319)).unwrap();
         let doc_text2 = extract_documentation(decl2).unwrap();
-        let resolved2 = resolve_inheritdoc(sources, decl2, &doc_text2).unwrap();
+        let resolved2 = resolve_inheritdoc(sources, decl2, &doc_text2, None).unwrap();
         assert!(resolved2.contains("@param startSlot"));
 
         // extsload(bytes32[]) — id=1331, selector "dbd035ff"
         let decl3 = find_node_by_id(sources, NodeId(1331)).unwrap();
         let doc_text3 = extract_documentation(decl3).unwrap();
-        let resolved3 = resolve_inheritdoc(sources, decl3, &doc_text3).unwrap();
+        let resolved3 = resolve_inheritdoc(sources, decl3, &doc_text3, None).unwrap();
         assert!(resolved3.contains("sparse pool state"));
     }
 
@@ -1926,7 +1947,7 @@ mod tests {
         // PoolManager.swap with @inheritdoc — verify format_natspec resolves it
         let decl = find_node_by_id(sources, NodeId(616)).unwrap();
         let doc_text = extract_documentation(decl).unwrap();
-        let inherited = resolve_inheritdoc(sources, decl, &doc_text);
+        let inherited = resolve_inheritdoc(sources, decl, &doc_text, None);
         let formatted = format_natspec(&doc_text, inherited.as_deref());
         // Should have the resolved content, not "@inheritdoc"
         assert!(!formatted.contains("@inheritdoc"));
@@ -1949,7 +1970,7 @@ mod tests {
             Some("sqrtPriceCurrentX96")
         );
 
-        let doc = lookup_param_doc(&doc_index, param_node, sources).unwrap();
+        let doc = lookup_param_doc(&doc_index, param_node, sources, None).unwrap();
         assert!(
             doc.contains("invalid"),
             "should describe the invalid price: {doc}"
@@ -1964,7 +1985,7 @@ mod tests {
 
         // PriceLimitAlreadyExceeded.sqrtPriceLimitX96 (id=3823)
         let param_node = find_node_by_id(sources, NodeId(3823)).unwrap();
-        let doc = lookup_param_doc(&doc_index, param_node, sources).unwrap();
+        let doc = lookup_param_doc(&doc_index, param_node, sources, None).unwrap();
         assert!(
             doc.contains("surpassed price limit"),
             "should describe the surpassed limit: {doc}"
@@ -1984,7 +2005,7 @@ mod tests {
             Some("delta")
         );
 
-        let doc = lookup_param_doc(&doc_index, param_node, sources).unwrap();
+        let doc = lookup_param_doc(&doc_index, param_node, sources, None).unwrap();
         assert!(
             doc.contains("deltas of the token balances"),
             "should have return doc: {doc}"
@@ -2010,7 +2031,7 @@ mod tests {
             .find(|p| p.get("name").and_then(|v| v.as_str()) == Some("params"))
             .unwrap();
 
-        let doc = lookup_param_doc(&doc_index, params_param, sources).unwrap();
+        let doc = lookup_param_doc(&doc_index, params_param, sources, None).unwrap();
         assert!(
             doc.contains("position details"),
             "should have param doc: {doc}"
@@ -2028,7 +2049,7 @@ mod tests {
         let param_node = find_node_by_id(sources, NodeId(478)).unwrap();
         assert_eq!(param_node.get("name").and_then(|v| v.as_str()), Some("key"));
 
-        let doc = lookup_param_doc(&doc_index, param_node, sources).unwrap();
+        let doc = lookup_param_doc(&doc_index, param_node, sources, None).unwrap();
         assert!(
             doc.contains("pool to swap"),
             "should have inherited param doc: {doc}"
@@ -2043,7 +2064,7 @@ mod tests {
 
         // PoolManager contract (id=1216) is not a parameter
         let node = find_node_by_id(sources, NodeId(1216)).unwrap();
-        assert!(lookup_param_doc(&doc_index, node, sources).is_none());
+        assert!(lookup_param_doc(&doc_index, node, sources, None).is_none());
     }
 
     // ── DocIndex integration tests (poolmanager.json) ──

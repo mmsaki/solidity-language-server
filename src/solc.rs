@@ -751,16 +751,18 @@ fn discover_recursive(dir: &Path, files: &mut Vec<PathBuf>) {
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if SKIP_DIRS.contains(&name) {
-                    continue;
-                }
+            if let Some(name) = path.file_name().and_then(|n| n.to_str())
+                && SKIP_DIRS.contains(&name)
+            {
+                continue;
             }
             discover_recursive(&path, files);
-        } else if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-            if name.ends_with(".sol") && !name.ends_with(".t.sol") && !name.ends_with(".s.sol") {
-                files.push(path);
-            }
+        } else if let Some(name) = path.file_name().and_then(|n| n.to_str())
+            && name.ends_with(".sol")
+            && !name.ends_with(".t.sol")
+            && !name.ends_with(".s.sol")
+        {
+            files.push(path);
         }
     }
 }
