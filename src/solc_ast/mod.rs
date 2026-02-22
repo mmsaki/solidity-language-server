@@ -188,7 +188,7 @@ mod tests {
         // Verify that we can access nodes in every source unit
         // and that the top-level contract count matches expectations.
         let mut contract_count = 0;
-        for (_path, entry) in &output.sources {
+        for (_path, entry) in output.sources {
             for node in &entry.ast.nodes {
                 if matches!(node, SourceUnitNode::ContractDefinition(_)) {
                     contract_count += 1;
@@ -263,7 +263,7 @@ mod tests {
         let output = load_fixture();
         let mut counter = NodeCounter::new();
 
-        for (_path, entry) in &output.sources {
+        for (_path, entry) in output.sources {
             entry.ast.accept(&mut counter);
         }
 

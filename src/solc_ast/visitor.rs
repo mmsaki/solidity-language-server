@@ -753,10 +753,10 @@ impl Node for ElementaryTypeName {
 
 impl Node for UserDefinedTypeName {
     fn accept(&self, v: &mut dyn AstVisitor) {
-        if v.visit_user_defined_type_name(self) {
-            if let Some(path) = &self.path_node {
-                path.accept(v);
-            }
+        if v.visit_user_defined_type_name(self)
+            && let Some(path) = &self.path_node
+        {
+            path.accept(v);
         }
         v.end_visit_user_defined_type_name(self);
     }
@@ -912,10 +912,10 @@ impl Node for Break {
 
 impl Node for Return {
     fn accept(&self, v: &mut dyn AstVisitor) {
-        if v.visit_return(self) {
-            if let Some(expr) = &self.expression {
-                expr.accept(v);
-            }
+        if v.visit_return(self)
+            && let Some(expr) = &self.expression
+        {
+            expr.accept(v);
         }
         v.end_visit_return(self);
     }
