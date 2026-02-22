@@ -5,3 +5,6 @@ cache
 
 # Benchmark results (generated)
 benchmarks/**/*.json
+
+# VS Code extension build artifacts
+editors/vscode/*.vsix
