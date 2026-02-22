@@ -362,6 +362,15 @@ fn extract_call_info(node: &Value, id_index: &HashMap<u64, &Value>) -> Option<Ca
     }
 
     let expr = node.get("expression")?;
+    let expr_type = expr.get("nodeType").and_then(|v| v.as_str()).unwrap_or("");
+
+    // Contract creation: `new Token(args)` — the expression is a NewExpression
+    // whose typeName holds the referencedDeclaration pointing to the contract.
+    // We resolve the constructor from the contract's nodes.
+    if expr_type == "NewExpression" {
+        return extract_new_expression_call_info(expr, args.len(), id_index);
+    }
+
     let decl_id = expr.get("referencedDeclaration").and_then(|v| v.as_u64())?;
 
     let decl_node = id_index.get(&decl_id)?;
@@ -392,6 +401,52 @@ fn extract_call_info(node: &Value, id_index: &HashMap<u64, &Value>) -> Option<Ca
     })
 }
 
+/// Extract call info for a `new ContractName(args)` expression.
+///
+/// The AST represents this as a `FunctionCall` whose `expression` is a
+/// `NewExpression`.  The `NewExpression` has a `typeName` with a
+/// `referencedDeclaration` pointing to the `ContractDefinition`.  We find the
+/// constructor inside that contract to get parameter names.
+fn extract_new_expression_call_info(
+    new_expr: &Value,
+    _arg_count: usize,
+    id_index: &HashMap<u64, &Value>,
+) -> Option<CallInfo> {
+    let type_name = new_expr.get("typeName")?;
+    let contract_id = type_name
+        .get("referencedDeclaration")
+        .and_then(|v| v.as_u64())?;
+
+    let contract_node = id_index.get(&contract_id)?;
+
+    // Find the constructor among the contract's nodes
+    let constructor = contract_node
+        .get("nodes")
+        .and_then(|v| v.as_array())?
+        .iter()
+        .find(|n| {
+            n.get("nodeType").and_then(|v| v.as_str()) == Some("FunctionDefinition")
+                && n.get("kind").and_then(|v| v.as_str()) == Some("constructor")
+        })?;
+
+    let constructor_id = constructor.get("id").and_then(|v| v.as_u64())?;
+    let names = get_parameter_names(constructor)?;
+
+    // Extract the contract name from the typeName path
+    let contract_name = type_name
+        .get("pathNode")
+        .and_then(|p| p.get("name"))
+        .and_then(|v| v.as_str())
+        // Fallback for older solc that may not have pathNode
+        .or_else(|| contract_node.get("name").and_then(|v| v.as_str()))?;
+
+    Some(CallInfo {
+        name: contract_name.to_string(),
+        params: ParamInfo { names, skip: 0 },
+        decl_id: constructor_id,
+    })
+}
+
 /// Extract the function/event name from an AST expression node.
 fn extract_function_name(expr: &Value) -> Option<String> {
     let node_type = expr.get("nodeType").and_then(|v| v.as_str())?;
@@ -400,6 +455,15 @@ fn extract_function_name(expr: &Value) -> Option<String> {
         "MemberAccess" => expr
             .get("memberName")
             .and_then(|v| v.as_str())
+            .map(String::from),
+        "NewExpression" => expr
+            .get("typeName")
+            .and_then(|t| {
+                t.get("pathNode")
+                    .and_then(|p| p.get("name"))
+                    .and_then(|v| v.as_str())
+                    .or_else(|| t.get("name").and_then(|v| v.as_str()))
+            })
             .map(String::from),
         _ => None,
     }
@@ -559,6 +623,10 @@ fn extract_name_from_expr<'a>(node: Node<'a>, source: &'a str) -> Option<&'a str
             let type_expr = node.child_by_field_name("type")?;
             extract_name_from_expr(type_expr, source)
         }
+        "new_expression" => {
+            // new Token(...) → the `name` field holds the type_name
+            ts_new_expression_name(node, source)
+        }
         "expression" => {
             // tree-sitter wraps many nodes in an `expression` wrapper — unwrap it
             let inner = first_named_child(node)?;
@@ -579,6 +647,28 @@ fn ts_emit_event_name<'a>(node: Node<'a>, source: &'a str) -> Option<&'a str> {
             Some(&source[prop.byte_range()])
         }
         _ => None,
+    }
+}
+
+/// Get the contract name from a `new_expression` node.
+///
+/// For `new Token(...)` → "Token"
+/// For `new Router(...)` → "Router"
+fn ts_new_expression_name<'a>(node: Node<'a>, source: &'a str) -> Option<&'a str> {
+    let name_node = node.child_by_field_name("name")?;
+    // The `name` field is a type_name; extract the identifier text from it
+    if name_node.kind() == "user_defined_type" || name_node.kind() == "type_name" {
+        // May have a single identifier child
+        let mut cursor = name_node.walk();
+        for child in name_node.children(&mut cursor) {
+            if child.kind() == "identifier" {
+                return Some(&source[child.byte_range()]);
+            }
+        }
+        // Fallback: use the full text of the name node
+        Some(&source[name_node.byte_range()])
+    } else {
+        Some(&source[name_node.byte_range()])
     }
 }
 
@@ -1360,6 +1450,130 @@ contract Foo {
     }
 
     #[test]
+    fn test_ts_new_expression_name() {
+        let source = r#"
+contract Token {
+    constructor(string memory _name, uint256 _supply) {}
+}
+contract Factory {
+    function create() public {
+        Token t = new Token("MyToken", 1000);
+    }
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+        let mut found = Vec::new();
+        find_new_exprs(tree.root_node(), source, &mut found);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0], "Token");
+    }
+
+    #[test]
+    fn test_ts_new_expression_arguments() {
+        // tree-sitter wraps `new Token(args)` as a call_expression whose
+        // callee is a new_expression. The call_argument nodes live on the
+        // call_expression, so we count them there.
+        let source = r#"
+contract Router {
+    constructor(address _manager, address _hook) {}
+}
+contract Factory {
+    function create() public {
+        Router r = new Router(address(this), address(0));
+    }
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+        let mut arg_counts = Vec::new();
+        find_call_arg_counts(tree.root_node(), &mut arg_counts);
+        // call_expression for `new Router(...)` has 2 args
+        assert_eq!(arg_counts, vec![2]);
+    }
+
+    #[test]
+    fn test_ts_find_call_at_byte_new_expression() {
+        let source = r#"
+contract Token {
+    constructor(string memory _name, uint256 _supply) {}
+}
+contract Factory {
+    function create() public {
+        Token t = new Token("MyToken", 1000);
+    }
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+        let pos = source.find("1000").unwrap();
+        let ctx = ts_find_call_at_byte(tree.root_node(), source, pos).unwrap();
+        assert_eq!(ctx.name, "Token");
+        assert_eq!(ctx.arg_index, 1);
+        assert_eq!(ctx.arg_count, 2);
+    }
+
+    #[test]
+    fn test_ts_find_call_at_byte_new_expression_first_arg() {
+        let source = r#"
+contract Token {
+    constructor(string memory _name, uint256 _supply) {}
+}
+contract Factory {
+    function create() public {
+        Token t = new Token("MyToken", 1000);
+    }
+}
+"#;
+        let tree = ts_parse(source).unwrap();
+        let pos = source.find("\"MyToken\"").unwrap();
+        let ctx = ts_find_call_at_byte(tree.root_node(), source, pos).unwrap();
+        assert_eq!(ctx.name, "Token");
+        assert_eq!(ctx.arg_index, 0);
+        assert_eq!(ctx.arg_count, 2);
+    }
+
+    #[test]
+    fn test_extract_new_expression_call_info() {
+        // Simulate the AST structure solc produces for `new Token("MyToken", 1000)`
+        let constructor: Value = serde_json::json!({
+            "id": 21,
+            "nodeType": "FunctionDefinition",
+            "kind": "constructor",
+            "name": "",
+            "parameters": {
+                "parameters": [
+                    {"name": "_name", "nodeType": "VariableDeclaration"},
+                    {"name": "_supply", "nodeType": "VariableDeclaration"}
+                ]
+            }
+        });
+        let contract: Value = serde_json::json!({
+            "id": 22,
+            "nodeType": "ContractDefinition",
+            "name": "Token",
+            "nodes": [constructor]
+        });
+        let new_expr: Value = serde_json::json!({
+            "nodeType": "NewExpression",
+            "typeName": {
+                "nodeType": "UserDefinedTypeName",
+                "referencedDeclaration": 22,
+                "pathNode": {
+                    "name": "Token"
+                }
+            }
+        });
+
+        let mut id_index: HashMap<u64, &Value> = HashMap::new();
+        id_index.insert(22, &contract);
+        id_index.insert(21, &constructor);
+
+        let info = extract_new_expression_call_info(&new_expr, 2, &id_index).unwrap();
+        assert_eq!(info.name, "Token");
+        assert_eq!(info.params.names, vec!["_name", "_supply"]);
+        assert_eq!(info.params.skip, 0);
+        assert_eq!(info.decl_id, 21);
+    }
+
+    #[test]
     fn test_ts_call_arguments_count() {
         let source = r#"
 contract Foo {
@@ -1421,6 +1635,18 @@ contract Foo {
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
             find_emits(child, source, out);
+        }
+    }
+
+    fn find_new_exprs<'a>(node: Node<'a>, source: &'a str, out: &mut Vec<&'a str>) {
+        if node.kind() == "new_expression"
+            && let Some(name) = ts_new_expression_name(node, source)
+        {
+            out.push(name);
+        }
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            find_new_exprs(child, source, out);
         }
     }
 
