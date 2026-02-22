@@ -111,6 +111,32 @@ lint.severity = ["high", "med"]
 lint.exclude = ["pascal-case-struct"]
 ```
 
+## AI Integrations
+
+### OpenCode
+
+Add to `~/.config/opencode/config.json`:
+
+```json
+{
+  "lsp": {
+    "solidity-language-server": {
+      "command": ["solidity-language-server", "--stdio"],
+      "extensions": [".sol"],
+      "initialization": {
+        "inlayHints": {
+          "parameters": true,
+          "gasEstimates": true
+        },
+        "lint": {
+          "enabled": true
+        }
+      }
+    }
+  }
+}
+```
+
 ## Verify Release Binaries
 
 Release binaries are GPG-signed. Download `checksums-sha256.txt`, `checksums-sha256.txt.asc`, and [`public-key.asc`](public-key.asc) from the [release](https://github.com/mmsaki/solidity-language-server/releases/latest):
