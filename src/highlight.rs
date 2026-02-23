@@ -53,11 +53,6 @@ fn find_identifier_at<'a>(root: Node<'a>, _source: &str, position: Position) -> 
         if current.kind() == "identifier" {
             return Some(current);
         }
-        // Also accept member_expression targets and similar named nodes
-        // where the user clicks on the name portion
-        if current.kind() == "identifier" {
-            return Some(current);
-        }
         current = current.parent()?;
     }
 
@@ -67,13 +62,9 @@ fn find_identifier_at<'a>(root: Node<'a>, _source: &str, position: Position) -> 
     // token adjacent to an identifier.
     let parent = node.parent()?;
     let mut cursor = parent.walk();
-    for child in parent.children(&mut cursor) {
-        if child.kind() == "identifier" && contains_point(child, point) {
-            return Some(child);
-        }
-    }
-
-    None
+    parent
+        .children(&mut cursor)
+        .find(|child| child.kind() == "identifier" && contains_point(*child, point))
 }
 
 /// Check if a node's range contains the given point.
@@ -171,10 +162,10 @@ fn classify_highlight(node: Node, _source: &str) -> DocumentHighlightKind {
 
     // For expression-wrapped identifiers, check the grandparent.
     // Tree structure: grandparent > expression(parent) > identifier(node)
-    if parent.kind() == "expression" {
-        if let Some(grandparent) = parent.parent() {
-            return classify_expression_context(grandparent, parent);
-        }
+    if parent.kind() == "expression"
+        && let Some(grandparent) = parent.parent()
+    {
+        return classify_expression_context(grandparent, parent);
     }
 
     DocumentHighlightKind::READ
@@ -212,16 +203,13 @@ fn classify_expression_context(grandparent: Node, expr_node: Node) -> DocumentHi
         // Tuple destructuring: (a, b) = func()
         // The tuple_expression wraps expressions that are LHS of assignment
         "tuple_expression" => {
-            if let Some(great_grandparent) = grandparent.parent() {
-                // Check if the tuple expression node is on the LHS
-                if let Some(ggp) = great_grandparent.parent() {
-                    if (ggp.kind() == "assignment_expression"
-                        || ggp.kind() == "augmented_assignment_expression")
-                        && is_lhs_of_assignment(ggp, great_grandparent)
-                    {
-                        return DocumentHighlightKind::WRITE;
-                    }
-                }
+            if let Some(great_grandparent) = grandparent.parent()
+                && let Some(ggp) = great_grandparent.parent()
+                && (ggp.kind() == "assignment_expression"
+                    || ggp.kind() == "augmented_assignment_expression")
+                && is_lhs_of_assignment(ggp, great_grandparent)
+            {
+                return DocumentHighlightKind::WRITE;
             }
             DocumentHighlightKind::READ
         }

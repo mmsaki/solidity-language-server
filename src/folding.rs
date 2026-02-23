@@ -159,10 +159,11 @@ fn collect_comment_folds(root: Node, source: &str, out: &mut Vec<FoldingRange>) 
     // Also recurse into contract/struct/enum bodies for inner comments
     let mut cursor2 = root.walk();
     for child in root.children(&mut cursor2) {
-        if child.is_named() && has_body(child) {
-            if let Some(body) = find_body(child) {
-                collect_comment_folds(body, source, out);
-            }
+        if child.is_named()
+            && has_body(child)
+            && let Some(body) = find_body(child)
+        {
+            collect_comment_folds(body, source, out);
         }
     }
 }
