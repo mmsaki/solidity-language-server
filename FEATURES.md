@@ -59,7 +59,7 @@ See [FEATURES.md](FEATURES.md) for the full LSP feature set and roadmap.
 - [ ] `textDocument/rangeFormatting` - Range formatting
 - [ ] `textDocument/onTypeFormatting` - On-type formatting
 - [x] `textDocument/foldingRange` - Folding ranges (contracts, functions, structs, enums, blocks, comments, imports)
-- [ ] `textDocument/selectionRange` - Selection ranges
+- [x] `textDocument/selectionRange` - Selection ranges
 - [x] `textDocument/inlayHint` - Inlay hints (parameter names, gas estimates)
 - [x] `textDocument/semanticTokens` - Semantic tokens
 - [x] `textDocument/semanticTokens/full` - Full semantic tokens

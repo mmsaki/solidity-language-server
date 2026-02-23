@@ -9,6 +9,7 @@ use crate::links;
 use crate::references;
 use crate::rename;
 use crate::runner::{ForgeRunner, Runner};
+use crate::selection;
 use crate::semantic_tokens;
 use crate::symbols;
 use crate::utils;
@@ -628,6 +629,7 @@ impl LanguageServer for ForgeLsp {
                 document_formatting_provider: Some(OneOf::Left(true)),
                 code_lens_provider: None,
                 folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
+                selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
                 inlay_hint_provider: Some(OneOf::Right(InlayHintServerCapabilities::Options(
                     InlayHintOptions {
                         resolve_provider: Some(false),
@@ -2025,6 +2027,53 @@ impl LanguageServer for ForgeLsp {
                 .log_message(
                     MessageType::INFO,
                     format!("found {} folding ranges", ranges.len()),
+                )
+                .await;
+            Ok(Some(ranges))
+        }
+    }
+
+    async fn selection_range(
+        &self,
+        params: SelectionRangeParams,
+    ) -> tower_lsp::jsonrpc::Result<Option<Vec<SelectionRange>>> {
+        self.client
+            .log_message(MessageType::INFO, "got textDocument/selectionRange request")
+            .await;
+
+        let uri = params.text_document.uri;
+
+        let source = {
+            let cache = self.text_cache.read().await;
+            cache.get(&uri.to_string()).map(|(_, s)| s.clone())
+        };
+
+        let source = match source {
+            Some(s) => s,
+            None => {
+                let file_path = match uri.to_file_path() {
+                    Ok(p) => p,
+                    Err(_) => return Ok(None),
+                };
+                match std::fs::read_to_string(&file_path) {
+                    Ok(s) => s,
+                    Err(_) => return Ok(None),
+                }
+            }
+        };
+
+        let ranges = selection::selection_ranges(&source, &params.positions);
+
+        if ranges.is_empty() {
+            self.client
+                .log_message(MessageType::INFO, "no selection ranges found")
+                .await;
+            Ok(None)
+        } else {
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    format!("found {} selection ranges", ranges.len()),
                 )
                 .await;
             Ok(Some(ranges))

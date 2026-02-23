@@ -13,6 +13,7 @@ pub mod lsp;
 pub mod references;
 pub mod rename;
 pub mod runner;
+pub mod selection;
 pub mod semantic_tokens;
 pub mod solar_runner;
 pub mod solc;
