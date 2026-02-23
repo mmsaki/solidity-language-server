@@ -396,6 +396,15 @@ impl ForgeLsp {
             }
         }
 
+        // Sanitize: some LSP clients (e.g. trunk.io) crash on diagnostics with
+        // empty message fields. Replace any empty message with a safe fallback
+        // before publishing regardless of which diagnostic source produced it.
+        for diag in &mut all_diagnostics {
+            if diag.message.is_empty() {
+                diag.message = "Unknown issue".to_string();
+            }
+        }
+
         // publish diags with no version, so we are sure they get displayed
         self.client
             .publish_diagnostics(uri, all_diagnostics, None)
