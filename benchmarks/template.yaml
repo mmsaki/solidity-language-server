@@ -20,7 +20,6 @@ benchmarks:
 exclude:
   - textDocument/typeDefinition
   - textDocument/implementation
-  - textDocument/selectionRange
   - textDocument/codeLens
   - textDocument/documentColor
 

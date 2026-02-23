@@ -22,7 +22,6 @@ exclude:
   - textDocument/colorPresentation
   - textDocument/rangeFormatting
   - textDocument/onTypeFormatting
-  - textDocument/selectionRange
 
 methods:
   textDocument/completion:
