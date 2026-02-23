@@ -1,6 +1,6 @@
 # example / Shop.sol
 
-── initialize (7.8ms) ──
+── initialize (9.9ms) ──
 
 ← mmsaki v0.1.25 [content] "ok"
 ← solc [content] "ok"
@@ -8,7 +8,7 @@
 ← juanfranblanco [content] "ok"
 ← nomicfoundation [content] "ok"
 
-── textDocument/diagnostic (74.2ms, 14.0 MB) ──
+── textDocument/diagnostic (74.3ms, 14.0 MB) ──
 
 ← mmsaki v0.1.25 [content] { diagnostics: Array(1) [{ code: "asm-keccak256", message: "use of inefficient hashing mechanism; consider using inline assembly", range: { end: { character: 66, line: 140 }, start: { character: 26...
 ← solc [content] { diagnostics: [], uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/example/A.sol" }
@@ -16,7 +16,7 @@
 ← juanfranblanco [content] { diagnostics: [], uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol" }
 ← nomicfoundation [content] { diagnostics: [], uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol" }
 
-── textDocument/semanticTokens/full/delta (1.5ms, 13.7 MB) ──
+── textDocument/semanticTokens/full/delta (1.5ms, 13.8 MB) ──
 
 ← mmsaki v0.1.25 [content] { edits: [], resultId: "3" }
 ← solc [error] error
@@ -24,7 +24,7 @@
 ← juanfranblanco [unsupported] unsupported
 ← nomicfoundation [unsupported] unsupported
 
-── textDocument/definition (3.3ms, 13.9 MB) ──
+── textDocument/definition (3.5ms, 13.8 MB) ──
 
 {
   "id": 1,
@@ -47,7 +47,7 @@
 ← juanfranblanco [content] Array(1) [{ range: { end: { character: 28, line: 68 }, start: { character: 4, line: 68 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol" }]
 ← nomicfoundation [content] { range: { end: { character: 19, line: 21 }, start: { character: 8, line: 21 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol" }
 
-── textDocument/declaration (0.2ms, 13.9 MB) ──
+── textDocument/declaration (0.2ms, 14.0 MB) ──
 
 {
   "id": 1,
@@ -70,7 +70,7 @@
 ← juanfranblanco [unsupported] unsupported
 ← nomicfoundation [unsupported] unsupported
 
-── textDocument/hover (3.0ms, 14.0 MB) ──
+── textDocument/hover (1.2ms, 13.9 MB) ──
 
 {
   "id": 1,
@@ -96,7 +96,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal..." } }
 	function addTax(uint256 amoun..." } }
 ← nomicfoundation [null] empty
 
-── textDocument/references (1.0ms, 13.8 MB) ──
+── textDocument/references (0.8ms, 13.8 MB) ──
 
 {
   "id": 1,
@@ -122,7 +122,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal..." } }
 ← juanfranblanco [content] Array(42) [{ range: { end: { character: 33, line: 69 }, start: { character: 4, line: 69 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol" }, { range: { end: ...
 ← nomicfoundation [content] Array(11) [{ range: { end: { character: 32, line: 69 }, start: { character: 27, line: 69 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol" }, { range: { end:...
 
-── textDocument/completion (0.9ms, 14.0 MB) ──
+── textDocument/completion (0.7ms, 13.8 MB) ──
 
 {
   "id": 1,
@@ -149,7 +149,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal..." } }
 ← juanfranblanco [empty] 0 items
 ← nomicfoundation [null] empty
 
-── textDocument/signatureHelp (13.8 MB) ──
+── textDocument/signatureHelp (0.9ms, 13.8 MB) ──
 
 {
   "id": 1,
@@ -157,8 +157,8 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal..." } }
   "method": "textDocument/signatureHelp",
   "params": {
     "position": {
-      "character": 12,
-      "line": 143
+      "character": 45,
+      "line": 136
     },
     "textDocument": {
       "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
@@ -166,13 +166,13 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal..." } }
   }
 }
 
-← mmsaki v0.1.25 [error] empty
+← mmsaki v0.1.25 [content] { activeParameter: 1, activeSignature: 0, signatures: Array(1) [{ activeParameter: 1, label: "function addTax(uint256 amount, uint16 tax, uint16 base) internal pure return...", parameters: Array(3)...
 ← solc [unsupported] unsupported
 ← qiuxiang [error] empty
 ← juanfranblanco [error] empty
 ← nomicfoundation [error] empty
 
-── textDocument/rename (1.3ms, 13.9 MB) ──
+── textDocument/rename (1.2ms, 13.9 MB) ──
 
 {
   "id": 1,
@@ -190,13 +190,13 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal..." } }
   }
 }
 
-← mmsaki v0.1.25 [content] { changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol: Array(4) [{ newText: "__lsp_bench_rename__", range: { end: { character: 45, line: 257 }, start: { charact...
+← mmsaki v0.1.25 [content] { changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol: Array(4) [{ newText: "__lsp_bench_rename__", range: { end: { character: 13, line: 121 }, start: { charact...
 ← solc [error] { error: "Unhandled exception: /solidity/libsolidity/interface/CompilerStack.cpp(1178):..." }
 ← qiuxiang [content] { changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol: Array(2) [{ newText: "__lsp_bench_rename__", range: { end: { character: 40, line: 40 }, start: { characte...
 ← juanfranblanco [error] { error: "Unhandled method textDocument/rename" }
 ← nomicfoundation [content] { changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol: Array(11) [{ newText: "__lsp_bench_rename__", range: { end: { character: 32, line: 69 }, start: { charact...
 
-── textDocument/prepareRename (0.2ms, 14.0 MB) ──
+── textDocument/prepareRename (0.2ms, 13.9 MB) ──
 
 {
   "id": 1,
@@ -219,7 +219,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal..." } }
 ← juanfranblanco [unsupported] unsupported
 ← nomicfoundation [unsupported] unsupported
 
-── textDocument/documentSymbol (1.3ms, 13.9 MB) ──
+── textDocument/documentSymbol (1.2ms, 14.0 MB) ──
 
 {
   "id": 1,
@@ -238,7 +238,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal..." } }
 ← juanfranblanco [content] Array(2) [{ children: Array(3) [{ children: Array(4) [{ detail: "Input Parameter:  uint256", kind: 13, name: "amount", range: { end: { character: 34, line: 41 }, start: { character: 20, line: 41 } ...
 ← nomicfoundation [content] Array(2) [{ children: Array(3) [{ children: Array(5) [{ children: [], kind: 7, name: "buyer", range: { end: { character: 0, line: 30 }, start: { character: 0, line: 29 } }, selectionRange: { end: {...
 
-── textDocument/documentLink (13.8 MB) ──
+── textDocument/documentLink (13.9 MB) ──
 
 {
   "id": 1,
@@ -257,7 +257,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal..." } }
 ← juanfranblanco [unsupported] unsupported
 ← nomicfoundation [unsupported] unsupported
 
-── textDocument/formatting (13.3ms, 13.9 MB) ──
+── textDocument/formatting (14.1ms, 14.0 MB) ──
 
 {
   "id": 1,
@@ -288,7 +288,7 @@ pragma solidity ^0.8.0;
 //
 //               ...", range: { end: { character: 0, line: 282 }, start: { character: 0, line: 0 } } }]
 
-── textDocument/inlayHint (1.6ms, 14.0 MB) ──
+── textDocument/inlayHint (1.5ms, 14.0 MB) ──
 
 {
   "id": 1,
@@ -317,7 +317,7 @@ pragma solidity ^0.8.0;
 ← juanfranblanco [unsupported] unsupported
 ← nomicfoundation [unsupported] unsupported
 
-── textDocument/semanticTokens/full (1.6ms, 13.8 MB) ──
+── textDocument/semanticTokens/full (1.6ms, 14.0 MB) ──
 
 {
   "id": 1,
@@ -336,7 +336,7 @@ pragma solidity ^0.8.0;
 ← juanfranblanco [unsupported] unsupported
 ← nomicfoundation [content] { data: Array(280) [21, 8, 11, ... 277 more] }
 
-── textDocument/semanticTokens/range (1.0ms, 13.9 MB) ──
+── textDocument/semanticTokens/range (1.1ms, 13.8 MB) ──
 
 {
   "id": 1,
@@ -365,7 +365,7 @@ pragma solidity ^0.8.0;
 ← juanfranblanco [unsupported] unsupported
 ← nomicfoundation [unsupported] unsupported
 
-── workspace/symbol (1.1ms, 13.6 MB) ──
+── workspace/symbol (1.1ms, 13.9 MB) ──
 
 {
   "id": 1,

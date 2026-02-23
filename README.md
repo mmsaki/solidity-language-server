@@ -18,22 +18,22 @@ Or download a pre-built binary from the [latest release](https://github.com/mmsa
 
 ## Benchmarks
 
-| Method | [mmsaki](https://github.com/mmsaki/solidity-language-server) 0.1.24 | [solc](https://docs.soliditylang.org) 0.8.26 | [nomicfoundation](https://github.com/NomicFoundation/hardhat-vscode) 0.8.25 | [juanfranblanco](https://github.com/juanfranblanco/vscode-solidity) 0.0.187 | [qiuxiang](https://github.com/qiuxiang/solidity-ls) 0.5.4 |
+| Method | [mmsaki](https://github.com/mmsaki/solidity-language-server) 0.1.25 | [solc](https://docs.soliditylang.org) 0.8.26 | [nomicfoundation](https://github.com/NomicFoundation/hardhat-vscode) 0.8.25 | [juanfranblanco](https://github.com/juanfranblanco/vscode-solidity) 0.0.187 | [qiuxiang](https://github.com/qiuxiang/solidity-ls) 0.5.4 |
 |--------|--------|------|-----------------|----------------|----------|
-| initialize | 12.2ms ⚡ | 122.5ms | 846.0ms | 576.9ms | 93.0ms |
-| diagnostic | 81.8ms | 2.7ms ⚡ | 506.3ms | 771.4ms | 275.8ms |
-| definition | 3.2ms ⚡ | - | - | 70.0ms | 21.1ms |
-| declaration | 1.4ms ⚡ | - | - | - | - |
-| hover | 4.4ms ⚡ | - | - | 67.2ms | - |
-| references | 2.2ms | - | 1.8ms ⚡ | 71.2ms | 21.0ms |
-| completion | 0.2ms ⚡ | - | - | - | 20.2ms |
-| signatureHelp | 2.7ms ⚡ | - | - | - | - |
-| rename | 4.0ms | - | 1.9ms ⚡ | - | 22.0ms |
-| documentSymbol | 1.2ms ⚡ | - | 16.0ms | 6.8ms | - |
-| formatting | 12.7ms ⚡ | - | 175.7ms | - | - |
-| inlayHint | 1.9ms ⚡ | - | - | - | - |
-| semanticTokens/full | 1.6ms ⚡ | - | 14.3ms | - | - |
-| semanticTokens/range | 1.0ms ⚡ | - | - | - | - |
+| initialize | 9.9ms ⚡ | 311.8ms | 849.8ms | 651.8ms | 184.9ms |
+| diagnostic | 74.3ms | 3.4ms ⚡ | 546.8ms | 812.7ms | 146.1ms |
+| definition | 3.5ms | 2.2ms | 1.6ms ⚡ | 66.2ms | 20.2ms |
+| declaration | 0.2ms ⚡ | - | - | - | - |
+| hover | 1.2ms ⚡ | - | - | 69.4ms | - |
+| references | 0.8ms ⚡ | - | 1.8ms | 75.9ms | 20.7ms |
+| completion | 0.7ms ⚡ | - | - | - | 20.2ms |
+| signatureHelp | 0.9ms ⚡ | - | - | - | - |
+| rename | 1.2ms ⚡ | 2.4ms | 1.9ms | 65.7ms | 20.6ms |
+| documentSymbol | 1.2ms ⚡ | - | 17.4ms | 14.7ms | - |
+| formatting | 14.1ms ⚡ | - | 193.2ms | - | - |
+| inlayHint | 1.5ms ⚡ | - | - | - | - |
+| semanticTokens/full | 1.6ms ⚡ | - | 15.7ms | - | - |
+| semanticTokens/range | 1.1ms ⚡ | - | - | - | - |
 | semanticTokens/delta | 1.5ms ⚡ | - | - | - | - |
 | workspace/symbol | 1.1ms ⚡ | - | - | - | - |
 
