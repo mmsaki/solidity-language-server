@@ -419,7 +419,7 @@ fn build_param_strings_typed(params: &ParameterList) -> Vec<String> {
 }
 
 /// Extract a human-readable type string from a `TypeName` node.
-fn type_name_to_str(tn: &TypeName) -> &str {
+pub fn type_name_to_str(tn: &TypeName) -> &str {
     match tn {
         TypeName::ElementaryTypeName(e) => e
             .type_descriptions
@@ -450,15 +450,14 @@ fn type_name_to_str(tn: &TypeName) -> &str {
 }
 
 /// Visitor that collects all declaration nodes into a flat index.
+#[derive(Default)]
 pub struct DeclIndexVisitor {
     pub decls: HashMap<NodeID, DeclNode>,
 }
 
 impl DeclIndexVisitor {
     pub fn new() -> Self {
-        Self {
-            decls: HashMap::new(),
-        }
+        Self::default()
     }
 }
 
@@ -969,8 +968,6 @@ mod tests {
 
         let build = crate::goto::CachedBuild::new(raw, 0);
         let sources = build.ast.get("sources").unwrap();
-        let id_idx = Some(&build.id_index);
-
         let mut checked = 0;
         let mut mismatches = Vec::new();
 
@@ -986,8 +983,12 @@ mod tests {
                 &build.decl_index,
                 &build.node_id_to_source_path,
             );
-            let raw_result =
-                crate::hover::lookup_doc_entry(&build.doc_index, raw_node, sources, id_idx);
+            let raw_result = crate::hover::lookup_doc_entry(
+                &build.doc_index,
+                raw_node,
+                sources,
+                &build.id_index,
+            );
 
             // Compare the notice/details/title fields (params/returns order may vary)
             let typed_key = typed_result.as_ref().map(|e| {
@@ -1037,8 +1038,6 @@ mod tests {
         let raw: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         let build = crate::goto::CachedBuild::new(raw, 0);
-        let sources = build.ast.get("sources").unwrap();
-        let id_idx = Some(&build.id_index);
 
         let mut checked = 0;
         let mut mismatches = Vec::new();
@@ -1056,7 +1055,7 @@ mod tests {
 
             let typed_result =
                 crate::hover::resolve_inheritdoc_typed(decl, &doc_text, &build.decl_index);
-            let raw_result = crate::hover::resolve_inheritdoc(sources, raw_node, &doc_text, id_idx);
+            let raw_result = crate::hover::resolve_inheritdoc(raw_node, &doc_text, &build.id_index);
 
             if typed_result != raw_result {
                 mismatches.push(format!(

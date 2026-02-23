@@ -8,7 +8,9 @@ use tower_lsp::lsp_types::{
 use crate::gas::{self, GasIndex};
 use crate::goto::{CHILD_KEYS, pos_to_bytes};
 use crate::references::{byte_to_decl_via_external_refs, byte_to_id};
-use crate::types::{EventSelector, FuncSelector, MethodId, NodeId, Selector};
+#[cfg(test)]
+use crate::types::NodeId;
+use crate::types::{EventSelector, FuncSelector, MethodId, Selector};
 
 /// Type alias for the pre-built node-id → raw AST node index.
 pub type IdIndex = HashMap<u64, Value>;
@@ -382,7 +384,7 @@ pub fn lookup_doc_entry(
     doc_index: &DocIndex,
     decl_node: &Value,
     sources: &Value,
-    id_index: Option<&IdIndex>,
+    id_index: &IdIndex,
 ) -> Option<DocEntry> {
     let node_type = decl_node.get("nodeType").and_then(|v| v.as_str())?;
 
@@ -401,7 +403,7 @@ pub fn lookup_doc_entry(
                 let var_name = decl_node.get("name").and_then(|v| v.as_str())?;
                 // Find containing contract via scope
                 let scope_id = decl_node.get("scope").and_then(|v| v.as_u64())?;
-                let scope_node = find_node_fast(id_index, sources, scope_id)?;
+                let scope_node = id_index.get(&scope_id)?;
                 let contract_name = scope_node.get("name").and_then(|v| v.as_str())?;
 
                 // Need to find the path — walk source units
@@ -415,7 +417,7 @@ pub fn lookup_doc_entry(
             // Fallback: try method by name
             let fn_name = decl_node.get("name").and_then(|v| v.as_str())?;
             let scope_id = decl_node.get("scope").and_then(|v| v.as_u64())?;
-            let scope_node = find_node_fast(id_index, sources, scope_id)?;
+            let scope_node = id_index.get(&scope_id)?;
             let contract_name = scope_node.get("name").and_then(|v| v.as_str())?;
             let path = find_source_path_for_node(sources, scope_id)?;
             let key = DocKey::Method(format!("{path}:{contract_name}:{fn_name}"));
@@ -528,7 +530,7 @@ pub fn lookup_param_doc(
     doc_index: &DocIndex,
     decl_node: &Value,
     sources: &Value,
-    id_index: Option<&IdIndex>,
+    id_index: &IdIndex,
 ) -> Option<String> {
     let node_type = decl_node.get("nodeType").and_then(|v| v.as_str())?;
     if node_type != "VariableDeclaration" {
@@ -542,7 +544,7 @@ pub fn lookup_param_doc(
 
     // Walk up to the parent via scope
     let scope_id = decl_node.get("scope").and_then(|v| v.as_u64())?;
-    let parent_node = find_node_fast(id_index, sources, scope_id)?;
+    let parent_node = id_index.get(&scope_id)?;
     let parent_type = parent_node.get("nodeType").and_then(|v| v.as_str())?;
 
     // Only handle function/error/event parents
@@ -592,7 +594,7 @@ pub fn lookup_param_doc(
     if let Some(doc_text) = extract_documentation(parent_node) {
         // Resolve @inheritdoc if present
         let resolved = if doc_text.contains("@inheritdoc") {
-            resolve_inheritdoc(sources, parent_node, &doc_text, id_index)
+            resolve_inheritdoc(parent_node, &doc_text, id_index)
         } else {
             None
         };
@@ -795,22 +797,12 @@ pub fn format_doc_entry(entry: &DocEntry) -> String {
     lines.join("\n")
 }
 
-/// O(1) lookup when an `id_index` is available, falling back to the O(N)
-/// `find_node_by_id` walk when it is not.
-fn find_node_fast<'a>(
-    id_index: Option<&'a IdIndex>,
-    sources: &'a Value,
-    id: u64,
-) -> Option<&'a Value> {
-    if let Some(idx) = id_index {
-        idx.get(&id)
-    } else {
-        find_node_by_id(sources, NodeId(id))
-    }
-}
-
 /// Find the raw AST node with the given id by walking all sources.
-pub fn find_node_by_id(sources: &Value, target_id: NodeId) -> Option<&Value> {
+///
+/// O(N) DFS walk — only used in tests. Production code uses the O(1)
+/// `CachedBuild.id_index` HashMap instead.
+#[cfg(test)]
+fn find_node_by_id(sources: &Value, target_id: NodeId) -> Option<&Value> {
     let sources_obj = sources.as_object()?;
     for (_path, source_data) in sources_obj {
         let ast = source_data.get("ast")?;
@@ -883,12 +875,7 @@ pub fn extract_selector(node: &Value) -> Option<Selector> {
 /// 3. Find the parent contract in `baseContracts` of the scope contract
 /// 4. Match by selector in the parent's child nodes
 /// 5. Return the matched parent node's documentation
-pub fn resolve_inheritdoc(
-    sources: &Value,
-    decl_node: &Value,
-    doc_text: &str,
-    id_index: Option<&IdIndex>,
-) -> Option<String> {
+pub fn resolve_inheritdoc(decl_node: &Value, doc_text: &str, id_index: &IdIndex) -> Option<String> {
     // Parse "@inheritdoc ParentName"
     let parent_name = doc_text
         .lines()
@@ -904,8 +891,8 @@ pub fn resolve_inheritdoc(
     // Get the scope (containing contract id)
     let scope_id = decl_node.get("scope").and_then(|v| v.as_u64())?;
 
-    // Find the scope contract — O(1) when id_index is available
-    let scope_contract = find_node_fast(id_index, sources, scope_id)?;
+    // Find the scope contract — O(1) via id_index
+    let scope_contract = id_index.get(&scope_id)?;
 
     // Find the parent contract in baseContracts by name
     let base_contracts = scope_contract
@@ -925,8 +912,8 @@ pub fn resolve_inheritdoc(
         }
     })?;
 
-    // Find the parent contract node — O(1) when id_index is available
-    let parent_contract = find_node_fast(id_index, sources, parent_id)?;
+    // Find the parent contract node — O(1) via id_index
+    let parent_contract = id_index.get(&parent_id)?;
 
     // Search parent's children for matching selector
     let parent_nodes = parent_contract.get("nodes").and_then(|v| v.as_array())?;
@@ -1435,6 +1422,99 @@ fn mapping_signature_help(sources: &Value, name: &str) -> Option<SignatureHelp> 
     })
 }
 
+/// Find a mapping `VariableDeclaration` by name in the typed `decl_index`.
+///
+/// Returns the `VariableDeclaration` whose `name` matches and whose
+/// `type_name` is `TypeName::Mapping`.
+fn find_mapping_decl_typed<'a>(
+    decl_index: &'a std::collections::HashMap<i64, crate::solc_ast::DeclNode>,
+    name: &str,
+) -> Option<&'a crate::solc_ast::VariableDeclaration> {
+    use crate::solc_ast::DeclNode;
+
+    decl_index.values().find_map(|decl| match decl {
+        DeclNode::VariableDeclaration(v)
+            if v.name == name
+                && matches!(
+                    v.type_name.as_ref(),
+                    Some(crate::solc_ast::TypeName::Mapping(_))
+                ) =>
+        {
+            Some(v)
+        }
+        _ => None,
+    })
+}
+
+/// Typed version of `mapping_signature_help` using `DeclNode`.
+///
+/// Builds signature help for `name[key]` from a typed `VariableDeclaration`
+/// with a `Mapping` type name, avoiding the O(N) CHILD_KEYS DFS walk.
+fn mapping_signature_help_typed(
+    decl_index: &std::collections::HashMap<i64, crate::solc_ast::DeclNode>,
+    name: &str,
+) -> Option<SignatureHelp> {
+    use crate::solc_ast::TypeName;
+
+    let decl = find_mapping_decl_typed(decl_index, name)?;
+    let mapping = match decl.type_name.as_ref()? {
+        TypeName::Mapping(m) => m,
+        _ => return None,
+    };
+
+    // Key type string from the key's TypeDescriptions
+    let key_type = crate::solc_ast::type_name_to_str(&mapping.key_type);
+
+    // Named mapping keys (Solidity >= 0.8.18)
+    let key_name = mapping.key_name.as_deref().filter(|s| !s.is_empty());
+
+    let param_str = if let Some(kn) = key_name {
+        format!("{} {}", key_type, kn)
+    } else {
+        key_type.to_string()
+    };
+
+    let sig_label = format!("{}[{}]", name, param_str);
+
+    let param_start = name.len() + 1; // after `[`
+    let param_end = param_start + param_str.len();
+
+    let key_param_name = key_name.unwrap_or("");
+    let var_name = &decl.name;
+
+    let param_info = ParameterInformation {
+        label: ParameterLabel::LabelOffsets([param_start as u32, param_end as u32]),
+        documentation: if !key_param_name.is_empty() {
+            Some(Documentation::MarkupContent(MarkupContent {
+                kind: MarkupKind::Markdown,
+                value: format!("`{}` — key for `{}`", key_param_name, var_name),
+            }))
+        } else {
+            None
+        },
+    };
+
+    // Value type for function-level documentation
+    let value_type = crate::solc_ast::type_name_to_str(&mapping.value_type);
+    let sig_doc = Some(format!("@returns `{}`", value_type));
+
+    Some(SignatureHelp {
+        signatures: vec![SignatureInformation {
+            label: sig_label,
+            documentation: sig_doc.map(|doc| {
+                Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: doc,
+                })
+            }),
+            parameters: Some(vec![param_info]),
+            active_parameter: Some(0),
+        }],
+        active_signature: Some(0),
+        active_parameter: Some(0),
+    })
+}
+
 /// Produce signature help for the call at the given position.
 ///
 /// Uses tree-sitter on the live buffer to find the enclosing call and argument
@@ -1460,9 +1540,10 @@ pub fn signature_help(
     let ctx =
         crate::inlay_hints::ts_find_call_for_signature(tree.root_node(), &source_str, byte_pos)?;
 
-    // Mapping index access: resolve via AST VariableDeclaration
+    // Mapping index access: prefer typed decl_index, fall back to raw AST walk
     if ctx.is_index_access {
-        return mapping_signature_help(sources, ctx.name);
+        return mapping_signature_help_typed(&cached_build.decl_index, ctx.name)
+            .or_else(|| mapping_signature_help(sources, ctx.name));
     }
 
     // Try all hint lookups to resolve the callsite declaration and get skip count
@@ -1488,7 +1569,7 @@ pub fn signature_help(
         .unwrap_or_else(|| build_parameter_strings(decl_node.get("parameters")));
 
     // Look up @param docs from DocIndex
-    let doc_entry = lookup_doc_entry(doc_index, decl_node, sources, Some(id_index));
+    let doc_entry = lookup_doc_entry(doc_index, decl_node, sources, id_index);
 
     // Calculate parameter label offsets within the signature string
     // The signature looks like: "function name(uint256 amount, uint16 tax) ..."
@@ -1611,9 +1692,8 @@ fn source_has_gas_sentinel(source: &str, decl_node: &Value) -> bool {
 /// Build gas hover text for a function declaration.
 fn gas_hover_for_function(
     decl_node: &Value,
-    sources: &Value,
     gas_index: &GasIndex,
-    id_index: Option<&IdIndex>,
+    id_index: &IdIndex,
 ) -> Option<String> {
     let node_type = decl_node.get("nodeType").and_then(|v| v.as_str())?;
     if node_type != "FunctionDefinition" {
@@ -1630,7 +1710,7 @@ fn gas_hover_for_function(
 
     // Try by name (internal functions)
     let fn_name = decl_node.get("name").and_then(|v| v.as_str())?;
-    let contract_key = gas::resolve_contract_key(sources, decl_node, gas_index, id_index)?;
+    let contract_key = gas::resolve_contract_key(decl_node, gas_index, id_index)?;
     let contract_gas = gas_index.get(&contract_key)?;
 
     // Match by name prefix in internal gas estimates
@@ -1647,16 +1727,15 @@ fn gas_hover_for_function(
 /// Build gas hover text for a contract declaration.
 fn gas_hover_for_contract(
     decl_node: &Value,
-    sources: &Value,
     gas_index: &GasIndex,
-    id_index: Option<&IdIndex>,
+    id_index: &IdIndex,
 ) -> Option<String> {
     let node_type = decl_node.get("nodeType").and_then(|v| v.as_str())?;
     if node_type != "ContractDefinition" {
         return None;
     }
 
-    let contract_key = gas::resolve_contract_key(sources, decl_node, gas_index, id_index)?;
+    let contract_key = gas::resolve_contract_key(decl_node, gas_index, id_index)?;
     let contract_gas = gas_index.get(&contract_key)?;
 
     let mut lines = Vec::new();
@@ -1867,8 +1946,6 @@ pub fn hover_info(
         parts.push(format!("Selector: `{}`", selector.to_prefixed()));
     }
 
-    let id_idx = Some(id_index);
-
     let di = &cached_build.decl_index;
 
     // Gas estimates — only shown when `@lsp-enable gas-estimates` is present
@@ -1879,12 +1956,12 @@ pub fn hover_info(
             let ta = cached_build.typed_ast.as_ref();
             if let Some(gas_text) = typed_decl
                 .and_then(|d| gas_hover_for_function_typed(d, gas_index, di, ta))
-                .or_else(|| gas_hover_for_function(decl_node, sources, gas_index, id_idx))
+                .or_else(|| gas_hover_for_function(decl_node, gas_index, id_index))
             {
                 parts.push(gas_text);
             } else if let Some(gas_text) = typed_decl
                 .and_then(|d| gas_hover_for_contract_typed(d, gas_index, di, ta))
-                .or_else(|| gas_hover_for_contract(decl_node, sources, gas_index, id_idx))
+                .or_else(|| gas_hover_for_contract(decl_node, gas_index, id_index))
             {
                 parts.push(gas_text);
             }
@@ -1895,7 +1972,7 @@ pub fn hover_info(
     // Documentation — try typed lookup first, fall back to raw Value
     if let Some(doc_entry) = typed_decl
         .and_then(|d| lookup_doc_entry_typed(doc_index, d, di, id_to_path))
-        .or_else(|| lookup_doc_entry(doc_index, decl_node, sources, id_idx))
+        .or_else(|| lookup_doc_entry(doc_index, decl_node, sources, id_index))
     {
         let formatted = format_doc_entry(&doc_entry);
         if !formatted.is_empty() {
@@ -1907,14 +1984,14 @@ pub fn hover_info(
     {
         let inherited_doc = typed_decl
             .and_then(|d| resolve_inheritdoc_typed(d, &doc_text, di))
-            .or_else(|| resolve_inheritdoc(sources, decl_node, &doc_text, id_idx));
+            .or_else(|| resolve_inheritdoc(decl_node, &doc_text, id_index));
         let formatted = format_natspec(&doc_text, inherited_doc.as_deref());
         if !formatted.is_empty() {
             parts.push(format!("---\n{formatted}"));
         }
     } else if let Some(param_doc) = typed_decl
         .and_then(|d| lookup_param_doc_typed(doc_index, d, di, id_to_path))
-        .or_else(|| lookup_param_doc(doc_index, decl_node, sources, id_idx))
+        .or_else(|| lookup_param_doc(doc_index, decl_node, sources, id_index))
     {
         // Parameter/return value — show the @param/@return description from parent
         if !param_doc.is_empty() {
@@ -1975,7 +2052,8 @@ pub fn hover_info(
                 .or_else(|| {
                     // Fall back to raw Value if typed lookup not available
                     let raw_fn = id_index.get(&resolved.decl_id)?;
-                    if let Some(doc_entry) = lookup_doc_entry(doc_index, raw_fn, sources, id_idx) {
+                    if let Some(doc_entry) = lookup_doc_entry(doc_index, raw_fn, sources, id_index)
+                    {
                         for (pname, pdesc) in &doc_entry.params {
                             if pname == &resolved.param_name {
                                 return Some(pdesc.clone());
@@ -1984,7 +2062,7 @@ pub fn hover_info(
                     }
                     if let Some(doc_text) = extract_documentation(raw_fn) {
                         let resolved_doc = if doc_text.contains("@inheritdoc") {
-                            resolve_inheritdoc(sources, raw_fn, &doc_text, id_idx)
+                            resolve_inheritdoc(raw_fn, &doc_text, id_index)
                         } else {
                             None
                         };
@@ -2288,13 +2366,13 @@ mod tests {
     #[test]
     fn test_resolve_inheritdoc_swap() {
         let ast = load_test_ast();
-        let sources = ast.get("sources").unwrap();
+        let build = crate::goto::CachedBuild::new(ast, 0);
         // PoolManager.swap (id=616) has "@inheritdoc IPoolManager"
-        let decl = find_node_by_id(sources, NodeId(616)).unwrap();
+        let decl = build.id_index.get(&616).unwrap();
         let doc_text = extract_documentation(decl).unwrap();
         assert!(doc_text.contains("@inheritdoc"));
 
-        let resolved = resolve_inheritdoc(sources, decl, &doc_text, None).unwrap();
+        let resolved = resolve_inheritdoc(decl, &doc_text, &build.id_index).unwrap();
         assert!(resolved.contains("@notice"));
         assert!(resolved.contains("Swap against the given pool"));
     }
@@ -2302,12 +2380,12 @@ mod tests {
     #[test]
     fn test_resolve_inheritdoc_initialize() {
         let ast = load_test_ast();
-        let sources = ast.get("sources").unwrap();
+        let build = crate::goto::CachedBuild::new(ast, 0);
         // PoolManager.initialize (id=330) has "@inheritdoc IPoolManager"
-        let decl = find_node_by_id(sources, NodeId(330)).unwrap();
+        let decl = build.id_index.get(&330).unwrap();
         let doc_text = extract_documentation(decl).unwrap();
 
-        let resolved = resolve_inheritdoc(sources, decl, &doc_text, None).unwrap();
+        let resolved = resolve_inheritdoc(decl, &doc_text, &build.id_index).unwrap();
         assert!(resolved.contains("Initialize the state"));
         assert!(resolved.contains("@param key"));
     }
@@ -2315,37 +2393,37 @@ mod tests {
     #[test]
     fn test_resolve_inheritdoc_extsload_overload() {
         let ast = load_test_ast();
-        let sources = ast.get("sources").unwrap();
+        let build = crate::goto::CachedBuild::new(ast, 0);
 
         // extsload(bytes32) — id=1306, selector "1e2eaeaf"
-        let decl = find_node_by_id(sources, NodeId(1306)).unwrap();
+        let decl = build.id_index.get(&1306).unwrap();
         let doc_text = extract_documentation(decl).unwrap();
-        let resolved = resolve_inheritdoc(sources, decl, &doc_text, None).unwrap();
+        let resolved = resolve_inheritdoc(decl, &doc_text, &build.id_index).unwrap();
         assert!(resolved.contains("granular pool state"));
         // Should match the single-slot overload doc
         assert!(resolved.contains("@param slot"));
 
         // extsload(bytes32, uint256) — id=1319, selector "35fd631a"
-        let decl2 = find_node_by_id(sources, NodeId(1319)).unwrap();
+        let decl2 = build.id_index.get(&1319).unwrap();
         let doc_text2 = extract_documentation(decl2).unwrap();
-        let resolved2 = resolve_inheritdoc(sources, decl2, &doc_text2, None).unwrap();
+        let resolved2 = resolve_inheritdoc(decl2, &doc_text2, &build.id_index).unwrap();
         assert!(resolved2.contains("@param startSlot"));
 
         // extsload(bytes32[]) — id=1331, selector "dbd035ff"
-        let decl3 = find_node_by_id(sources, NodeId(1331)).unwrap();
+        let decl3 = build.id_index.get(&1331).unwrap();
         let doc_text3 = extract_documentation(decl3).unwrap();
-        let resolved3 = resolve_inheritdoc(sources, decl3, &doc_text3, None).unwrap();
+        let resolved3 = resolve_inheritdoc(decl3, &doc_text3, &build.id_index).unwrap();
         assert!(resolved3.contains("sparse pool state"));
     }
 
     #[test]
     fn test_resolve_inheritdoc_formats_in_hover() {
         let ast = load_test_ast();
-        let sources = ast.get("sources").unwrap();
+        let build = crate::goto::CachedBuild::new(ast, 0);
         // PoolManager.swap with @inheritdoc — verify format_natspec resolves it
-        let decl = find_node_by_id(sources, NodeId(616)).unwrap();
+        let decl = build.id_index.get(&616).unwrap();
         let doc_text = extract_documentation(decl).unwrap();
-        let inherited = resolve_inheritdoc(sources, decl, &doc_text, None);
+        let inherited = resolve_inheritdoc(decl, &doc_text, &build.id_index);
         let formatted = format_natspec(&doc_text, inherited.as_deref());
         // Should have the resolved content, not "@inheritdoc"
         assert!(!formatted.contains("@inheritdoc"));
@@ -2358,17 +2436,17 @@ mod tests {
     #[test]
     fn test_param_doc_error_parameter() {
         let ast = load_test_ast();
-        let sources = ast.get("sources").unwrap();
-        let doc_index = build_doc_index(&ast);
+        let build = crate::goto::CachedBuild::new(ast, 0);
+        let sources = build.ast.get("sources").unwrap();
 
         // PriceLimitAlreadyExceeded.sqrtPriceCurrentX96 (id=3821)
-        let param_node = find_node_by_id(sources, NodeId(3821)).unwrap();
+        let param_node = build.id_index.get(&3821).unwrap();
         assert_eq!(
             param_node.get("name").and_then(|v| v.as_str()),
             Some("sqrtPriceCurrentX96")
         );
 
-        let doc = lookup_param_doc(&doc_index, param_node, sources, None).unwrap();
+        let doc = lookup_param_doc(&build.doc_index, param_node, sources, &build.id_index).unwrap();
         assert!(
             doc.contains("invalid"),
             "should describe the invalid price: {doc}"
@@ -2378,12 +2456,12 @@ mod tests {
     #[test]
     fn test_param_doc_error_second_parameter() {
         let ast = load_test_ast();
-        let sources = ast.get("sources").unwrap();
-        let doc_index = build_doc_index(&ast);
+        let build = crate::goto::CachedBuild::new(ast, 0);
+        let sources = build.ast.get("sources").unwrap();
 
         // PriceLimitAlreadyExceeded.sqrtPriceLimitX96 (id=3823)
-        let param_node = find_node_by_id(sources, NodeId(3823)).unwrap();
-        let doc = lookup_param_doc(&doc_index, param_node, sources, None).unwrap();
+        let param_node = build.id_index.get(&3823).unwrap();
+        let doc = lookup_param_doc(&build.doc_index, param_node, sources, &build.id_index).unwrap();
         assert!(
             doc.contains("surpassed price limit"),
             "should describe the surpassed limit: {doc}"
@@ -2393,17 +2471,17 @@ mod tests {
     #[test]
     fn test_param_doc_function_return_value() {
         let ast = load_test_ast();
-        let sources = ast.get("sources").unwrap();
-        let doc_index = build_doc_index(&ast);
+        let build = crate::goto::CachedBuild::new(ast, 0);
+        let sources = build.ast.get("sources").unwrap();
 
         // Pool.modifyLiquidity return param "delta" (id=4055)
-        let param_node = find_node_by_id(sources, NodeId(4055)).unwrap();
+        let param_node = build.id_index.get(&4055).unwrap();
         assert_eq!(
             param_node.get("name").and_then(|v| v.as_str()),
             Some("delta")
         );
 
-        let doc = lookup_param_doc(&doc_index, param_node, sources, None).unwrap();
+        let doc = lookup_param_doc(&build.doc_index, param_node, sources, &build.id_index).unwrap();
         assert!(
             doc.contains("deltas of the token balances"),
             "should have return doc: {doc}"
@@ -2413,12 +2491,12 @@ mod tests {
     #[test]
     fn test_param_doc_function_input_parameter() {
         let ast = load_test_ast();
-        let sources = ast.get("sources").unwrap();
-        let doc_index = build_doc_index(&ast);
+        let build = crate::goto::CachedBuild::new(ast, 0);
+        let sources = build.ast.get("sources").unwrap();
 
         // Pool.modifyLiquidity input param "params"
         // Find it via the function's parameters
-        let fn_node = find_node_by_id(sources, NodeId(4371)).unwrap();
+        let fn_node = build.id_index.get(&4371).unwrap();
         let params_arr = fn_node
             .get("parameters")
             .and_then(|p| p.get("parameters"))
@@ -2429,7 +2507,8 @@ mod tests {
             .find(|p| p.get("name").and_then(|v| v.as_str()) == Some("params"))
             .unwrap();
 
-        let doc = lookup_param_doc(&doc_index, params_param, sources, None).unwrap();
+        let doc =
+            lookup_param_doc(&build.doc_index, params_param, sources, &build.id_index).unwrap();
         assert!(
             doc.contains("position details"),
             "should have param doc: {doc}"
@@ -2439,15 +2518,15 @@ mod tests {
     #[test]
     fn test_param_doc_inherited_function_via_docindex() {
         let ast = load_test_ast();
-        let sources = ast.get("sources").unwrap();
-        let doc_index = build_doc_index(&ast);
+        let build = crate::goto::CachedBuild::new(ast, 0);
+        let sources = build.ast.get("sources").unwrap();
 
         // PoolManager.swap `key` param (id=478) — parent has @inheritdoc IPoolManager
         // The DocIndex should have the resolved devdoc from IPoolManager
-        let param_node = find_node_by_id(sources, NodeId(478)).unwrap();
+        let param_node = build.id_index.get(&478).unwrap();
         assert_eq!(param_node.get("name").and_then(|v| v.as_str()), Some("key"));
 
-        let doc = lookup_param_doc(&doc_index, param_node, sources, None).unwrap();
+        let doc = lookup_param_doc(&build.doc_index, param_node, sources, &build.id_index).unwrap();
         assert!(
             doc.contains("pool to swap"),
             "should have inherited param doc: {doc}"
@@ -2457,12 +2536,12 @@ mod tests {
     #[test]
     fn test_param_doc_non_parameter_returns_none() {
         let ast = load_test_ast();
-        let sources = ast.get("sources").unwrap();
-        let doc_index = build_doc_index(&ast);
+        let build = crate::goto::CachedBuild::new(ast, 0);
+        let sources = build.ast.get("sources").unwrap();
 
         // PoolManager contract (id=1216) is not a parameter
-        let node = find_node_by_id(sources, NodeId(1216)).unwrap();
-        assert!(lookup_param_doc(&doc_index, node, sources, None).is_none());
+        let node = build.id_index.get(&1216).unwrap();
+        assert!(lookup_param_doc(&build.doc_index, node, sources, &build.id_index).is_none());
     }
 
     // ── DocIndex integration tests (poolmanager.json) ──
@@ -3040,5 +3119,68 @@ mod tests {
         let sources = ast.get("sources").unwrap();
         // "owner" is a regular address variable, not a mapping
         assert!(mapping_signature_help(sources, "owner").is_none());
+    }
+
+    // ── Parity tests: typed vs raw mapping signature help ────────────
+
+    #[test]
+    fn parity_find_mapping_decl_typed_pools() {
+        let ast = load_test_ast();
+        let build = crate::goto::CachedBuild::new(ast, 0);
+        let decl = find_mapping_decl_typed(&build.decl_index, "_pools").unwrap();
+        assert_eq!(decl.name, "_pools");
+        assert!(matches!(
+            decl.type_name.as_ref(),
+            Some(crate::solc_ast::TypeName::Mapping(_))
+        ));
+        // Cross-check: raw also finds it
+        let sources = build.ast.get("sources").unwrap();
+        let raw = find_mapping_decl_by_name(sources, "_pools").unwrap();
+        assert_eq!(raw.get("name").and_then(|v| v.as_str()), Some("_pools"));
+    }
+
+    #[test]
+    fn parity_find_mapping_decl_typed_not_found() {
+        let ast = load_test_ast();
+        let build = crate::goto::CachedBuild::new(ast, 0);
+        assert!(find_mapping_decl_typed(&build.decl_index, "nonexistent").is_none());
+    }
+
+    #[test]
+    fn parity_mapping_signature_help_typed_pools() {
+        let ast = load_test_ast();
+        let build = crate::goto::CachedBuild::new(ast, 0);
+        let sources = build.ast.get("sources").unwrap();
+
+        let typed = mapping_signature_help_typed(&build.decl_index, "_pools").unwrap();
+        let raw = mapping_signature_help(sources, "_pools").unwrap();
+
+        // Labels must match
+        assert_eq!(typed.signatures[0].label, raw.signatures[0].label);
+
+        // Parameter offsets must match
+        let t_params = typed.signatures[0].parameters.as_ref().unwrap();
+        let r_params = raw.signatures[0].parameters.as_ref().unwrap();
+        assert_eq!(t_params.len(), r_params.len());
+        assert_eq!(t_params[0].label, r_params[0].label);
+    }
+
+    #[test]
+    fn parity_mapping_signature_help_typed_protocol_fees() {
+        let ast = load_test_ast();
+        let build = crate::goto::CachedBuild::new(ast, 0);
+        let sources = build.ast.get("sources").unwrap();
+
+        let typed = mapping_signature_help_typed(&build.decl_index, "protocolFeesAccrued").unwrap();
+        let raw = mapping_signature_help(sources, "protocolFeesAccrued").unwrap();
+
+        assert_eq!(typed.signatures[0].label, raw.signatures[0].label);
+    }
+
+    #[test]
+    fn parity_mapping_signature_help_typed_non_mapping() {
+        let ast = load_test_ast();
+        let build = crate::goto::CachedBuild::new(ast, 0);
+        assert!(mapping_signature_help_typed(&build.decl_index, "owner").is_none());
     }
 }

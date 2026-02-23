@@ -161,19 +161,19 @@ impl CachedBuild {
 
         let gas_index = crate::gas::build_gas_index(&ast);
 
-        let hint_index = if let Some(sources) = ast.get("sources") {
-            crate::inlay_hints::build_hint_index(sources)
-        } else {
-            HashMap::new()
-        };
-
-        let doc_index = crate::hover::build_doc_index(&ast);
-
         let id_index = if let Some(sources) = ast.get("sources") {
             build_id_index_owned(sources)
         } else {
             HashMap::new()
         };
+
+        let hint_index = if let Some(sources) = ast.get("sources") {
+            crate::inlay_hints::build_hint_index(sources, &id_index)
+        } else {
+            HashMap::new()
+        };
+
+        let doc_index = crate::hover::build_doc_index(&ast);
 
         // Attempt typed AST deserialization from the sources section.
         // This is best-effort — if it fails (e.g. unknown nodeType in a

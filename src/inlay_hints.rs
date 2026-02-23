@@ -118,8 +118,10 @@ pub type HintIndex = HashMap<String, HintLookup>;
 
 /// Build the hint index for all files from the AST sources.
 /// Called once in `CachedBuild::new()`.
-pub fn build_hint_index(sources: &Value) -> HintIndex {
-    let id_index = build_id_index(sources);
+///
+/// Accepts the pre-built `id_index` from `CachedBuild` to avoid
+/// rebuilding a duplicate node-id index.
+pub fn build_hint_index(sources: &Value, id_index: &HashMap<u64, Value>) -> HintIndex {
     let mut hint_index = HashMap::new();
 
     if let Some(obj) = sources.as_object() {
@@ -127,7 +129,7 @@ pub fn build_hint_index(sources: &Value) -> HintIndex {
             if let Some(ast) = source_data.get("ast")
                 && let Some(abs_path) = ast.get("absolutePath").and_then(|v| v.as_str())
             {
-                let lookup = build_hint_lookup(ast, &id_index);
+                let lookup = build_hint_lookup(ast, id_index);
                 hint_index.insert(abs_path.to_string(), lookup);
             }
         }
@@ -192,46 +194,6 @@ pub fn inlay_hints(
     hints
 }
 
-/// Build a flat node-id → AST-node index from all sources.
-/// This is O(total_nodes) and replaces the O(calls × total_nodes)
-/// `find_declaration` that walked the entire AST per lookup.
-fn build_id_index(sources: &Value) -> HashMap<u64, &Value> {
-    let mut index = HashMap::new();
-    if let Some(obj) = sources.as_object() {
-        for (_, source_data) in obj {
-            if let Some(ast) = source_data.get("ast") {
-                index_node_ids(ast, &mut index);
-            }
-        }
-    }
-    index
-}
-
-/// Recursively index all nodes that have an `id` field.
-fn index_node_ids<'a>(node: &'a Value, index: &mut HashMap<u64, &'a Value>) {
-    if let Some(id) = node.get("id").and_then(|v| v.as_u64()) {
-        index.insert(id, node);
-    }
-    for key in crate::goto::CHILD_KEYS {
-        if let Some(child) = node.get(*key) {
-            if child.is_array() {
-                if let Some(arr) = child.as_array() {
-                    for item in arr {
-                        index_node_ids(item, index);
-                    }
-                }
-            } else if child.is_object() {
-                index_node_ids(child, index);
-            }
-        }
-    }
-    if let Some(nodes) = node.get("nodes").and_then(|v| v.as_array()) {
-        for child in nodes {
-            index_node_ids(child, index);
-        }
-    }
-}
-
 /// Parse Solidity source with tree-sitter.
 pub fn ts_parse(source: &str) -> Option<tree_sitter::Tree> {
     let mut parser = Parser::new();
@@ -242,7 +204,7 @@ pub fn ts_parse(source: &str) -> Option<tree_sitter::Tree> {
 }
 
 /// Build both lookup strategies from the AST.
-fn build_hint_lookup(file_ast: &Value, id_index: &HashMap<u64, &Value>) -> HintLookup {
+fn build_hint_lookup(file_ast: &Value, id_index: &HashMap<u64, Value>) -> HintLookup {
     let mut lookup = HintLookup {
         by_offset: HashMap::new(),
         by_name: HashMap::new(),
@@ -258,7 +220,7 @@ fn parse_src_offset(node: &Value) -> Option<usize> {
 }
 
 /// Recursively walk AST nodes collecting call site info.
-fn collect_ast_calls(node: &Value, id_index: &HashMap<u64, &Value>, lookup: &mut HintLookup) {
+fn collect_ast_calls(node: &Value, id_index: &HashMap<u64, Value>, lookup: &mut HintLookup) {
     let node_type = node.get("nodeType").and_then(|v| v.as_str()).unwrap_or("");
 
     match node_type {
@@ -344,7 +306,7 @@ struct CallInfo {
 }
 
 /// Extract function/event name and parameter info from an AST FunctionCall node.
-fn extract_call_info(node: &Value, id_index: &HashMap<u64, &Value>) -> Option<CallInfo> {
+fn extract_call_info(node: &Value, id_index: &HashMap<u64, Value>) -> Option<CallInfo> {
     let args = node.get("arguments")?.as_array()?;
     if args.is_empty() {
         return None;
@@ -410,7 +372,7 @@ fn extract_call_info(node: &Value, id_index: &HashMap<u64, &Value>) -> Option<Ca
 fn extract_new_expression_call_info(
     new_expr: &Value,
     _arg_count: usize,
-    id_index: &HashMap<u64, &Value>,
+    id_index: &HashMap<u64, Value>,
 ) -> Option<CallInfo> {
     let type_name = new_expr.get("typeName")?;
     let contract_id = type_name
@@ -1562,9 +1524,9 @@ contract Factory {
             }
         });
 
-        let mut id_index: HashMap<u64, &Value> = HashMap::new();
-        id_index.insert(22, &contract);
-        id_index.insert(21, &constructor);
+        let mut id_index: HashMap<u64, Value> = HashMap::new();
+        id_index.insert(22, contract.clone());
+        id_index.insert(21, constructor.clone());
 
         let info = extract_new_expression_call_info(&new_expr, 2, &id_index).unwrap();
         assert_eq!(info.name, "Token");
