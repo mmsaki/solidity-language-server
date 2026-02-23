@@ -43,7 +43,18 @@ pub fn lint_output_to_diagnostics(
                             }),
                             code_description: None,
                             source: Some("forge-lint".to_string()),
-                            message: forge_diag.message.clone(),
+                            // forge occasionally emits diagnostics with an empty message field;
+                            // fall back to rendered output or the span label so LSP clients
+                            // that require a non-empty message (e.g. trunk.io) don't crash.
+                            message: if !forge_diag.message.is_empty() {
+                                forge_diag.message.clone()
+                            } else if let Some(rendered) = &forge_diag.rendered {
+                                rendered.clone()
+                            } else if let Some(label) = &span.label {
+                                label.clone()
+                            } else {
+                                "Lint warning".to_string()
+                            },
                             related_information: None,
                             tags: None,
                             data: None,
