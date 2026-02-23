@@ -1,5 +1,53 @@
 # Changelog
 
+## v0.1.25
+
+### Performance
+
+- Replace clone-then-strip with build-filtered-map in `walk_and_extract()` (#132)
+  - `build_filtered_decl()` / `build_filtered_contract()` iterate borrowed node fields and only
+    clone fields that pass the STRIP_FIELDS filter, skipping heavy subtrees (`body`, `modifiers`,
+    `value`, `overrides`, etc.)
+  - Eliminates 234 MB of transient allocations (629→395 MB total, -37%)
+  - RSS: 310 MB → 254 MB (down from 394 MB pre-optimization)
+- Pre-size HashMaps with `with_capacity()` in `cache_ids()`, `extract_decl_nodes()`,
+  `build_completion_cache()`, `build_hint_index()`, `build_constructor_index()` (#132)
+- Remove dead `goto_references()` and `goto_references_with_index()` functions (#132)
+- Gate `SolcOutput` / `SourceEntry` behind `#[cfg(test)]` (#132)
+
+### Fixes
+
+- Fix cross-file references contamination: use `nameLocation` instead of `src` in
+  `resolve_target_location()` so "Find All References" on `IPoolManager manager` returns
+  references to `manager`, not to the `IPoolManager` interface (#131)
+- Fix non-deterministic hover on inherited contracts: `byte_to_id()` now prefers
+  nodes with `referencedDeclaration` when two nodes share the same span length (#131)
+
+### Memory
+
+| State | RSS | vs v0.1.24 |
+|---|---|---|
+| v0.1.24 baseline | 230 MB | — |
+| Before optimization | 394 MB | +164 MB |
+| **v0.1.25** | **254 MB** | **+24 MB** |
+
+DHAT profiling (poolmanager-t-full.json, 95 files):
+
+| Metric | v0.1.24 | v0.1.25 | Delta |
+|---|---|---|---|
+| Total allocated | 629 MB | 395 MB | -37% |
+| Peak (t-gmax) | 277 MB | 243 MB | -12% |
+| Retained (t-end) | 60 MB | 60 MB | unchanged |
+
+### Tests
+
+- 458 total tests, 0 warnings
+
+### Benchmarks
+
+Updated for Shop.sol (all competitors), Pool.sol (v0.1.25 vs v0.1.24), and
+PoolManager.t.sol (v0.1.25 vs v0.1.24).
+
 ## v0.1.24
 
 ### Features
