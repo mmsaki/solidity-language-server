@@ -833,34 +833,28 @@ pub struct IdentifierPath {
     pub src: String,
 }
 
-/// Top-level output from `solc --standard-json` after normalization.
-///
-/// Contains the per-file ASTs and compiled contract artifacts.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SolcOutput {
-    /// Map of source file path to its source entry.
-    #[serde(default)]
-    pub sources: HashMap<String, SourceEntry>,
-
-    /// Reverse map from source ID to file path.
-    #[serde(default)]
-    pub source_id_to_path: HashMap<String, String>,
-}
-
-/// A single source file entry in the solc output.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SourceEntry {
-    /// Source file ID assigned by the compiler.
-    pub id: i64,
-    /// The AST root for this file.
-    pub ast: SourceUnit,
-}
-
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
+    /// Top-level output from `solc --standard-json` after normalization.
+    ///
+    /// Only used in tests to deserialize full fixture files.
+    #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct SolcOutput {
+        #[serde(default)]
+        pub sources: std::collections::HashMap<String, SourceEntry>,
+        #[serde(default)]
+        pub source_id_to_path: std::collections::HashMap<String, String>,
+    }
+
+    /// A single source file entry in the solc output.
+    #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+    pub struct SourceEntry {
+        pub id: i64,
+        pub ast: super::SourceUnit,
+    }
     use super::*;
     use std::path::Path;
 

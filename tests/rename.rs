@@ -87,7 +87,7 @@ async fn test_references_namelocations_fallback() {
     // The StructDefinition node (id=4) has nameLocation but no nameLocations.
     // The IdentifierPath nodes (ids 9, 13) have nameLocations but no nameLocation.
     //
-    // When we call goto_references_with_index with name_location_index=Some(0),
+    // When we call goto_references_cached with name_location_index=Some(0),
     // the StructDefinition MUST still resolve via its nameLocation fallback,
     // not return None.
     let (build, _) = build_example("B.sol").await;
