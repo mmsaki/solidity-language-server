@@ -1,5 +1,6 @@
 use crate::completion;
 use crate::config::{self, FoundryConfig, LintConfig, Settings};
+use crate::folding;
 use crate::goto;
 use crate::hover;
 use crate::inlay_hints;
@@ -624,6 +625,7 @@ impl LanguageServer for ForgeLsp {
                 }),
                 document_formatting_provider: Some(OneOf::Left(true)),
                 code_lens_provider: None,
+                folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
                 inlay_hint_provider: Some(OneOf::Right(InlayHintServerCapabilities::Options(
                     InlayHintOptions {
                         resolve_provider: Some(false),
@@ -1926,6 +1928,53 @@ impl LanguageServer for ForgeLsp {
                 // No cached previous — fall back to full response
                 Ok(Some(SemanticTokensFullDeltaResult::Tokens(new_tokens)))
             }
+        }
+    }
+
+    async fn folding_range(
+        &self,
+        params: FoldingRangeParams,
+    ) -> tower_lsp::jsonrpc::Result<Option<Vec<FoldingRange>>> {
+        self.client
+            .log_message(MessageType::INFO, "got textDocument/foldingRange request")
+            .await;
+
+        let uri = params.text_document.uri;
+
+        let source = {
+            let cache = self.text_cache.read().await;
+            cache.get(&uri.to_string()).map(|(_, s)| s.clone())
+        };
+
+        let source = match source {
+            Some(s) => s,
+            None => {
+                let file_path = match uri.to_file_path() {
+                    Ok(p) => p,
+                    Err(_) => return Ok(None),
+                };
+                match std::fs::read_to_string(&file_path) {
+                    Ok(s) => s,
+                    Err(_) => return Ok(None),
+                }
+            }
+        };
+
+        let ranges = folding::folding_ranges(&source);
+
+        if ranges.is_empty() {
+            self.client
+                .log_message(MessageType::INFO, "no folding ranges found")
+                .await;
+            Ok(None)
+        } else {
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    format!("found {} folding ranges", ranges.len()),
+                )
+                .await;
+            Ok(Some(ranges))
         }
     }
 
