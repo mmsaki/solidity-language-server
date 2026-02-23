@@ -1,9 +1,8 @@
-use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use tower_lsp::lsp_types::{Location, Position, Range, Url};
 
 use crate::goto::{
-    CachedBuild, ExternalRefs, NodeInfo, bytes_to_pos, cache_ids, pos_to_bytes, src_to_location,
+    CachedBuild, ExternalRefs, NodeInfo, bytes_to_pos, pos_to_bytes, src_to_location,
 };
 use crate::types::{NodeId, SourceLoc};
 
@@ -143,8 +142,8 @@ pub fn id_to_location_with_index(
     })
 }
 
-/// Like `goto_references_with_index` but uses pre-built `CachedBuild` indices
-/// instead of re-calling `cache_ids`. Avoids redundant O(N) AST traversal.
+/// Find all references using pre-built `CachedBuild` indices.
+/// Avoids redundant O(N) AST traversal by reusing cached node maps.
 pub fn goto_references_cached(
     build: &CachedBuild,
     file_uri: &Url,
@@ -234,23 +233,6 @@ pub fn goto_references_cached(
     unique_locations
 }
 
-pub fn goto_references(
-    ast_data: &Value,
-    file_uri: &Url,
-    position: Position,
-    source_bytes: &[u8],
-    include_declaration: bool,
-) -> Vec<Location> {
-    goto_references_with_index(
-        ast_data,
-        file_uri,
-        position,
-        source_bytes,
-        None,
-        include_declaration,
-    )
-}
-
 /// Resolve cursor position to the target definition's location (abs_path + byte offset).
 /// Node IDs are not stable across builds, but byte offsets within a file are.
 /// Returns (abs_path, byte_offset) of the definition node, usable with byte_to_id
@@ -300,109 +282,6 @@ pub fn resolve_target_location(
         }
     }
     None
-}
-
-pub fn goto_references_with_index(
-    ast_data: &Value,
-    file_uri: &Url,
-    position: Position,
-    source_bytes: &[u8],
-    name_location_index: Option<usize>,
-    include_declaration: bool,
-) -> Vec<Location> {
-    let sources = match ast_data.get("sources") {
-        Some(s) => s,
-        None => return vec![],
-    };
-    let id_to_path = match ast_data
-        .get("source_id_to_path")
-        .and_then(|v| v.as_object())
-    {
-        Some(map) => map,
-        None => return vec![],
-    };
-    let id_to_path_map: HashMap<String, String> = id_to_path
-        .iter()
-        .map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
-        .collect();
-
-    let (nodes, path_to_abs, external_refs) = cache_ids(sources);
-    let all_refs = all_references(&nodes);
-    let path = match file_uri.to_file_path() {
-        Ok(p) => p,
-        Err(_) => return vec![],
-    };
-    let path_str = match path.to_str() {
-        Some(s) => s,
-        None => return vec![],
-    };
-    let abs_path = match path_to_abs.get(path_str) {
-        Some(ap) => ap,
-        None => return vec![],
-    };
-    let byte_position = pos_to_bytes(source_bytes, position);
-
-    // Check if cursor is on a Yul external reference first
-    let target_node_id = if let Some(decl_id) =
-        byte_to_decl_via_external_refs(&external_refs, &id_to_path_map, abs_path, byte_position)
-    {
-        decl_id
-    } else {
-        let node_id = match byte_to_id(&nodes, abs_path, byte_position) {
-            Some(id) => id,
-            None => return vec![],
-        };
-        let file_nodes = match nodes.get(abs_path) {
-            Some(nodes) => nodes,
-            None => return vec![],
-        };
-        if let Some(node_info) = file_nodes.get(&node_id) {
-            node_info.referenced_declaration.unwrap_or(node_id)
-        } else {
-            node_id
-        }
-    };
-
-    let mut results: HashSet<NodeId> = HashSet::new();
-    if include_declaration {
-        results.insert(target_node_id);
-    }
-    if let Some(refs) = all_refs.get(&target_node_id) {
-        results.extend(refs.iter().copied());
-    }
-    let mut locations = Vec::new();
-    for id in results {
-        if let Some(location) =
-            id_to_location_with_index(&nodes, &id_to_path_map, id, name_location_index)
-        {
-            locations.push(location);
-        }
-    }
-
-    // Also add Yul external reference use sites that point to our target declaration
-    for (src_str, decl_id) in &external_refs {
-        if *decl_id == target_node_id
-            && let Some(location) = src_to_location(src_str, &id_to_path_map)
-        {
-            locations.push(location);
-        }
-    }
-
-    let mut unique_locations = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    for location in locations {
-        let key = (
-            location.uri.clone(),
-            location.range.start.line,
-            location.range.start.character,
-            location.range.end.line,
-            location.range.end.character,
-        );
-        if seen.insert(key) {
-            unique_locations.push(location);
-        }
-    }
-    unique_locations
 }
 
 /// Find all references to a definition in a single AST build, identified by

@@ -253,37 +253,49 @@ fn count_signature_params(sig: &str) -> usize {
 /// Build a CompletionCache from AST sources and contracts.
 /// `contracts` is the `.contracts` section of the compiler output (optional).
 pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> CompletionCache {
-    let mut names: Vec<CompletionItem> = Vec::new();
-    let mut seen_names: HashMap<String, usize> = HashMap::new(); // name → index in names vec
-    let mut name_to_type: HashMap<String, String> = HashMap::new();
-    let mut node_members: HashMap<NodeId, Vec<CompletionItem>> = HashMap::new();
-    let mut type_to_node: HashMap<String, NodeId> = HashMap::new();
-    let mut method_identifiers: HashMap<NodeId, Vec<CompletionItem>> = HashMap::new();
-    let mut name_to_node_id: HashMap<String, NodeId> = HashMap::new();
-    let mut contract_kinds: HashMap<NodeId, String> = HashMap::new();
+    let source_count = sources.as_object().map_or(0, |obj| obj.len());
+    // Pre-size collections based on source count to reduce rehash churn.
+    // Estimates: ~20 names/file, ~5 contracts/file, ~10 functions/file.
+    let est_names = source_count * 20;
+    let est_contracts = source_count * 5;
+
+    let mut names: Vec<CompletionItem> = Vec::with_capacity(est_names);
+    let mut seen_names: HashMap<String, usize> = HashMap::with_capacity(est_names);
+    let mut name_to_type: HashMap<String, String> = HashMap::with_capacity(est_names);
+    let mut node_members: HashMap<NodeId, Vec<CompletionItem>> =
+        HashMap::with_capacity(est_contracts);
+    let mut type_to_node: HashMap<String, NodeId> = HashMap::with_capacity(est_contracts);
+    let mut method_identifiers: HashMap<NodeId, Vec<CompletionItem>> =
+        HashMap::with_capacity(est_contracts);
+    let mut name_to_node_id: HashMap<String, NodeId> = HashMap::with_capacity(est_names);
+    let mut contract_kinds: HashMap<NodeId, String> = HashMap::with_capacity(est_contracts);
 
     // Collect (path, contract_name, node_id) during AST walk for methodIdentifiers lookup after.
-    let mut contract_locations: Vec<(String, String, NodeId)> = Vec::new();
+    let mut contract_locations: Vec<(String, String, NodeId)> = Vec::with_capacity(est_contracts);
 
     // contract_node_id → fn_name → Vec<signature> (for matching method_identifiers to AST signatures)
-    let mut function_signatures: HashMap<NodeId, HashMap<String, Vec<String>>> = HashMap::new();
+    let mut function_signatures: HashMap<NodeId, HashMap<String, Vec<String>>> =
+        HashMap::with_capacity(est_contracts);
 
     // (contract_node_id, fn_name) → return typeIdentifier
-    let mut function_return_types: HashMap<(NodeId, String), String> = HashMap::new();
+    let mut function_return_types: HashMap<(NodeId, String), String> =
+        HashMap::with_capacity(source_count * 10);
 
     // typeIdentifier → Vec<CompletionItem> from UsingForDirective
-    let mut using_for: HashMap<String, Vec<CompletionItem>> = HashMap::new();
+    let mut using_for: HashMap<String, Vec<CompletionItem>> = HashMap::with_capacity(source_count);
     let mut using_for_wildcard: Vec<CompletionItem> = Vec::new();
 
     // Temp: (library_node_id, target_type_id_or_none) for resolving after walk
     let mut using_for_directives: Vec<(NodeId, Option<String>)> = Vec::new();
 
     // Scope-aware completion data
-    let mut scope_declarations: HashMap<NodeId, Vec<ScopedDeclaration>> = HashMap::new();
-    let mut scope_parent: HashMap<NodeId, NodeId> = HashMap::new();
-    let mut scope_ranges: Vec<ScopeRange> = Vec::new();
-    let mut path_to_file_id: HashMap<String, FileId> = HashMap::new();
-    let mut linearized_base_contracts: HashMap<NodeId, Vec<NodeId>> = HashMap::new();
+    let mut scope_declarations: HashMap<NodeId, Vec<ScopedDeclaration>> =
+        HashMap::with_capacity(est_contracts);
+    let mut scope_parent: HashMap<NodeId, NodeId> = HashMap::with_capacity(est_contracts);
+    let mut scope_ranges: Vec<ScopeRange> = Vec::with_capacity(est_contracts);
+    let mut path_to_file_id: HashMap<String, FileId> = HashMap::with_capacity(source_count);
+    let mut linearized_base_contracts: HashMap<NodeId, Vec<NodeId>> =
+        HashMap::with_capacity(est_contracts);
 
     if let Some(sources_obj) = sources.as_object() {
         for (path, source_data) in sources_obj {

@@ -1,0 +1,28 @@
+{
+  "name": "@mmsaki/solidity-language-server",
+  "version": "0.1.25",
+  "description": "A fast Solidity language server powered by solc and Foundry",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mmsaki/solidity-language-server"
+  },
+  "homepage": "https://github.com/mmsaki/solidity-language-server",
+  "keywords": [
+    "solidity",
+    "ethereum",
+    "lsp",
+    "language-server",
+    "foundry"
+  ],
+  "bin": {
+    "solidity-language-server": "bin/solidity-language-server"
+  },
+  "scripts": {
+    "postinstall": "bun run install.ts"
+  },
+  "files": [
+    "bin",
+    "install.ts"
+  ]
+}

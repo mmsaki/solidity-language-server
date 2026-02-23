@@ -213,9 +213,14 @@ type CachedIds = (
 );
 
 pub fn cache_ids(sources: &Value) -> CachedIds {
-    let mut nodes: HashMap<String, HashMap<NodeId, NodeInfo>> = HashMap::new();
-    let mut path_to_abs: HashMap<String, String> = HashMap::new();
-    let mut external_refs: ExternalRefs = HashMap::new();
+    let source_count = sources.as_object().map_or(0, |obj| obj.len());
+
+    // Pre-size top-level maps based on source file count to avoid rehashing.
+    // Typical project: ~200 nodes/file, ~10 external refs/file.
+    let mut nodes: HashMap<String, HashMap<NodeId, NodeInfo>> =
+        HashMap::with_capacity(source_count);
+    let mut path_to_abs: HashMap<String, String> = HashMap::with_capacity(source_count);
+    let mut external_refs: ExternalRefs = HashMap::with_capacity(source_count * 10);
 
     if let Some(sources_obj) = sources.as_object() {
         for (path, source_data) in sources_obj {
@@ -229,9 +234,16 @@ pub fn cache_ids(sources: &Value) -> CachedIds {
 
                 path_to_abs.insert(path.clone(), abs_path.clone());
 
-                // Initialize the nodes map for this file
+                // Initialize the per-file node map with a size hint.
+                // Use the top-level `nodes` array length as a proxy for total
+                // AST node count (actual count is higher due to nesting, but
+                // this avoids the first few rehashes).
+                let size_hint = ast
+                    .get("nodes")
+                    .and_then(|v| v.as_array())
+                    .map_or(64, |arr| arr.len() * 8);
                 if !nodes.contains_key(&abs_path) {
-                    nodes.insert(abs_path.clone(), HashMap::new());
+                    nodes.insert(abs_path.clone(), HashMap::with_capacity(size_hint));
                 }
 
                 if let Some(id) = ast.get("id").and_then(|v| v.as_u64())

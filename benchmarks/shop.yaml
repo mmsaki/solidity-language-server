@@ -15,7 +15,7 @@ output: benchmarks/shop
 report: README.md
 
 servers:
-  - mmsaki@latest
+  - mmsaki@v0.1.25
   - solc
   - qiuxiang
   - juanfranblanco

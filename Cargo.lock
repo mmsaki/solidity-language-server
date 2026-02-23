@@ -3090,7 +3090,7 @@ dependencies = [
 
 [[package]]
 name = "solidity-language-server"
-version = "0.1.24"
+version = "0.1.25"
 dependencies = [
  "clap",
  "dhat",

@@ -15,7 +15,7 @@ Benchmarked against `example` — `Shop.sol`.
 
 | Server | Version |
 |--------|---------|
-| [mmsaki](https://github.com/mmsaki/solidity-language-server) | `0.1.24` |
+| [mmsaki v0.1.25](https://github.com/mmsaki/solidity-language-server) | `0.1.25` |
 | [solc](https://docs.soliditylang.org) | `0.8.26` |
 | [qiuxiang](https://github.com/qiuxiang/solidity-ls) | `0.5.4` |
 | [juanfranblanco](https://github.com/juanfranblanco/vscode-solidity) | `0.0.187` |
@@ -25,24 +25,24 @@ Benchmarked against `example` — `Shop.sol`.
 
 ## Summary
 
-| Method | mmsaki | solc | qiuxiang | juanfranblanco | nomicfoundation |
-|--------|--------|------|----------|----------------|-----------------|
-| [initialize](#initialize) | 7.0ms ⚡ | 116.6ms | 137.3ms | 570.2ms | 854.0ms |
-| [textDocument/diagnostic](#textdocumentdiagnostic) | 78.7ms | 2.4ms ⚡ | 216.8ms | 872.8ms | 512.9ms |
+| Method | mmsaki v0.1.25 | solc | qiuxiang | juanfranblanco | nomicfoundation |
+|--------|----------------|------|----------|----------------|-----------------|
+| [initialize](#initialize) | 7.8ms ⚡ | 116.2ms | 86.9ms | 548.0ms | 827.1ms |
+| [textDocument/diagnostic](#textdocumentdiagnostic) | 74.2ms | 3.5ms ⚡ | 201.8ms | 953.4ms | 647.0ms |
 | [textDocument/semanticTokens/full/delta](#textdocumentsemantictokensfulldelta) | 1.5ms ⚡ | error | unsupported | unsupported | unsupported |
-| [textDocument/definition](#textdocumentdefinition) | 2.9ms | 2.3ms | 2.4ms ⚡ | 55.2ms | 1.4ms |
-| [textDocument/declaration](#textdocumentdeclaration) | 1.5ms ⚡ | unsupported | unsupported | unsupported | unsupported |
-| [textDocument/hover](#textdocumenthover) | 4.2ms ⚡ | crash | 2.1ms | 53.1ms | 1.4ms |
-| [textDocument/references](#textdocumentreferences) | 2.3ms | 2.3ms | 2.5ms | 73.2ms | 1.5ms ⚡ |
-| [textDocument/completion](#textdocumentcompletion) | 1.0ms ⚡ | 2.4ms | 2.3ms | 53.2ms | 37.5ms |
-| [textDocument/signatureHelp](#textdocumentsignaturehelp) | 2.6ms ⚡ | unsupported | empty | empty | empty |
-| [textDocument/rename](#textdocumentrename) | 3.9ms | 2.3ms | 2.6ms | 50.4ms | 1.7ms ⚡ |
+| [textDocument/definition](#textdocumentdefinition) | 3.3ms | 2.2ms | 27.8ms | 69.6ms | 1.6ms ⚡ |
+| [textDocument/declaration](#textdocumentdeclaration) | 0.2ms ⚡ | unsupported | unsupported | unsupported | unsupported |
+| [textDocument/hover](#textdocumenthover) | 3.0ms ⚡ | crash | 22.1ms | 73.1ms | 1.6ms |
+| [textDocument/references](#textdocumentreferences) | 1.0ms ⚡ | 2.3ms | 20.5ms | 73.1ms | 1.8ms |
+| [textDocument/completion](#textdocumentcompletion) | 0.9ms ⚡ | 4.4ms | 20.0ms | 73.7ms | 38.9ms |
+| [textDocument/signatureHelp](#textdocumentsignaturehelp) | empty | unsupported | empty | empty | empty |
+| [textDocument/rename](#textdocumentrename) | 1.3ms ⚡ | 3.5ms | 24.5ms | 85.5ms | 2.1ms |
 | [textDocument/prepareRename](#textdocumentpreparerename) | 0.2ms ⚡ | unsupported | unsupported | unsupported | unsupported |
-| [textDocument/documentSymbol](#textdocumentdocumentsymbol) | 1.2ms ⚡ | unsupported | unsupported | 13.7ms | 14.4ms |
+| [textDocument/documentSymbol](#textdocumentdocumentsymbol) | 1.3ms ⚡ | unsupported | unsupported | 18.5ms | 17.1ms |
 | [textDocument/documentLink](#textdocumentdocumentlink) | empty | unsupported | unsupported | unsupported | unsupported |
-| [textDocument/formatting](#textdocumentformatting) | 11.1ms ⚡ | 2.3ms | 1.8ms | 62.1ms | 189.1ms |
-| [textDocument/inlayHint](#textdocumentinlayhint) | 1.5ms ⚡ | unsupported | unsupported | unsupported | unsupported |
-| [textDocument/semanticTokens/full](#textdocumentsemantictokensfull) | 1.6ms ⚡ | error | unsupported | unsupported | 13.8ms |
+| [textDocument/formatting](#textdocumentformatting) | 13.3ms ⚡ | 2.4ms | 24.9ms | 94.8ms | 197.0ms |
+| [textDocument/inlayHint](#textdocumentinlayhint) | 1.6ms ⚡ | unsupported | unsupported | unsupported | unsupported |
+| [textDocument/semanticTokens/full](#textdocumentsemantictokensfull) | 1.6ms ⚡ | error | unsupported | unsupported | 14.9ms |
 | [textDocument/semanticTokens/range](#textdocumentsemantictokensrange) | 1.0ms ⚡ | unsupported | unsupported | unsupported | unsupported |
 | [workspace/symbol](#workspacesymbol) | 1.1ms ⚡ | unsupported | unsupported | timeout | unsupported |
 
@@ -50,10 +50,9 @@ Benchmarked against `example` — `Shop.sol`.
 
 | Server | Wins | Out of |
 |--------|------|--------|
-| **mmsaki** | **13** | **18** |
-| nomicfoundation | 2 | 18 |
+| **mmsaki v0.1.25** | **14** | **18** |
 | solc | 1 | 18 |
-| qiuxiang | 1 | 18 |
+| nomicfoundation | 1 | 18 |
 
 ---
 
@@ -61,184 +60,184 @@ Benchmarked against `example` — `Shop.sol`.
 
 ### initialize
 
-| Server | p95 | RSS | Result | Responded |
-|--------|-----|-----|--------|-----------|
-| **mmsaki** | 7.0ms ⚡ | - | ok | ✓ |
-| **solc** | 116.6ms | - | ok | ✓ |
-| **qiuxiang** | 137.3ms | - | ok | ✓ |
-| **juanfranblanco** | 570.2ms | - | ok | ✓ |
-| **nomicfoundation** | 854.0ms | - | ok | ✓ |
+| Server | p95 | RSS | Result |
+|--------|-----|-----|--------|
+| **mmsaki v0.1.25** | 7.8ms ⚡ | - | ok |
+| **solc** | 116.2ms | - | ok |
+| **qiuxiang** | 86.9ms | - | ok |
+| **juanfranblanco** | 548.0ms | - | ok |
+| **nomicfoundation** | 827.1ms | - | ok |
 
 ### textDocument/diagnostic
 
-| Server | p95 | RSS | Result | Responded |
-|--------|-----|-----|--------|-----------|
-| **mmsaki** | 78.7ms | **12.8 MB** | 1 diagnostics | ✓ |
-| **solc** | 2.4ms ⚡ | 26.2 MB | 0 diagnostics | ✓ |
-| **qiuxiang** | 216.8ms | 64.6 MB | 0 diagnostics | ✓ |
-| **juanfranblanco** | 872.8ms | 438.2 MB | 0 diagnostics | ✓ |
-| **nomicfoundation** | 512.9ms | 412.8 MB | 0 diagnostics | ✓ |
+| Server | p95 | RSS | Result |
+|--------|-----|-----|--------|
+| **mmsaki v0.1.25** | 74.2ms | 14.0 MB | 1 diagnostics |
+| **solc** | 3.5ms ⚡ | 26.2 MB | 0 diagnostics |
+| **qiuxiang** | 201.8ms | 6.7 MB | 0 diagnostics |
+| **juanfranblanco** | 953.4ms | **6.6 MB** | 0 diagnostics |
+| **nomicfoundation** | 647.0ms | **6.6 MB** | 0 diagnostics |
 
 ### textDocument/semanticTokens/full/delta
 
-| Server | p95 | RSS | Result | Responded |
-|--------|-----|-----|--------|-----------|
-| **mmsaki** | 1.5ms ⚡ | **12.6 MB** | delta | ✓ |
-| **solc** | - | 26.1 MB | error | ✗ |
-| **qiuxiang** | - | 64.0 MB | unsupported | ✗ |
-| **juanfranblanco** | - | 438.3 MB | unsupported | ✗ |
-| **nomicfoundation** | - | 413.5 MB | unsupported | ✗ |
+| Server | p95 | RSS | Result |
+|--------|-----|-----|--------|
+| **mmsaki v0.1.25** | 1.5ms ⚡ | **13.7 MB** | delta |
+| **solc** | - | 26.0 MB | error |
+| **qiuxiang** | - | 6.7 MB | unsupported |
+| **juanfranblanco** | - | 6.6 MB | unsupported |
+| **nomicfoundation** | - | 6.6 MB | unsupported |
 
 ### textDocument/definition
 
-| Server | p95 | RSS | Result | Responded |
-|--------|-----|-----|--------|-----------|
-| **mmsaki** | 2.9ms | **12.8 MB** | `Shop.sol:68` | ✓ |
-| **solc** | 2.3ms | 25.8 MB | empty | ✗ |
-| **qiuxiang** | 2.4ms ⚡ | 64.5 MB | `Shop.sol:121` | ✓ |
-| **juanfranblanco** | 55.2ms | 427.5 MB | `Shop.sol:68` | ✓ |
-| **nomicfoundation** | 1.4ms | 408.6 MB | empty | ✗ |
+| Server | p95 | RSS | Result |
+|--------|-----|-----|--------|
+| **mmsaki v0.1.25** | 3.3ms | 13.9 MB | `Shop.sol:68` |
+| **solc** | 2.2ms | 26.1 MB | empty |
+| **qiuxiang** | 27.8ms | 6.7 MB | `Shop.sol:121` |
+| **juanfranblanco** | 69.6ms | **6.5 MB** | `Shop.sol:68` |
+| **nomicfoundation** | 1.6ms ⚡ | **6.5 MB** | `Shop.sol:21` |
 
 ### textDocument/declaration
 
-| Server | p95 | RSS | Result | Responded |
-|--------|-----|-----|--------|-----------|
-| **mmsaki** | 1.5ms ⚡ | **12.6 MB** | `Shop.sol:68` | ✓ |
-| **solc** | - | 26.1 MB | unsupported | ✗ |
-| **qiuxiang** | - | 64.5 MB | unsupported | ✗ |
-| **juanfranblanco** | - | 438.0 MB | unsupported | ✗ |
-| **nomicfoundation** | - | 412.9 MB | unsupported | ✗ |
+| Server | p95 | RSS | Result |
+|--------|-----|-----|--------|
+| **mmsaki v0.1.25** | 0.2ms ⚡ | **13.9 MB** | `Shop.sol:68` |
+| **solc** | - | 26.1 MB | unsupported |
+| **qiuxiang** | - | 6.6 MB | unsupported |
+| **juanfranblanco** | - | 6.6 MB | unsupported |
+| **nomicfoundation** | - | 6.6 MB | unsupported |
 
 ### textDocument/hover
 
-| Server | p95 | RSS | Result | Responded |
-|--------|-----|-----|--------|-----------|
-| **mmsaki** | 4.2ms ⚡ | **12.5 MB** | function addTax(uint256 amount, uint16 tax, uint16... | ✓ |
-| **solc** | - | 26.1 MB | crash | ✗ |
-| **qiuxiang** | 2.1ms | 64.3 MB | empty | ✗ |
-| **juanfranblanco** | 53.1ms | 426.8 MB | ### Function: addTax | ✓ |
-| **nomicfoundation** | 1.4ms | 409.8 MB | empty | ✗ |
+| Server | p95 | RSS | Result |
+|--------|-----|-----|--------|
+| **mmsaki v0.1.25** | 3.0ms ⚡ | 14.0 MB | function addTax(uint256 amount, uint16 tax, uint16... |
+| **solc** | - | 25.8 MB | crash |
+| **qiuxiang** | 22.1ms | 6.7 MB | empty |
+| **juanfranblanco** | 73.1ms | **6.6 MB** | ### Function: addTax |
+| **nomicfoundation** | 1.6ms | 6.6 MB | empty |
 
 ### textDocument/references
 
-| Server | p95 | RSS | Result | Responded |
-|--------|-----|-----|--------|-----------|
-| **mmsaki** | 2.3ms | **12.7 MB** | 11 references | ✓ |
-| **solc** | 2.3ms | 26.1 MB | {"error":"Unknown method textDocument/re... | ✗ |
-| **qiuxiang** | 2.5ms | 64.4 MB | 2 references | ✓ |
-| **juanfranblanco** | 73.2ms | 433.1 MB | 42 references | ✓ |
-| **nomicfoundation** | 1.5ms ⚡ | 408.8 MB | 11 references | ✓ |
+| Server | p95 | RSS | Result |
+|--------|-----|-----|--------|
+| **mmsaki v0.1.25** | 1.0ms ⚡ | 13.8 MB | 11 references |
+| **solc** | 2.3ms | 26.2 MB | {"error":"Unknown method textDocument/re... |
+| **qiuxiang** | 20.5ms | 6.6 MB | 2 references |
+| **juanfranblanco** | 73.1ms | **6.6 MB** | 42 references |
+| **nomicfoundation** | 1.8ms | 6.6 MB | 11 references |
 
 ### textDocument/completion
 
-| Server | p95 | RSS | Result | Responded |
-|--------|-----|-----|--------|-----------|
-| **mmsaki** | 1.0ms ⚡ | **12.6 MB** | 5 items (buyer, nonce, amount) | ✓ |
-| **solc** | 2.4ms | 25.8 MB | {"error":"Unknown method textDocument/co... | ✗ |
-| **qiuxiang** | 2.3ms | 64.8 MB | 3 items (data, sender, sig) | ✓ |
-| **juanfranblanco** | 53.2ms | 428.1 MB | 0 items | ✗ |
-| **nomicfoundation** | 37.5ms | 410.0 MB | empty | ✗ |
+| Server | p95 | RSS | Result |
+|--------|-----|-----|--------|
+| **mmsaki v0.1.25** | 0.9ms ⚡ | **14.0 MB** | 5 items (buyer, nonce, amount) |
+| **solc** | 4.4ms | 26.1 MB | {"error":"Unknown method textDocument/co... |
+| **qiuxiang** | 20.0ms | 6.6 MB | 0 items |
+| **juanfranblanco** | 73.7ms | 6.6 MB | 0 items |
+| **nomicfoundation** | 38.9ms | 6.6 MB | empty |
 
 ### textDocument/signatureHelp
 
-| Server | p95 | RSS | Result | Responded |
-|--------|-----|-----|--------|-----------|
-| **mmsaki** | 2.6ms ⚡ | **12.6 MB** | function addTax(uint256 amount, uint16 tax, uint16... | ✓ |
-| **solc** | - | 25.9 MB | unsupported | ✗ |
-| **qiuxiang** | - | 64.6 MB | empty | ✗ |
-| **juanfranblanco** | - | 427.1 MB | empty | ✗ |
-| **nomicfoundation** | - | 411.5 MB | empty | ✗ |
+| Server | p95 | RSS | Result |
+|--------|-----|-----|--------|
+| **mmsaki v0.1.25** | - | 13.8 MB | empty |
+| **solc** | - | 26.0 MB | unsupported |
+| **qiuxiang** | - | 6.7 MB | empty |
+| **juanfranblanco** | - | 6.6 MB | empty |
+| **nomicfoundation** | - | 6.6 MB | empty |
 
 ### textDocument/rename
 
-| Server | p95 | RSS | Result | Responded |
-|--------|-----|-----|--------|-----------|
-| **mmsaki** | 3.9ms | **12.7 MB** | 3 edits in 1 files | ✓ |
-| **solc** | 2.3ms | 26.0 MB | {"error":"Unhandled exception: /solidity... | ✗ |
-| **qiuxiang** | 2.6ms | 64.7 MB | 2 edits in 1 files | ✓ |
-| **juanfranblanco** | 50.4ms | 433.9 MB | {"error":"Unhandled method textDocument/... | ✗ |
-| **nomicfoundation** | 1.7ms ⚡ | 413.4 MB | 11 edits in 1 files | ✓ |
+| Server | p95 | RSS | Result |
+|--------|-----|-----|--------|
+| **mmsaki v0.1.25** | 1.3ms ⚡ | 13.9 MB | 4 edits in 1 files |
+| **solc** | 3.5ms | 26.3 MB | {"error":"Unhandled exception: /solidity... |
+| **qiuxiang** | 24.5ms | 6.7 MB | 2 edits in 1 files |
+| **juanfranblanco** | 85.5ms | 6.6 MB | {"error":"Unhandled method textDocument/... |
+| **nomicfoundation** | 2.1ms | **6.6 MB** | 11 edits in 1 files |
 
 ### textDocument/prepareRename
 
-| Server | p95 | RSS | Result | Responded |
-|--------|-----|-----|--------|-----------|
-| **mmsaki** | 0.2ms ⚡ | **12.7 MB** | ready (line 136) | ✓ |
-| **solc** | - | 26.2 MB | unsupported | ✗ |
-| **qiuxiang** | - | 64.4 MB | unsupported | ✗ |
-| **juanfranblanco** | - | 425.9 MB | unsupported | ✗ |
-| **nomicfoundation** | - | 410.7 MB | unsupported | ✗ |
+| Server | p95 | RSS | Result |
+|--------|-----|-----|--------|
+| **mmsaki v0.1.25** | 0.2ms ⚡ | **14.0 MB** | ready (line 136) |
+| **solc** | - | 25.9 MB | unsupported |
+| **qiuxiang** | - | 6.6 MB | unsupported |
+| **juanfranblanco** | - | 6.6 MB | unsupported |
+| **nomicfoundation** | - | 6.5 MB | unsupported |
 
 ### textDocument/documentSymbol
 
-| Server | p95 | RSS | Result | Responded |
-|--------|-----|-----|--------|-----------|
-| **mmsaki** | 1.2ms ⚡ | **12.5 MB** | 3 symbols | ✓ |
-| **solc** | - | 26.1 MB | unsupported | ✗ |
-| **qiuxiang** | - | 64.3 MB | unsupported | ✗ |
-| **juanfranblanco** | 13.7ms | 426.9 MB | 2 symbols | ✓ |
-| **nomicfoundation** | 14.4ms | 407.0 MB | 2 symbols | ✓ |
+| Server | p95 | RSS | Result |
+|--------|-----|-----|--------|
+| **mmsaki v0.1.25** | 1.3ms ⚡ | 13.9 MB | 3 symbols |
+| **solc** | - | 26.2 MB | unsupported |
+| **qiuxiang** | - | 6.7 MB | unsupported |
+| **juanfranblanco** | 18.5ms | 6.6 MB | 2 symbols |
+| **nomicfoundation** | 17.1ms | **6.5 MB** | 2 symbols |
 
 ### textDocument/documentLink
 
-| Server | p95 | RSS | Result | Responded |
-|--------|-----|-----|--------|-----------|
-| **mmsaki** | - | 12.8 MB | empty | ✗ |
-| **solc** | - | 26.2 MB | unsupported | ✗ |
-| **qiuxiang** | - | 64.4 MB | unsupported | ✗ |
-| **juanfranblanco** | - | 438.5 MB | unsupported | ✗ |
-| **nomicfoundation** | - | 412.0 MB | unsupported | ✗ |
+| Server | p95 | RSS | Result |
+|--------|-----|-----|--------|
+| **mmsaki v0.1.25** | - | 13.8 MB | empty |
+| **solc** | - | 26.0 MB | unsupported |
+| **qiuxiang** | - | 6.6 MB | unsupported |
+| **juanfranblanco** | - | 6.6 MB | unsupported |
+| **nomicfoundation** | - | 6.6 MB | unsupported |
 
 ### textDocument/formatting
 
-| Server | p95 | RSS | Result | Responded |
-|--------|-----|-----|--------|-----------|
-| **mmsaki** | 11.1ms ⚡ | **12.5 MB** | 1 edits | ✓ |
-| **solc** | 2.3ms | 26.1 MB | {"error":"Unknown method textDocument/fo... | ✗ |
-| **qiuxiang** | 1.8ms | 64.4 MB | {"error":"Request textDocument/formattin... | ✗ |
-| **juanfranblanco** | 62.1ms | 432.6 MB | {"error":"Unhandled method textDocument/... | ✗ |
-| **nomicfoundation** | 189.1ms | 412.2 MB | 1 edits | ✓ |
+| Server | p95 | RSS | Result |
+|--------|-----|-----|--------|
+| **mmsaki v0.1.25** | 13.3ms ⚡ | 13.9 MB | 1 edits |
+| **solc** | 2.4ms | 25.9 MB | {"error":"Unknown method textDocument/fo... |
+| **qiuxiang** | 24.9ms | 6.6 MB | {"error":"Request textDocument/formattin... |
+| **juanfranblanco** | 94.8ms | 6.6 MB | {"error":"Unhandled method textDocument/... |
+| **nomicfoundation** | 197.0ms | **6.6 MB** | 1 edits |
 
 ### textDocument/inlayHint
 
-| Server | p95 | RSS | Result | Responded |
-|--------|-----|-----|--------|-----------|
-| **mmsaki** | 1.5ms ⚡ | **12.7 MB** | 24 hints (tax:, base:, buyer:) | ✓ |
-| **solc** | - | 26.2 MB | unsupported | ✗ |
-| **qiuxiang** | - | 64.3 MB | unsupported | ✗ |
-| **juanfranblanco** | - | 433.0 MB | unsupported | ✗ |
-| **nomicfoundation** | - | 408.3 MB | unsupported | ✗ |
+| Server | p95 | RSS | Result |
+|--------|-----|-----|--------|
+| **mmsaki v0.1.25** | 1.6ms ⚡ | **14.0 MB** | 24 hints (tax:, base:, buyer:) |
+| **solc** | - | 25.8 MB | unsupported |
+| **qiuxiang** | - | 6.7 MB | unsupported |
+| **juanfranblanco** | - | 6.6 MB | unsupported |
+| **nomicfoundation** | - | 6.5 MB | unsupported |
 
 ### textDocument/semanticTokens/full
 
-| Server | p95 | RSS | Result | Responded |
-|--------|-----|-----|--------|-----------|
-| **mmsaki** | 1.6ms ⚡ | **12.7 MB** | 451 tokens | ✓ |
-| **solc** | - | 25.9 MB | error | ✗ |
-| **qiuxiang** | - | 64.4 MB | unsupported | ✗ |
-| **juanfranblanco** | - | 435.2 MB | unsupported | ✗ |
-| **nomicfoundation** | 13.8ms | 408.9 MB | 56 tokens | ✓ |
+| Server | p95 | RSS | Result |
+|--------|-----|-----|--------|
+| **mmsaki v0.1.25** | 1.6ms ⚡ | 13.8 MB | 451 tokens |
+| **solc** | - | 25.8 MB | error |
+| **qiuxiang** | - | 6.7 MB | unsupported |
+| **juanfranblanco** | - | 6.5 MB | unsupported |
+| **nomicfoundation** | 14.9ms | **6.6 MB** | 56 tokens |
 
 ### textDocument/semanticTokens/range
 
-| Server | p95 | RSS | Result | Responded |
-|--------|-----|-----|--------|-----------|
-| **mmsaki** | 1.0ms ⚡ | **12.6 MB** | 160 tokens | ✓ |
-| **solc** | - | 25.9 MB | unsupported | ✗ |
-| **qiuxiang** | - | 64.5 MB | unsupported | ✗ |
-| **juanfranblanco** | - | 425.7 MB | unsupported | ✗ |
-| **nomicfoundation** | - | 408.1 MB | unsupported | ✗ |
+| Server | p95 | RSS | Result |
+|--------|-----|-----|--------|
+| **mmsaki v0.1.25** | 1.0ms ⚡ | **13.9 MB** | 160 tokens |
+| **solc** | - | 25.9 MB | unsupported |
+| **qiuxiang** | - | 6.7 MB | unsupported |
+| **juanfranblanco** | - | 6.5 MB | unsupported |
+| **nomicfoundation** | - | 6.6 MB | unsupported |
 
 ### workspace/symbol
 
-| Server | p95 | RSS | Result | Responded |
-|--------|-----|-----|--------|-----------|
-| **mmsaki** | 1.1ms ⚡ | **12.7 MB** | 61 symbols | ✓ |
-| **solc** | - | 25.9 MB | unsupported | ✗ |
-| **qiuxiang** | - | 64.6 MB | unsupported | ✗ |
-| **juanfranblanco** | - | 418.3 MB | timeout | ✗ |
-| **nomicfoundation** | - | 409.3 MB | unsupported | ✗ |
+| Server | p95 | RSS | Result |
+|--------|-----|-----|--------|
+| **mmsaki v0.1.25** | 1.1ms ⚡ | **13.6 MB** | 61 symbols |
+| **solc** | - | 26.2 MB | unsupported |
+| **qiuxiang** | - | 6.7 MB | unsupported |
+| **juanfranblanco** | - | 6.5 MB | timeout |
+| **nomicfoundation** | - | 6.6 MB | unsupported |
 
 ---
 
-*Benchmark run: 2026-02-22T03:42:38Z*
+*Benchmark run: 2026-02-23T18:37:44Z*
