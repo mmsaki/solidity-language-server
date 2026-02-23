@@ -502,18 +502,18 @@ mod tests {
     }
 
     #[test]
-    fn test_counter_sol() {
-        let source = std::fs::read_to_string("example/Counter.sol").unwrap();
-        // "count" is used at multiple locations
-        let highlights = document_highlights(&source, Position::new(4, 23));
+    fn test_shop_sol() {
+        let source = std::fs::read_to_string("example/Shop.sol").unwrap();
+        // "PRICE" is declared at line 68 (0-indexed) and used in buy()
+        let highlights = document_highlights(&source, Position::new(68, 22));
         assert!(
-            highlights.len() >= 5,
-            "Counter.sol 'count' should have at least 5 highlights, got {}",
+            highlights.len() >= 2,
+            "Shop.sol 'PRICE' should have at least 2 highlights, got {}",
             highlights.len()
         );
 
-        // The declaration (line 4) should be Write
-        let decl = highlights.iter().find(|h| h.range.start.line == 4);
+        // The declaration (line 68) should be Write
+        let decl = highlights.iter().find(|h| h.range.start.line == 68);
         assert_eq!(
             decl.map(|h| h.kind),
             Some(Some(DocumentHighlightKind::WRITE))

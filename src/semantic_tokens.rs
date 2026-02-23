@@ -504,12 +504,12 @@ mod tests {
     }
 
     #[test]
-    fn test_counter_sol() {
-        let source = std::fs::read_to_string("example/Counter.sol").unwrap();
+    fn test_shop_sol() {
+        let source = std::fs::read_to_string("example/Shop.sol").unwrap();
         let result = semantic_tokens_full(&source);
         assert!(
-            result.data.len() > 20,
-            "Counter.sol should produce many tokens"
+            result.data.len() > 50,
+            "Shop.sol should produce many tokens"
         );
     }
 

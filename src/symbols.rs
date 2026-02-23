@@ -593,20 +593,16 @@ library SafeMath { function add(uint256 a, uint256 b) internal pure returns (uin
     }
 
     #[test]
-    fn test_counter_sol() {
-        let source = std::fs::read_to_string("example/Counter.sol").unwrap();
+    fn test_shop_sol() {
+        let source = std::fs::read_to_string("example/Shop.sol").unwrap();
         let symbols = extract_document_symbols(&source);
-        let children = symbols
-            .iter()
-            .find(|s| s.kind == SymbolKind::CLASS)
-            .unwrap()
-            .children
-            .as_ref()
-            .unwrap();
-        assert!(children.iter().any(|c| c.name == "increment"));
-        assert!(children.iter().any(|c| c.name == "decrement"));
-        assert!(children.iter().any(|c| c.name == "reset"));
-        assert!(children.iter().any(|c| c.name == "getCount"));
+        // Should find both Transaction library and Shop contract
+        assert!(symbols.iter().any(|s| s.name == "Transaction"));
+        let shop = symbols.iter().find(|s| s.name == "Shop").unwrap();
+        let children = shop.children.as_ref().unwrap();
+        assert!(children.iter().any(|c| c.name == "buy"));
+        assert!(children.iter().any(|c| c.name == "withdraw"));
+        assert!(children.iter().any(|c| c.name == "refund"));
     }
 
     #[test]

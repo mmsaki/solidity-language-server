@@ -487,22 +487,22 @@ import {
     }
 
     #[test]
-    fn test_counter_sol() {
-        let source = std::fs::read_to_string("example/Counter.sol").unwrap();
+    fn test_shop_sol() {
+        let source = std::fs::read_to_string("example/Shop.sol").unwrap();
         let ranges = folding_ranges(&source);
 
-        // Should have several folds: contract body, constructor, functions, etc.
+        // Shop.sol has library + contract bodies, many functions, comments, etc.
         assert!(
-            ranges.len() >= 5,
-            "Counter.sol should have at least 5 folding ranges, got {}",
+            ranges.len() >= 10,
+            "Shop.sol should have at least 10 folding ranges, got {}",
             ranges.len()
         );
 
-        // Contract body fold
-        let contract_fold = ranges.iter().find(|r| r.start_line == 3);
+        // Library body fold (Transaction at line 22)
+        let lib_fold = ranges.iter().find(|r| r.start_line == 22);
         assert!(
-            contract_fold.is_some(),
-            "expected fold starting at contract body (line 3)"
+            lib_fold.is_some(),
+            "expected fold starting at library body (line 22)"
         );
     }
 
