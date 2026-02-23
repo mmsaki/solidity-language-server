@@ -117,9 +117,57 @@ impl HintLookup {
 pub type HintIndex = HashMap<String, HintLookup>;
 
 /// Build the hint index for all files from the AST sources.
+/// Pre-computed constructor info for `new ContractName(args)` resolution.
+/// Maps contract declaration ID → (constructor declaration ID, contract name, param names).
+#[derive(Debug, Clone)]
+pub struct ConstructorInfo {
+    pub constructor_id: u64,
+    pub contract_name: String,
+    pub param_names: Vec<String>,
+}
+
+/// Index of contract ID → constructor info, built from the typed `decl_index`.
+pub type ConstructorIndex = HashMap<u64, ConstructorInfo>;
+
+/// Build the constructor index from the `decl_index`.
+///
+/// For every constructor in the decl_index, record contract ID → constructor info.
+pub fn build_constructor_index(
+    decl_index: &HashMap<i64, crate::solc_ast::DeclNode>,
+) -> ConstructorIndex {
+    let mut index = HashMap::new();
+    for (id, decl) in decl_index {
+        if decl.is_constructor()
+            && let Some(scope) = decl.scope()
+        {
+            let names = decl.param_names().unwrap_or_default();
+            // Look up contract name from the scope's decl entry
+            let contract_name = decl_index
+                .get(&scope)
+                .map(|d| d.name().to_string())
+                .unwrap_or_default();
+            index.insert(
+                scope as u64,
+                ConstructorInfo {
+                    constructor_id: *id as u64,
+                    contract_name,
+                    param_names: names,
+                },
+            );
+        }
+    }
+    index
+}
+
 /// Called once in `CachedBuild::new()`.
-pub fn build_hint_index(sources: &Value) -> HintIndex {
-    let id_index = build_id_index(sources);
+///
+/// Accepts the typed `decl_index` and `constructor_index` for O(1) param name
+/// resolution, replacing the previous `id_index: HashMap<u64, Value>`.
+pub fn build_hint_index(
+    sources: &Value,
+    decl_index: &HashMap<i64, crate::solc_ast::DeclNode>,
+    constructor_index: &ConstructorIndex,
+) -> HintIndex {
     let mut hint_index = HashMap::new();
 
     if let Some(obj) = sources.as_object() {
@@ -127,7 +175,7 @@ pub fn build_hint_index(sources: &Value) -> HintIndex {
             if let Some(ast) = source_data.get("ast")
                 && let Some(abs_path) = ast.get("absolutePath").and_then(|v| v.as_str())
             {
-                let lookup = build_hint_lookup(ast, &id_index);
+                let lookup = build_hint_lookup(ast, decl_index, constructor_index);
                 hint_index.insert(abs_path.to_string(), lookup);
             }
         }
@@ -192,46 +240,6 @@ pub fn inlay_hints(
     hints
 }
 
-/// Build a flat node-id → AST-node index from all sources.
-/// This is O(total_nodes) and replaces the O(calls × total_nodes)
-/// `find_declaration` that walked the entire AST per lookup.
-fn build_id_index(sources: &Value) -> HashMap<u64, &Value> {
-    let mut index = HashMap::new();
-    if let Some(obj) = sources.as_object() {
-        for (_, source_data) in obj {
-            if let Some(ast) = source_data.get("ast") {
-                index_node_ids(ast, &mut index);
-            }
-        }
-    }
-    index
-}
-
-/// Recursively index all nodes that have an `id` field.
-fn index_node_ids<'a>(node: &'a Value, index: &mut HashMap<u64, &'a Value>) {
-    if let Some(id) = node.get("id").and_then(|v| v.as_u64()) {
-        index.insert(id, node);
-    }
-    for key in crate::goto::CHILD_KEYS {
-        if let Some(child) = node.get(*key) {
-            if child.is_array() {
-                if let Some(arr) = child.as_array() {
-                    for item in arr {
-                        index_node_ids(item, index);
-                    }
-                }
-            } else if child.is_object() {
-                index_node_ids(child, index);
-            }
-        }
-    }
-    if let Some(nodes) = node.get("nodes").and_then(|v| v.as_array()) {
-        for child in nodes {
-            index_node_ids(child, index);
-        }
-    }
-}
-
 /// Parse Solidity source with tree-sitter.
 pub fn ts_parse(source: &str) -> Option<tree_sitter::Tree> {
     let mut parser = Parser::new();
@@ -242,12 +250,16 @@ pub fn ts_parse(source: &str) -> Option<tree_sitter::Tree> {
 }
 
 /// Build both lookup strategies from the AST.
-fn build_hint_lookup(file_ast: &Value, id_index: &HashMap<u64, &Value>) -> HintLookup {
+fn build_hint_lookup(
+    file_ast: &Value,
+    decl_index: &HashMap<i64, crate::solc_ast::DeclNode>,
+    constructor_index: &ConstructorIndex,
+) -> HintLookup {
     let mut lookup = HintLookup {
         by_offset: HashMap::new(),
         by_name: HashMap::new(),
     };
-    collect_ast_calls(file_ast, id_index, &mut lookup);
+    collect_ast_calls(file_ast, decl_index, constructor_index, &mut lookup);
     lookup
 }
 
@@ -258,12 +270,17 @@ fn parse_src_offset(node: &Value) -> Option<usize> {
 }
 
 /// Recursively walk AST nodes collecting call site info.
-fn collect_ast_calls(node: &Value, id_index: &HashMap<u64, &Value>, lookup: &mut HintLookup) {
+fn collect_ast_calls(
+    node: &Value,
+    decl_index: &HashMap<i64, crate::solc_ast::DeclNode>,
+    constructor_index: &ConstructorIndex,
+    lookup: &mut HintLookup,
+) {
     let node_type = node.get("nodeType").and_then(|v| v.as_str()).unwrap_or("");
 
     match node_type {
         "FunctionCall" => {
-            if let Some(call_info) = extract_call_info(node, id_index) {
+            if let Some(call_info) = extract_call_info(node, decl_index, constructor_index) {
                 let arg_count = node
                     .get("arguments")
                     .and_then(|v| v.as_array())
@@ -289,7 +306,8 @@ fn collect_ast_calls(node: &Value, id_index: &HashMap<u64, &Value>, lookup: &mut
         }
         "EmitStatement" => {
             if let Some(event_call) = node.get("eventCall")
-                && let Some(call_info) = extract_call_info(event_call, id_index)
+                && let Some(call_info) =
+                    extract_call_info(event_call, decl_index, constructor_index)
             {
                 let arg_count = event_call
                     .get("arguments")
@@ -323,11 +341,11 @@ fn collect_ast_calls(node: &Value, id_index: &HashMap<u64, &Value>, lookup: &mut
             if child.is_array() {
                 if let Some(arr) = child.as_array() {
                     for item in arr {
-                        collect_ast_calls(item, id_index, lookup);
+                        collect_ast_calls(item, decl_index, constructor_index, lookup);
                     }
                 }
             } else if child.is_object() {
-                collect_ast_calls(child, id_index, lookup);
+                collect_ast_calls(child, decl_index, constructor_index, lookup);
             }
         }
     }
@@ -344,7 +362,11 @@ struct CallInfo {
 }
 
 /// Extract function/event name and parameter info from an AST FunctionCall node.
-fn extract_call_info(node: &Value, id_index: &HashMap<u64, &Value>) -> Option<CallInfo> {
+fn extract_call_info(
+    node: &Value,
+    decl_index: &HashMap<i64, crate::solc_ast::DeclNode>,
+    constructor_index: &ConstructorIndex,
+) -> Option<CallInfo> {
     let args = node.get("arguments")?.as_array()?;
     if args.is_empty() {
         return None;
@@ -366,15 +388,15 @@ fn extract_call_info(node: &Value, id_index: &HashMap<u64, &Value>) -> Option<Ca
 
     // Contract creation: `new Token(args)` — the expression is a NewExpression
     // whose typeName holds the referencedDeclaration pointing to the contract.
-    // We resolve the constructor from the contract's nodes.
+    // We resolve the constructor from the constructor_index.
     if expr_type == "NewExpression" {
-        return extract_new_expression_call_info(expr, args.len(), id_index);
+        return extract_new_expression_call_info(expr, args.len(), constructor_index);
     }
 
     let decl_id = expr.get("referencedDeclaration").and_then(|v| v.as_u64())?;
 
-    let decl_node = id_index.get(&decl_id)?;
-    let names = get_parameter_names(decl_node)?;
+    let decl = decl_index.get(&(decl_id as i64))?;
+    let names = decl.param_names()?;
 
     // Extract the function name from the expression
     let func_name = extract_function_name(expr)?;
@@ -405,45 +427,35 @@ fn extract_call_info(node: &Value, id_index: &HashMap<u64, &Value>) -> Option<Ca
 ///
 /// The AST represents this as a `FunctionCall` whose `expression` is a
 /// `NewExpression`.  The `NewExpression` has a `typeName` with a
-/// `referencedDeclaration` pointing to the `ContractDefinition`.  We find the
-/// constructor inside that contract to get parameter names.
+/// `referencedDeclaration` pointing to the `ContractDefinition`.  We resolve
+/// the constructor via the pre-built `constructor_index`.
 fn extract_new_expression_call_info(
     new_expr: &Value,
     _arg_count: usize,
-    id_index: &HashMap<u64, &Value>,
+    constructor_index: &ConstructorIndex,
 ) -> Option<CallInfo> {
     let type_name = new_expr.get("typeName")?;
     let contract_id = type_name
         .get("referencedDeclaration")
         .and_then(|v| v.as_u64())?;
 
-    let contract_node = id_index.get(&contract_id)?;
+    let info = constructor_index.get(&contract_id)?;
 
-    // Find the constructor among the contract's nodes
-    let constructor = contract_node
-        .get("nodes")
-        .and_then(|v| v.as_array())?
-        .iter()
-        .find(|n| {
-            n.get("nodeType").and_then(|v| v.as_str()) == Some("FunctionDefinition")
-                && n.get("kind").and_then(|v| v.as_str()) == Some("constructor")
-        })?;
-
-    let constructor_id = constructor.get("id").and_then(|v| v.as_u64())?;
-    let names = get_parameter_names(constructor)?;
-
-    // Extract the contract name from the typeName path
+    // Prefer contract name from AST typeName path, fall back to constructor_index
     let contract_name = type_name
         .get("pathNode")
         .and_then(|p| p.get("name"))
         .and_then(|v| v.as_str())
-        // Fallback for older solc that may not have pathNode
-        .or_else(|| contract_node.get("name").and_then(|v| v.as_str()))?;
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| info.contract_name.clone());
 
     Some(CallInfo {
-        name: contract_name.to_string(),
-        params: ParamInfo { names, skip: 0 },
-        decl_id: constructor_id,
+        name: contract_name,
+        params: ParamInfo {
+            names: info.param_names.clone(),
+            skip: 0,
+        },
+        decl_id: info.constructor_id,
     })
 }
 
@@ -1221,28 +1233,6 @@ fn ts_gas_hint_for_contract(
 
 // ── AST helpers ──────────────────────────────────────────────────────────
 
-/// Extract parameter names from a function/event/error/struct declaration.
-fn get_parameter_names(decl: &Value) -> Option<Vec<String>> {
-    // Functions, events, errors: parameters.parameters[]
-    // Structs: members[]
-    let items = decl
-        .get("parameters")
-        .and_then(|p| p.get("parameters"))
-        .and_then(|v| v.as_array())
-        .or_else(|| decl.get("members").and_then(|v| v.as_array()))?;
-    Some(
-        items
-            .iter()
-            .map(|p| {
-                p.get("name")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string()
-            })
-            .collect(),
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1306,20 +1296,6 @@ contract Foo {
             .find(|c| c.kind() == "function_definition")
             .unwrap();
         assert!(has_gas_sentinel(fn_node, source));
-    }
-
-    #[test]
-    fn test_get_parameter_names() {
-        let decl: Value = serde_json::json!({
-            "parameters": {
-                "parameters": [
-                    {"name": "to", "nodeType": "VariableDeclaration"},
-                    {"name": "amount", "nodeType": "VariableDeclaration"},
-                ]
-            }
-        });
-        let names = get_parameter_names(&decl).unwrap();
-        assert_eq!(names, vec!["to", "amount"]);
     }
 
     #[test]
@@ -1532,25 +1508,7 @@ contract Factory {
 
     #[test]
     fn test_extract_new_expression_call_info() {
-        // Simulate the AST structure solc produces for `new Token("MyToken", 1000)`
-        let constructor: Value = serde_json::json!({
-            "id": 21,
-            "nodeType": "FunctionDefinition",
-            "kind": "constructor",
-            "name": "",
-            "parameters": {
-                "parameters": [
-                    {"name": "_name", "nodeType": "VariableDeclaration"},
-                    {"name": "_supply", "nodeType": "VariableDeclaration"}
-                ]
-            }
-        });
-        let contract: Value = serde_json::json!({
-            "id": 22,
-            "nodeType": "ContractDefinition",
-            "name": "Token",
-            "nodes": [constructor]
-        });
+        // Simulate `new Token("MyToken", 1000)` using a ConstructorIndex
         let new_expr: Value = serde_json::json!({
             "nodeType": "NewExpression",
             "typeName": {
@@ -1562,11 +1520,17 @@ contract Factory {
             }
         });
 
-        let mut id_index: HashMap<u64, &Value> = HashMap::new();
-        id_index.insert(22, &contract);
-        id_index.insert(21, &constructor);
+        let mut constructor_index = ConstructorIndex::new();
+        constructor_index.insert(
+            22,
+            ConstructorInfo {
+                constructor_id: 21,
+                contract_name: "Token".to_string(),
+                param_names: vec!["_name".to_string(), "_supply".to_string()],
+            },
+        );
 
-        let info = extract_new_expression_call_info(&new_expr, 2, &id_index).unwrap();
+        let info = extract_new_expression_call_info(&new_expr, 2, &constructor_index).unwrap();
         assert_eq!(info.name, "Token");
         assert_eq!(info.params.names, vec!["_name", "_supply"]);
         assert_eq!(info.params.skip, 0);

@@ -34,10 +34,10 @@ pub fn document_links(
     };
 
     for (_id, node_info) in file_nodes.iter() {
-        if node_info.node_type.as_deref() == Some("ImportDirective") {
-            if let Some(link) = import_link(node_info, source_bytes) {
-                links.push(link);
-            }
+        if node_info.node_type.as_deref() == Some("ImportDirective")
+            && let Some(link) = import_link(node_info, source_bytes)
+        {
+            links.push(link);
         }
     }
 

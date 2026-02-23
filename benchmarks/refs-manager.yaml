@@ -1,0 +1,25 @@
+# References on the `manager` state variable in Deployers.sol line 56:
+#   IPoolManager manager;
+#                ^^^^^^^
+# Bug: references for `manager` are returning IPoolManager (interface) references
+# mixed in with the actual `manager` variable references.
+#   lsp-bench -c benchmarks/refs-manager.yaml
+
+project: v4-core
+file: test/utils/Deployers.sol
+line: 55
+col: 17
+output: benchmarks/refs-manager
+report: README.md
+response: full
+
+benchmarks:
+  - textDocument/references
+
+servers:
+  - mmsaki@latest
+
+methods:
+  textDocument/references:
+    line: 55
+    col: 17

@@ -4,14 +4,14 @@ use solidity_language_server::types::NodeId;
 use std::collections::HashMap;
 use std::fs;
 
-type Type = (
+type CachedIds = (
     HashMap<String, HashMap<NodeId, goto::NodeInfo>>,
     HashMap<String, String>,
     goto::ExternalRefs,
 );
 
 /// Load poolmanager.json, normalize from solc shape, and run cache_ids.
-fn load_ast() -> Type {
+fn load_ast() -> CachedIds {
     let raw: Value =
         serde_json::from_str(&fs::read_to_string("poolmanager.json").unwrap()).unwrap();
     let ast_data = solidity_language_server::solc::normalize_solc_output(raw, None);

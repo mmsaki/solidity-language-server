@@ -21,6 +21,8 @@ mmsaki:
       cmd: /Users/meek/.solidity-lsp/0.1.22/bin/solidity-language-server
     v0.1.23:
       cmd: /Users/meek/.solidity-lsp/0.1.23/bin/solidity-language-server
+    v0.1.24:
+      cmd: /Users/meek/.solidity-lsp/0.1.24/bin/solidity-language-server
     latest:
       cmd: ./target/release/solidity-language-server
 

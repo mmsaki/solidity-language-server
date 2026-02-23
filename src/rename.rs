@@ -2,7 +2,6 @@ use crate::goto;
 use crate::goto::CachedBuild;
 use crate::references;
 use crate::types::SourceLoc;
-use serde_json::Value;
 use std::collections::HashMap;
 use tower_lsp::lsp_types::{Position, Range, TextEdit, Url, WorkspaceEdit};
 
@@ -55,19 +54,17 @@ fn get_text_at_range(source_bytes: &[u8], range: &Range) -> Option<String> {
 }
 
 fn get_name_location_index(
-    ast_data: &Value,
+    build: &CachedBuild,
     file_uri: &Url,
     position: Position,
     source_bytes: &[u8],
 ) -> Option<usize> {
-    let sources = ast_data.get("sources")?;
-    let (nodes, path_to_abs, _external_refs) = goto::cache_ids(sources);
     let path = file_uri.to_file_path().ok()?;
     let path_str = path.to_str()?;
-    let abs_path = path_to_abs.get(path_str)?;
+    let abs_path = build.path_to_abs.get(path_str)?;
     let byte_position = goto::pos_to_bytes(source_bytes, position);
-    let node_id = references::byte_to_id(&nodes, abs_path, byte_position)?;
-    let file_nodes = nodes.get(abs_path)?;
+    let node_id = references::byte_to_id(&build.nodes, abs_path, byte_position)?;
+    let file_nodes = build.nodes.get(abs_path)?;
     let node_info = file_nodes.get(&node_id)?;
 
     if !node_info.name_locations.is_empty() {
@@ -175,7 +172,8 @@ pub fn get_identifier_range(source_bytes: &[u8], position: Position) -> Option<R
     Some(Range { start, end })
 }
 
-type Type = HashMap<Url, HashMap<(u32, u32, u32, u32), TextEdit>>;
+/// Deduplication map: URI → (start_line, start_col, end_line, end_col) → TextEdit.
+type RenameEdits = HashMap<Url, HashMap<(u32, u32, u32, u32), TextEdit>>;
 
 pub fn rename_symbol(
     build: &CachedBuild,
@@ -187,9 +185,9 @@ pub fn rename_symbol(
     text_buffers: &HashMap<String, Vec<u8>>,
 ) -> Option<WorkspaceEdit> {
     let original_identifier = get_identifier_at_position(source_bytes, position)?;
-    let name_location_index = get_name_location_index(&build.ast, file_uri, position, source_bytes);
-    let mut locations = references::goto_references_with_index(
-        &build.ast,
+    let name_location_index = get_name_location_index(build, file_uri, position, source_bytes);
+    let mut locations = references::goto_references_cached(
+        build,
         file_uri,
         position,
         source_bytes,
@@ -228,7 +226,7 @@ pub fn rename_symbol(
     if locations.is_empty() {
         return None;
     }
-    let mut changes: Type = HashMap::new();
+    let mut changes: RenameEdits = HashMap::new();
     for location in locations {
         // Read the file content, preferring in-memory text buffers (which
         // reflect unsaved editor changes) over reading from disk.

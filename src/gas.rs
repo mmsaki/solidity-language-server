@@ -157,33 +157,35 @@ pub fn gas_for_contract<'a>(
 
 /// Resolve the gas index key for a declaration node.
 ///
-/// Walks up through `scope` to find the containing `ContractDefinition`,
-/// then further to the `SourceUnit` to get `absolutePath`.
-/// Returns the `"path:ContractName"` key used in the gas index.
-pub fn resolve_contract_key(
-    sources: &Value,
-    decl_node: &Value,
+/// Typed version of `resolve_contract_key` using `DeclNode` and typed indices.
+///
+/// Resolves a declaration node to its `"{abs_path}:{contract_name}"` gas index key
+/// using typed field access instead of raw `Value` chains.
+pub fn resolve_contract_key_typed(
+    decl: &crate::solc_ast::DeclNode,
     index: &GasIndex,
+    decl_index: &HashMap<i64, crate::solc_ast::DeclNode>,
+    node_id_to_source_path: &HashMap<i64, String>,
 ) -> Option<String> {
-    let node_type = decl_node.get("nodeType").and_then(|v| v.as_str())?;
+    use crate::solc_ast::DeclNode;
 
-    // If this IS a ContractDefinition, find its source path directly
-    let (contract_name, source_id) = if node_type == "ContractDefinition" {
-        let name = decl_node.get("name").and_then(|v| v.as_str())?;
-        let scope_id = decl_node.get("scope").and_then(|v| v.as_u64())?;
-        (name.to_string(), scope_id)
-    } else {
-        // Walk up to containing contract
-        let scope_id = decl_node.get("scope").and_then(|v| v.as_u64())?;
-        let scope_node = crate::hover::find_node_by_id(sources, crate::types::NodeId(scope_id))?;
-        let contract_name = scope_node.get("name").and_then(|v| v.as_str())?;
-        let source_id = scope_node.get("scope").and_then(|v| v.as_u64())?;
-        (contract_name.to_string(), source_id)
+    // Get the contract name and source unit scope
+    let (contract_name, source_unit_scope) = match decl {
+        DeclNode::ContractDefinition(c) => (c.name.as_str(), c.scope?),
+        _ => {
+            // Walk up to containing contract via scope
+            let scope_id = decl.scope()?;
+            let scope_decl = decl_index.get(&scope_id)?;
+            let contract = match scope_decl {
+                DeclNode::ContractDefinition(c) => c,
+                _ => return None,
+            };
+            (contract.name.as_str(), contract.scope?)
+        }
     };
 
-    // Find the SourceUnit to get the absolute path
-    let source_unit = crate::hover::find_node_by_id(sources, crate::types::NodeId(source_id))?;
-    let abs_path = source_unit.get("absolutePath").and_then(|v| v.as_str())?;
+    // Find the absolute path via node_id_to_source_path (O(1) lookup)
+    let abs_path = node_id_to_source_path.get(&source_unit_scope)?;
 
     // Build the exact key
     let exact_key = format!("{abs_path}:{contract_name}");
@@ -191,9 +193,10 @@ pub fn resolve_contract_key(
         return Some(exact_key);
     }
 
-    // Fallback: the gas index may use a different path representation.
-    // Match by suffix — find a key ending with the filename:ContractName.
-    let file_name = std::path::Path::new(abs_path).file_name()?.to_str()?;
+    // Fallback: match by suffix
+    let file_name = std::path::Path::new(abs_path.as_str())
+        .file_name()?
+        .to_str()?;
     let suffix = format!("{file_name}:{contract_name}");
     index.keys().find(|k| k.ends_with(&suffix)).cloned()
 }

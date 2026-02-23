@@ -1,3 +1,7 @@
+#[cfg(feature = "dhat-heap")]
+#[global_allocator]
+static ALLOC: dhat::Alloc = dhat::Alloc;
+
 use clap::Parser;
 use eyre::Result;
 use solidity_language_server::lsp::ForgeLsp;
@@ -67,6 +71,9 @@ impl LspArgs {
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
+    #[cfg(feature = "dhat-heap")]
+    let _profiler = dhat::Profiler::new_heap();
+
     let args = LspArgs::parse();
     args.run().await
 }

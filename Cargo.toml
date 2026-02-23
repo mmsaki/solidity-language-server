@@ -33,3 +33,15 @@ svm = { package = "svm-rs", version = "0.5", default-features = false, features 
   "rustls",
 ] }
 semver = "1"
+dhat = { version = "0.3", optional = true }
+
+[features]
+dhat-heap = ["dhat"]
+
+[profile.release]
+debug = 1  # needed for DHAT backtraces
+
+[[bin]]
+name = "dhat-profile"
+path = "src/bin/dhat_profile.rs"
+required-features = ["dhat-heap"]

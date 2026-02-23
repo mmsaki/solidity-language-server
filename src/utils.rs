@@ -1,4 +1,5 @@
 use lintspec_core::textindex::{TextIndex, compute_indices};
+use serde_json::Value;
 use std::sync::OnceLock;
 use tower_lsp::lsp_types::{Position, PositionEncodingKind};
 
@@ -308,4 +309,23 @@ fn is_numeric_type_keyword(name: &str) -> bool {
         return (1..=32).contains(&n);
     }
     false
+}
+
+// ---------------------------------------------------------------------------
+// JSON AST helpers
+// ---------------------------------------------------------------------------
+
+/// Push a JSON value onto `stack` if the field `key` is an object or array.
+///
+/// Used during AST walks that iterate over child nodes without full
+/// typed deserialization. Objects are pushed as-is; arrays are flattened
+/// so each element is pushed individually.
+pub fn push_if_node_or_array<'a>(tree: &'a Value, key: &str, stack: &mut Vec<&'a Value>) {
+    if let Some(value) = tree.get(key) {
+        match value {
+            Value::Array(arr) => stack.extend(arr),
+            Value::Object(_) => stack.push(value),
+            _ => {}
+        }
+    }
 }

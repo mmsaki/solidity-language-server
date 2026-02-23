@@ -16,6 +16,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::RwLock;
 use tower_lsp::{Client, LanguageServer, lsp_types::*};
 
+/// Per-document semantic token cache: `result_id` + token list.
+type SemanticTokenCache = HashMap<String, (String, Vec<SemanticToken>)>;
+
 pub struct ForgeLsp {
     client: Client,
     compiler: Arc<dyn Runner>,
@@ -36,8 +39,7 @@ pub struct ForgeLsp {
     /// Whether to use solc directly for AST generation (with forge fallback).
     use_solc: bool,
     /// Cache of semantic tokens per document for delta support.
-    /// Key: URI string, Value: (result_id, tokens).
-    semantic_token_cache: Arc<RwLock<HashMap<String, (String, Vec<SemanticToken>)>>>,
+    semantic_token_cache: Arc<RwLock<SemanticTokenCache>>,
     /// Monotonic counter for generating unique result_ids.
     semantic_token_id: Arc<AtomicU64>,
     /// Workspace root URI from `initialize`. Used for project-wide file discovery.
@@ -232,19 +234,11 @@ impl ForgeLsp {
                 cache.insert(uri.to_string(), cached_build.clone());
                 drop(cache);
 
-                // Rebuild completion cache in the background; old cache stays usable until replaced
-                let completion_cache = self.completion_cache.clone();
-                let uri_string = uri.to_string();
-                tokio::spawn(async move {
-                    if let Some(sources) = cached_build.ast.get("sources") {
-                        let contracts = cached_build.ast.get("contracts");
-                        let cc = completion::build_completion_cache(sources, contracts);
-                        completion_cache
-                            .write()
-                            .await
-                            .insert(uri_string, Arc::new(cc));
-                    }
-                });
+                // Insert pre-built completion cache (built during CachedBuild::new)
+                {
+                    let mut cc = self.completion_cache.write().await;
+                    cc.insert(uri.to_string(), cached_build.completion_cache.clone());
+                }
                 self.client
                     .log_message(MessageType::INFO, "Build successful, AST cache updated")
                     .await;
@@ -1029,7 +1023,7 @@ impl LanguageServer for ForgeLsp {
         };
 
         if cached.is_none() {
-            // Spawn background cache build so the next request will have full completions
+            // Use pre-built completion cache from CachedBuild
             let ast_cache = self.ast_cache.clone();
             let completion_cache = self.completion_cache.clone();
             let uri_string = uri.to_string();
@@ -1041,14 +1035,10 @@ impl LanguageServer for ForgeLsp {
                         None => return,
                     }
                 };
-                if let Some(sources) = cached_build.ast.get("sources") {
-                    let contracts = cached_build.ast.get("contracts");
-                    let cc = completion::build_completion_cache(sources, contracts);
-                    completion_cache
-                        .write()
-                        .await
-                        .insert(uri_string, Arc::new(cc));
-                }
+                completion_cache
+                    .write()
+                    .await
+                    .insert(uri_string, cached_build.completion_cache.clone());
             });
         }
 
@@ -1202,7 +1192,7 @@ impl LanguageServer for ForgeLsp {
             // CLEAN: AST first → tree-sitter fallback (validated)
             if let Some(ref cb) = cached_build
                 && let Some(location) =
-                    goto::goto_declaration(&cb.ast, &uri, position, &source_bytes)
+                    goto::goto_declaration_cached(cb, &uri, position, &source_bytes)
             {
                 self.client
                     .log_message(
@@ -1285,7 +1275,7 @@ impl LanguageServer for ForgeLsp {
         };
 
         if let Some(location) =
-            goto::goto_declaration(&cached_build.ast, &uri, position, &source_bytes)
+            goto::goto_declaration_cached(&cached_build, &uri, position, &source_bytes)
         {
             self.client
                 .log_message(
@@ -1334,12 +1324,13 @@ impl LanguageServer for ForgeLsp {
             None => return Ok(None),
         };
 
-        // Get references from the current file's AST
-        let mut locations = references::goto_references(
-            &cached_build.ast,
+        // Get references from the current file's AST — uses pre-built indices
+        let mut locations = references::goto_references_cached(
+            &cached_build,
             &uri,
             position,
             &source_bytes,
+            None,
             params.context.include_declaration,
         );
 
@@ -1678,15 +1669,7 @@ impl LanguageServer for ForgeLsp {
             None => return Ok(None),
         };
 
-        let result = hover::hover_info(
-            &cached_build.ast,
-            &uri,
-            position,
-            &source_bytes,
-            &cached_build.gas_index,
-            &cached_build.doc_index,
-            &cached_build.hint_index,
-        );
+        let result = hover::hover_info(&cached_build, &uri, position, &source_bytes);
 
         if result.is_some() {
             self.client
@@ -1733,13 +1716,7 @@ impl LanguageServer for ForgeLsp {
             None => return Ok(None),
         };
 
-        let result = hover::signature_help(
-            &cached_build.ast,
-            &source_bytes,
-            position,
-            &cached_build.hint_index,
-            &cached_build.doc_index,
-        );
+        let result = hover::signature_help(&cached_build, &source_bytes, position);
 
         Ok(result)
     }

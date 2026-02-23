@@ -5,3 +5,12 @@ cache
 
 # Benchmark results (generated)
 benchmarks/**/*.json
+
+# DHAT heap profiling output
+dhat-heap*.json
+
+# Large solc output fixtures (generate with solc --standard-json)
+poolmanager-t-full.json
+
+# VS Code extension build artifacts
+editors/vscode/*.vsix

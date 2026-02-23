@@ -75,10 +75,18 @@ fn test_cached_build_has_external_refs() {
 }
 
 #[test]
-fn test_cached_build_preserves_raw_ast() {
+fn test_cached_build_drops_raw_ast() {
     let build = load_cached_build();
-    assert!(build.ast.get("sources").is_some());
-    assert!(build.ast.get("source_id_to_path").is_some());
+    // Raw AST JSON is fully consumed during construction — no `ast` field retained.
+    // All data lives in pre-built indexes: nodes, decl_index, gas_index, doc_index, etc.
+    assert!(
+        !build.decl_index.is_empty(),
+        "decl_index should be populated from the consumed AST"
+    );
+    assert!(
+        !build.id_to_path_map.is_empty(),
+        "id_to_path_map should be populated from source_id_to_path"
+    );
 }
 
 // =============================================================================

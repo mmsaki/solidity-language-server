@@ -4,6 +4,7 @@ use tower_lsp::lsp_types::{Location, Position, Range, Url};
 use tree_sitter::{Node, Parser};
 
 use crate::types::{NodeId, SourceLoc};
+use crate::utils::push_if_node_or_array;
 
 #[derive(Debug, Clone)]
 pub struct NodeInfo {
@@ -79,33 +80,29 @@ pub const CHILD_KEYS: &[&str] = &[
     "variables",
 ];
 
-fn push_if_node_or_array<'a>(tree: &'a Value, key: &str, stack: &mut Vec<&'a Value>) {
-    if let Some(value) = tree.get(key) {
-        match value {
-            Value::Array(arr) => {
-                stack.extend(arr);
-            }
-            Value::Object(_) => {
-                stack.push(value);
-            }
-            _ => {}
-        }
-    }
-}
-
 /// Maps `"offset:length:fileId"` src strings from Yul externalReferences
 /// to the Solidity declaration node id they refer to.
 pub type ExternalRefs = HashMap<String, NodeId>;
 
 /// Pre-computed AST index. Built once when an AST enters the cache,
 /// then reused on every goto/references/rename/hover request.
+///
+/// All data from the raw solc JSON is consumed during `new()` into
+/// pre-built indexes. The raw JSON is not retained.
 #[derive(Debug, Clone)]
 pub struct CachedBuild {
-    pub ast: Value,
     pub nodes: HashMap<String, HashMap<NodeId, NodeInfo>>,
     pub path_to_abs: HashMap<String, String>,
     pub external_refs: ExternalRefs,
     pub id_to_path_map: HashMap<String, String>,
+    /// O(1) typed declaration node lookup by AST node ID.
+    /// Built from the typed AST via visitor. Contains functions, variables,
+    /// contracts, events, errors, structs, enums, modifiers, and UDVTs.
+    pub decl_index: HashMap<i64, crate::solc_ast::DeclNode>,
+    /// O(1) lookup from any declaration/source-unit node ID to its source file path.
+    /// Built from `typed_ast` during construction. Replaces the O(N)
+    /// `find_source_path_for_node()` that walked raw JSON.
+    pub node_id_to_source_path: HashMap<i64, String>,
     /// Pre-built gas index from contract output. Built once, reused by
     /// hover, inlay hints, and code lens.
     pub gas_index: crate::gas::GasIndex,
@@ -115,6 +112,9 @@ pub struct CachedBuild {
     /// Pre-built documentation index from solc userdoc/devdoc.
     /// Merged and keyed by selector for fast hover lookup.
     pub doc_index: crate::hover::DocIndex,
+    /// Pre-built completion cache. Built from sources during construction
+    /// before the sources key is stripped.
+    pub completion_cache: std::sync::Arc<crate::completion::CompletionCache>,
     /// The text_cache version this build was created from.
     /// Used to detect dirty files (unsaved edits since last build).
     pub build_version: i32,
@@ -146,35 +146,73 @@ impl CachedBuild {
 
         let gas_index = crate::gas::build_gas_index(&ast);
 
+        let doc_index = crate::hover::build_doc_index(&ast);
+
+        // Extract declaration nodes directly from the raw sources JSON.
+        // Instead of deserializing the entire typed AST (SourceUnit, all
+        // expressions, statements, Yul blocks), this walks the raw Value
+        // tree and only deserializes nodes whose nodeType matches one of the
+        // 9 declaration types. Heavy fields (body, modifiers, value, etc.)
+        // are stripped before deserialization.
+        let (decl_index, node_id_to_source_path) = if let Some(sources) = ast.get("sources") {
+            match crate::solc_ast::extract_decl_nodes(sources) {
+                Some(extracted) => (extracted.decl_index, extracted.node_id_to_source_path),
+                None => (HashMap::new(), HashMap::new()),
+            }
+        } else {
+            (HashMap::new(), HashMap::new())
+        };
+
+        // Build constructor index and hint index from the typed decl_index.
+        let constructor_index = crate::inlay_hints::build_constructor_index(&decl_index);
         let hint_index = if let Some(sources) = ast.get("sources") {
-            crate::inlay_hints::build_hint_index(sources)
+            crate::inlay_hints::build_hint_index(sources, &decl_index, &constructor_index)
         } else {
             HashMap::new()
         };
 
-        let doc_index = crate::hover::build_doc_index(&ast);
+        // Build completion cache before stripping sources.
+        let completion_cache = {
+            let sources = ast.get("sources");
+            let contracts = ast.get("contracts");
+            let cc = if let Some(s) = sources {
+                crate::completion::build_completion_cache(s, contracts)
+            } else {
+                crate::completion::build_completion_cache(
+                    &serde_json::Value::Object(Default::default()),
+                    contracts,
+                )
+            };
+            std::sync::Arc::new(cc)
+        };
+
+        // The raw AST JSON is fully consumed — all data has been extracted
+        // into the pre-built indexes above. `ast` is dropped here.
 
         Self {
-            ast,
             nodes,
             path_to_abs,
             external_refs,
             id_to_path_map,
+            decl_index,
+            node_id_to_source_path,
             gas_index,
             hint_index,
             doc_index,
+            completion_cache,
             build_version,
         }
     }
 }
 
-type Type = (
+/// Return type of [`cache_ids`]: `(nodes, path_to_abs, external_refs)`.
+type CachedIds = (
     HashMap<String, HashMap<NodeId, NodeInfo>>,
     HashMap<String, String>,
     ExternalRefs,
 );
 
-pub fn cache_ids(sources: &Value) -> Type {
+pub fn cache_ids(sources: &Value) -> CachedIds {
     let mut nodes: HashMap<String, HashMap<NodeId, NodeInfo>> = HashMap::new();
     let mut path_to_abs: HashMap<String, String> = HashMap::new();
     let mut external_refs: ExternalRefs = HashMap::new();
@@ -484,28 +522,21 @@ pub fn goto_bytes(
     Some((file_path, loc.offset, loc.length))
 }
 
-pub fn goto_declaration(
-    ast_data: &Value,
+/// Go-to-declaration using pre-built `CachedBuild` indices.
+/// Avoids redundant O(N) AST traversal by reusing cached node maps.
+pub fn goto_declaration_cached(
+    build: &CachedBuild,
     file_uri: &Url,
     position: Position,
     source_bytes: &[u8],
 ) -> Option<Location> {
-    let sources = ast_data.get("sources")?;
-    let id_to_path = ast_data.get("source_id_to_path")?.as_object()?;
-
-    let id_to_path_map: HashMap<String, String> = id_to_path
-        .iter()
-        .map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
-        .collect();
-
-    let (nodes, path_to_abs, external_refs) = cache_ids(sources);
     let byte_position = pos_to_bytes(source_bytes, position);
 
     if let Some((file_path, location_bytes, length)) = goto_bytes(
-        &nodes,
-        &path_to_abs,
-        &id_to_path_map,
-        &external_refs,
+        &build.nodes,
+        &build.path_to_abs,
+        &build.id_to_path_map,
+        &build.external_refs,
         file_uri.as_ref(),
         byte_position,
     ) {
@@ -537,7 +568,7 @@ pub fn goto_declaration(
 /// Name-based AST goto — resolves by searching cached AST nodes for identifiers
 /// matching `name` in the current file, then following `referencedDeclaration`.
 ///
-/// Unlike `goto_declaration` which matches by byte offset (breaks on dirty files),
+/// Unlike `goto_declaration_cached` which matches by byte offset (breaks on dirty files),
 /// this reads the identifier text from the **built source** (on disk) at each node's
 /// `src` range and compares it to the cursor name. Works on dirty files because the
 /// AST node relationships (referencedDeclaration) are still valid — only the byte
@@ -561,11 +592,11 @@ pub fn goto_declaration_by_name(
     // Collect all matching nodes: (distance_to_hint, span_size, ref_id)
     let mut candidates: Vec<(usize, usize, NodeId)> = Vec::new();
 
-    let mut tmp = {
+    let tmp = {
         let this = cached_build.nodes.get(abs_path)?;
         this.iter()
     };
-    while let Some((_id, node)) = tmp.next() {
+    for (_id, node) in tmp {
         let ref_id = match node.referenced_declaration {
             Some(id) => id,
             None => continue,
@@ -791,26 +822,24 @@ fn find_variable_type(from: Node, source: &str, var_name: &str) -> Option<String
                 // Check local variable declarations
                 let mut c = node.walk();
                 for child in node.children(&mut c) {
-                    if child.kind() == "variable_declaration_statement"
-                        || child.kind() == "variable_declaration"
+                    if (child.kind() == "variable_declaration_statement"
+                        || child.kind() == "variable_declaration")
+                        && let Some(id) = ts_child_id_text(child, source)
+                        && id == var_name
                     {
-                        if let Some(id) = ts_child_id_text(child, source)
-                            && id == var_name
-                        {
-                            let mut pc = child.walk();
-                            return child
-                                .children(&mut pc)
-                                .find(|c| {
-                                    matches!(
-                                        c.kind(),
-                                        "type_name"
-                                            | "primitive_type"
-                                            | "user_defined_type"
-                                            | "mapping"
-                                    )
-                                })
-                                .map(|t| source[t.byte_range()].trim().to_string());
-                        }
+                        let mut pc = child.walk();
+                        return child
+                            .children(&mut pc)
+                            .find(|c| {
+                                matches!(
+                                    c.kind(),
+                                    "type_name"
+                                        | "primitive_type"
+                                        | "user_defined_type"
+                                        | "mapping"
+                                )
+                            })
+                            .map(|t| source[t.byte_range()].trim().to_string());
                     }
                 }
             }

@@ -1,0 +1,30 @@
+# Cross-file references bug reproduction:
+# Open Deployers.sol, get baseline references on `manager` variable,
+# then open PoolManager.t.sol and re-request — the cross-file results
+# get contaminated with IPoolManager (interface) references.
+#
+# Iteration 0: baseline (Deployers.sol only) — 15 correct `manager` refs
+# Iteration 1: after didOpen PoolManager.t.sol — 97 refs (IPoolManager mixed in)
+#
+#   lsp-bench -c benchmarks/refs-manager-crossfile.yaml
+
+project: v4-core
+file: test/utils/Deployers.sol
+line: 55
+col: 17
+output: benchmarks/refs-manager-crossfile
+report: README.md
+response: full
+
+benchmarks:
+  - textDocument/references
+
+servers:
+  - mmsaki@latest
+
+methods:
+  textDocument/references:
+    line: 55
+    col: 17
+    didOpen:
+      - file: test/PoolManager.t.sol

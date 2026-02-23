@@ -5,7 +5,9 @@ use tower_lsp::lsp_types::{
 };
 
 use crate::goto::CHILD_KEYS;
+use crate::hover::build_function_signature;
 use crate::types::{FileId, NodeId, SourceLoc};
+use crate::utils::push_if_node_or_array;
 
 /// A declaration found within a specific scope.
 #[derive(Debug, Clone)]
@@ -30,6 +32,7 @@ pub struct ScopeRange {
 }
 
 /// Completion cache built from the AST.
+#[derive(Debug)]
 pub struct CompletionCache {
     /// All named identifiers as completion items (flat, unscoped).
     pub names: Vec<CompletionItem>,
@@ -93,16 +96,6 @@ pub struct CompletionCache {
     pub contract_kinds: HashMap<NodeId, String>,
 }
 
-fn push_if_node_or_array<'a>(tree: &'a Value, key: &str, stack: &mut Vec<&'a Value>) {
-    if let Some(value) = tree.get(key) {
-        match value {
-            Value::Array(arr) => stack.extend(arr),
-            Value::Object(_) => stack.push(value),
-            _ => {}
-        }
-    }
-}
-
 /// Map AST nodeType to LSP CompletionItemKind.
 fn node_type_to_completion_kind(node_type: &str) -> CompletionItemKind {
     match node_type {
@@ -154,86 +147,6 @@ pub fn extract_node_id_from_type(type_id: &str) -> Option<NodeId> {
         }
     }
     last_id
-}
-
-/// Build a human-readable function signature from a FunctionDefinition AST node.
-/// e.g. `swap(PoolKey key, SwapParams params, bytes hookData) returns (BalanceDelta swapDelta)`
-fn build_function_signature(node: &Value) -> Option<String> {
-    let name = node.get("name").and_then(|v| v.as_str()).unwrap_or("");
-    if name.is_empty() {
-        return None;
-    }
-
-    let params = node
-        .get("parameters")
-        .and_then(|p| p.get("parameters"))
-        .and_then(|v| v.as_array());
-
-    let mut sig = String::new();
-    sig.push_str(name);
-    sig.push('(');
-
-    if let Some(params) = params {
-        for (i, param) in params.iter().enumerate() {
-            if i > 0 {
-                sig.push_str(", ");
-            }
-            let type_str = param
-                .get("typeDescriptions")
-                .and_then(|td| td.get("typeString"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("?");
-            // Clean up the type string: "struct PoolKey" → "PoolKey", "contract IHooks" → "IHooks"
-            let clean_type = type_str
-                .strip_prefix("struct ")
-                .or_else(|| type_str.strip_prefix("contract "))
-                .or_else(|| type_str.strip_prefix("enum "))
-                .unwrap_or(type_str);
-            let param_name = param.get("name").and_then(|v| v.as_str()).unwrap_or("");
-            sig.push_str(clean_type);
-            if !param_name.is_empty() {
-                sig.push(' ');
-                sig.push_str(param_name);
-            }
-        }
-    }
-    sig.push(')');
-
-    // Add return parameters if present
-    let returns = node
-        .get("returnParameters")
-        .and_then(|p| p.get("parameters"))
-        .and_then(|v| v.as_array());
-
-    if let Some(returns) = returns
-        && !returns.is_empty()
-    {
-        sig.push_str(" returns (");
-        for (i, ret) in returns.iter().enumerate() {
-            if i > 0 {
-                sig.push_str(", ");
-            }
-            let type_str = ret
-                .get("typeDescriptions")
-                .and_then(|td| td.get("typeString"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("?");
-            let clean_type = type_str
-                .strip_prefix("struct ")
-                .or_else(|| type_str.strip_prefix("contract "))
-                .or_else(|| type_str.strip_prefix("enum "))
-                .unwrap_or(type_str);
-            let ret_name = ret.get("name").and_then(|v| v.as_str()).unwrap_or("");
-            sig.push_str(clean_type);
-            if !ret_name.is_empty() {
-                sig.push(' ');
-                sig.push_str(ret_name);
-            }
-        }
-        sig.push(')');
-    }
-
-    Some(sig)
 }
 
 /// Extract the deepest value type from a mapping typeIdentifier.
