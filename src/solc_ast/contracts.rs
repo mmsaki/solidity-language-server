@@ -24,6 +24,42 @@ pub enum ContractDefinitionNode {
     UserDefinedValueTypeDefinition(UserDefinedValueTypeDefinition),
 }
 
+impl ContractDefinitionNode {
+    /// Extract the function/error/event selector from this contract child node.
+    ///
+    /// Returns the hex selector string (no `0x` prefix):
+    /// - 4-byte for functions, public variables, and errors
+    /// - 32-byte for events
+    /// - `None` for other node types
+    pub fn selector(&self) -> Option<&str> {
+        match self {
+            Self::FunctionDefinition(n) => n.function_selector.as_deref(),
+            Self::VariableDeclaration(n) => n.function_selector.as_deref(),
+            Self::EventDefinition(n) => n.event_selector.as_deref(),
+            Self::ErrorDefinition(n) => n.error_selector.as_deref(),
+            _ => None,
+        }
+    }
+
+    /// Extract the documentation text from this contract child node.
+    pub fn documentation_text(&self) -> Option<String> {
+        let doc = match self {
+            Self::FunctionDefinition(n) => n.documentation.as_ref()?,
+            Self::VariableDeclaration(n) => n.documentation.as_ref()?,
+            Self::EventDefinition(n) => n.documentation.as_ref()?,
+            Self::ErrorDefinition(n) => n.documentation.as_ref()?,
+            Self::StructDefinition(n) => n.documentation.as_ref()?,
+            Self::EnumDefinition(n) => n.documentation.as_ref()?,
+            Self::ModifierDefinition(n) => n.documentation.as_ref()?,
+            _ => return None,
+        };
+        match doc {
+            super::Documentation::String(s) => Some(s.clone()),
+            super::Documentation::Structured(s) => Some(s.text.clone()),
+        }
+    }
+}
+
 /// An inheritance specifier (`is Base(arg1, arg2)`).
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]

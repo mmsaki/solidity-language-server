@@ -958,4 +958,163 @@ mod tests {
             mismatches.join("\n"),
         );
     }
+
+    /// Verify that `lookup_doc_entry_typed` produces identical output to
+    /// `lookup_doc_entry` for every declaration in the fixture.
+    #[test]
+    fn lookup_doc_entry_parity_with_raw() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("poolmanager.json");
+        let json = std::fs::read_to_string(&path).unwrap();
+        let raw: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        let build = crate::goto::CachedBuild::new(raw, 0);
+        let sources = build.ast.get("sources").unwrap();
+        let id_idx = Some(&build.id_index);
+
+        let mut checked = 0;
+        let mut mismatches = Vec::new();
+
+        for (id, decl) in &build.decl_index {
+            let raw_node = match build.id_index.get(&(*id as u64)) {
+                Some(n) => n,
+                None => continue,
+            };
+
+            let typed_result = crate::hover::lookup_doc_entry_typed(
+                &build.doc_index,
+                decl,
+                &build.decl_index,
+                &build.node_id_to_source_path,
+            );
+            let raw_result =
+                crate::hover::lookup_doc_entry(&build.doc_index, raw_node, sources, id_idx);
+
+            // Compare the notice/details/title fields (params/returns order may vary)
+            let typed_key = typed_result.as_ref().map(|e| {
+                (
+                    e.notice.clone(),
+                    e.details.clone(),
+                    e.title.clone(),
+                    e.author.clone(),
+                )
+            });
+            let raw_key = raw_result.as_ref().map(|e| {
+                (
+                    e.notice.clone(),
+                    e.details.clone(),
+                    e.title.clone(),
+                    e.author.clone(),
+                )
+            });
+
+            if typed_key != raw_key {
+                mismatches.push(format!(
+                    "id={id} name={:?} type={}: typed={:?} raw={:?}",
+                    decl.name(),
+                    decl.node_type(),
+                    typed_key,
+                    raw_key,
+                ));
+            }
+            checked += 1;
+        }
+
+        assert!(
+            mismatches.is_empty(),
+            "lookup_doc_entry parity failures ({}/{checked}):\n{}",
+            mismatches.len(),
+            mismatches.join("\n"),
+        );
+        assert!(checked > 200, "expected to check >200, got {checked}");
+    }
+
+    /// Verify that `resolve_inheritdoc_typed` produces identical output to
+    /// `resolve_inheritdoc` for declarations with `@inheritdoc`.
+    #[test]
+    fn resolve_inheritdoc_parity_with_raw() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("poolmanager.json");
+        let json = std::fs::read_to_string(&path).unwrap();
+        let raw: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        let build = crate::goto::CachedBuild::new(raw, 0);
+        let sources = build.ast.get("sources").unwrap();
+        let id_idx = Some(&build.id_index);
+
+        let mut checked = 0;
+        let mut mismatches = Vec::new();
+
+        for (id, decl) in &build.decl_index {
+            let doc_text = match decl.extract_doc_text() {
+                Some(t) if t.contains("@inheritdoc") => t,
+                _ => continue,
+            };
+
+            let raw_node = match build.id_index.get(&(*id as u64)) {
+                Some(n) => n,
+                None => continue,
+            };
+
+            let typed_result =
+                crate::hover::resolve_inheritdoc_typed(decl, &doc_text, &build.decl_index);
+            let raw_result = crate::hover::resolve_inheritdoc(sources, raw_node, &doc_text, id_idx);
+
+            if typed_result != raw_result {
+                mismatches.push(format!(
+                    "id={id} name={:?}: typed={:?} raw={:?}",
+                    decl.name(),
+                    typed_result,
+                    raw_result,
+                ));
+            }
+            checked += 1;
+        }
+
+        assert!(
+            mismatches.is_empty(),
+            "resolve_inheritdoc parity failures ({}/{checked}):\n{}",
+            mismatches.len(),
+            mismatches.join("\n"),
+        );
+        // The fixture should have at least a few @inheritdoc declarations
+        assert!(checked > 0, "expected to find @inheritdoc declarations");
+    }
+
+    /// Verify that `node_id_to_source_path` covers all declaration nodes.
+    #[test]
+    fn node_id_to_source_path_covers_decl_index() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("poolmanager.json");
+        let json = std::fs::read_to_string(&path).unwrap();
+        let raw: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        let build = crate::goto::CachedBuild::new(raw, 0);
+
+        assert!(
+            !build.node_id_to_source_path.is_empty(),
+            "node_id_to_source_path should be populated"
+        );
+
+        // Every contract, function, event, error at contract level should have a path
+        let mut missing = Vec::new();
+        for (id, decl) in &build.decl_index {
+            // Skip parameter VariableDeclarations — they are nested deeper than
+            // the 2-level walk in our path builder
+            if matches!(decl, DeclNode::VariableDeclaration(v) if v.state_variable != Some(true)) {
+                continue;
+            }
+            if build.node_id_to_source_path.get(id).is_none() {
+                missing.push(format!(
+                    "id={id} name={:?} type={}",
+                    decl.name(),
+                    decl.node_type()
+                ));
+            }
+        }
+
+        assert!(
+            missing.is_empty(),
+            "Declarations without source path ({}):\n{}",
+            missing.len(),
+            missing.join("\n"),
+        );
+    }
 }

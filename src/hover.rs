@@ -447,6 +447,75 @@ pub fn lookup_doc_entry(
     }
 }
 
+/// Typed version of `lookup_doc_entry` using `DeclNode` and `decl_index`.
+///
+/// Looks up documentation for an AST declaration node from the DocIndex
+/// using typed field access instead of raw `Value` chains.
+pub fn lookup_doc_entry_typed(
+    doc_index: &DocIndex,
+    decl: &crate::solc_ast::DeclNode,
+    decl_index: &std::collections::HashMap<i64, crate::solc_ast::DeclNode>,
+    node_id_to_source_path: &std::collections::HashMap<i64, String>,
+) -> Option<DocEntry> {
+    use crate::solc_ast::DeclNode;
+
+    match decl {
+        DeclNode::FunctionDefinition(_) | DeclNode::VariableDeclaration(_) => {
+            // Try by selector first
+            if let Some(sel) = decl.selector() {
+                let key = DocKey::Func(FuncSelector::new(sel));
+                if let Some(entry) = doc_index.get(&key) {
+                    return Some(entry.clone());
+                }
+            }
+
+            // For state variables without selector, try statevar key
+            if matches!(decl, DeclNode::VariableDeclaration(_)) {
+                let var_name = decl.name();
+                if let Some(scope_id) = decl.scope() {
+                    if let Some(scope_decl) = decl_index.get(&scope_id) {
+                        let contract_name = scope_decl.name();
+                        if let Some(path) = node_id_to_source_path.get(&scope_id) {
+                            let key =
+                                DocKey::StateVar(format!("{path}:{contract_name}:{var_name}"));
+                            if let Some(entry) = doc_index.get(&key) {
+                                return Some(entry.clone());
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Fallback: try method by name
+            let fn_name = decl.name();
+            let scope_id = decl.scope()?;
+            let scope_decl = decl_index.get(&scope_id)?;
+            let contract_name = scope_decl.name();
+            let path = node_id_to_source_path.get(&scope_id)?;
+            let key = DocKey::Method(format!("{path}:{contract_name}:{fn_name}"));
+            doc_index.get(&key).cloned()
+        }
+        DeclNode::ErrorDefinition(_) => {
+            let sel = decl.selector()?;
+            let key = DocKey::Func(FuncSelector::new(sel));
+            doc_index.get(&key).cloned()
+        }
+        DeclNode::EventDefinition(_) => {
+            let sel = decl.selector()?;
+            let key = DocKey::Event(EventSelector::new(sel));
+            doc_index.get(&key).cloned()
+        }
+        DeclNode::ContractDefinition(_) => {
+            let contract_name = decl.name();
+            let node_id = decl.id();
+            let path = node_id_to_source_path.get(&node_id)?;
+            let key = DocKey::Contract(format!("{path}:{contract_name}"));
+            doc_index.get(&key).cloned()
+        }
+        _ => None,
+    }
+}
+
 /// Look up documentation for a parameter from its parent function/error/event.
 ///
 /// When hovering a `VariableDeclaration` that is a parameter or return value,
@@ -524,6 +593,97 @@ pub fn lookup_param_doc(
         // Resolve @inheritdoc if present
         let resolved = if doc_text.contains("@inheritdoc") {
             resolve_inheritdoc(sources, parent_node, &doc_text, id_index)
+        } else {
+            None
+        };
+        let text = resolved.as_deref().unwrap_or(&doc_text);
+
+        let tag = if is_return { "@return " } else { "@param " };
+        for line in text.lines() {
+            let trimmed = line.trim().trim_start_matches('*').trim();
+            if let Some(rest) = trimmed.strip_prefix(tag) {
+                if let Some((name, desc)) = rest.split_once(' ') {
+                    if name == param_name {
+                        return Some(desc.to_string());
+                    }
+                } else if rest == param_name {
+                    return Some(String::new());
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Typed version of `lookup_param_doc` using `DeclNode` and `decl_index`.
+///
+/// When hovering a parameter/return `VariableDeclaration`, this looks up
+/// the parent declaration in `decl_index` and extracts `@param`/`@return` doc.
+pub fn lookup_param_doc_typed(
+    doc_index: &DocIndex,
+    decl: &crate::solc_ast::DeclNode,
+    decl_index: &std::collections::HashMap<i64, crate::solc_ast::DeclNode>,
+    node_id_to_source_path: &std::collections::HashMap<i64, String>,
+) -> Option<String> {
+    use crate::solc_ast::DeclNode;
+
+    // Only VariableDeclarations can be parameters
+    let var = match decl {
+        DeclNode::VariableDeclaration(v) => v,
+        _ => return None,
+    };
+
+    let param_name = &var.name;
+    if param_name.is_empty() {
+        return None;
+    }
+
+    // Walk up to the parent via scope
+    let scope_id = var.scope?;
+    let parent = decl_index.get(&scope_id)?;
+
+    // Only handle function/error/event/modifier parents
+    if !matches!(
+        parent,
+        DeclNode::FunctionDefinition(_)
+            | DeclNode::ErrorDefinition(_)
+            | DeclNode::EventDefinition(_)
+            | DeclNode::ModifierDefinition(_)
+    ) {
+        return None;
+    }
+
+    // Determine if this param is a return value (only for functions)
+    let is_return = if let Some(ret_params) = parent.return_parameters() {
+        ret_params.parameters.iter().any(|p| p.id == var.id)
+    } else {
+        false
+    };
+
+    // Try DocIndex first (structured devdoc)
+    if let Some(parent_doc) =
+        lookup_doc_entry_typed(doc_index, parent, decl_index, node_id_to_source_path)
+    {
+        if is_return {
+            for (rname, rdesc) in &parent_doc.returns {
+                if rname == param_name {
+                    return Some(rdesc.clone());
+                }
+            }
+        } else {
+            for (pname, pdesc) in &parent_doc.params {
+                if pname == param_name {
+                    return Some(pdesc.clone());
+                }
+            }
+        }
+    }
+
+    // Fallback: parse raw AST documentation on the parent
+    if let Some(doc_text) = parent.extract_doc_text() {
+        let resolved = if doc_text.contains("@inheritdoc") {
+            resolve_inheritdoc_typed(parent, &doc_text, decl_index)
         } else {
             None
         };
@@ -775,6 +935,73 @@ pub fn resolve_inheritdoc(
             && child_selector == impl_selector
         {
             return extract_documentation(child);
+        }
+    }
+
+    None
+}
+
+/// Typed version of `resolve_inheritdoc` using `DeclNode` and `decl_index`.
+///
+/// Resolves `@inheritdoc ParentName` by matching selectors in the parent
+/// contract's typed `nodes` array. Falls back to the raw version if any
+/// typed lookup fails.
+pub fn resolve_inheritdoc_typed(
+    decl: &crate::solc_ast::DeclNode,
+    doc_text: &str,
+    decl_index: &std::collections::HashMap<i64, crate::solc_ast::DeclNode>,
+) -> Option<String> {
+    use crate::solc_ast::DeclNode;
+
+    // Parse "@inheritdoc ParentName"
+    let parent_name = doc_text
+        .lines()
+        .find_map(|line| {
+            let trimmed = line.trim().trim_start_matches('*').trim();
+            trimmed.strip_prefix("@inheritdoc ")
+        })?
+        .trim();
+
+    // Get the selector from the implementation function
+    let impl_selector = decl.extract_typed_selector()?;
+
+    // Get the scope (containing contract id)
+    let scope_id = decl.scope()?;
+
+    // Find the scope contract in decl_index
+    let scope_decl = decl_index.get(&scope_id)?;
+    let scope_contract = match scope_decl {
+        DeclNode::ContractDefinition(c) => c,
+        _ => return None,
+    };
+
+    // Find the parent contract in baseContracts by name
+    let parent_id = scope_contract.base_contracts.iter().find_map(|base| {
+        if base.base_name.name == parent_name {
+            base.base_name.referenced_declaration
+        } else {
+            None
+        }
+    })?;
+
+    // Find the parent contract in decl_index
+    let parent_decl = decl_index.get(&parent_id)?;
+    let parent_contract = match parent_decl {
+        DeclNode::ContractDefinition(c) => c,
+        _ => return None,
+    };
+
+    // Search parent's children for matching selector
+    for child in &parent_contract.nodes {
+        if let Some(child_sel_str) = child.selector() {
+            // Compare selectors — both are hex strings
+            let child_matches = match &impl_selector {
+                crate::types::Selector::Func(fs) => child_sel_str == fs.as_hex(),
+                crate::types::Selector::Event(es) => child_sel_str == es.as_hex(),
+            };
+            if child_matches {
+                return child.documentation_text();
+            }
         }
     }
 
@@ -1571,9 +1798,14 @@ pub fn hover_info(
         }
     }
 
-    // Documentation — try userdoc/devdoc first, fall back to AST docs
-    // (lookup_doc_entry / lookup_param_doc / resolve_inheritdoc still use raw Value)
-    if let Some(doc_entry) = lookup_doc_entry(doc_index, decl_node, sources, id_idx) {
+    let di = &cached_build.decl_index;
+    let id_to_path = &cached_build.node_id_to_source_path;
+
+    // Documentation — try typed lookup first, fall back to raw Value
+    if let Some(doc_entry) = typed_decl
+        .and_then(|d| lookup_doc_entry_typed(doc_index, d, di, id_to_path))
+        .or_else(|| lookup_doc_entry(doc_index, decl_node, sources, id_idx))
+    {
         let formatted = format_doc_entry(&doc_entry);
         if !formatted.is_empty() {
             parts.push(format!("---\n{formatted}"));
@@ -1582,12 +1814,17 @@ pub fn hover_info(
         .and_then(|d| d.extract_doc_text())
         .or_else(|| extract_documentation(decl_node))
     {
-        let inherited_doc = resolve_inheritdoc(sources, decl_node, &doc_text, id_idx);
+        let inherited_doc = typed_decl
+            .and_then(|d| resolve_inheritdoc_typed(d, &doc_text, di))
+            .or_else(|| resolve_inheritdoc(sources, decl_node, &doc_text, id_idx));
         let formatted = format_natspec(&doc_text, inherited_doc.as_deref());
         if !formatted.is_empty() {
             parts.push(format!("---\n{formatted}"));
         }
-    } else if let Some(param_doc) = lookup_param_doc(doc_index, decl_node, sources, id_idx) {
+    } else if let Some(param_doc) = typed_decl
+        .and_then(|d| lookup_param_doc_typed(doc_index, d, di, id_to_path))
+        .or_else(|| lookup_param_doc(doc_index, decl_node, sources, id_idx))
+    {
         // Parameter/return value — show the @param/@return description from parent
         if !param_doc.is_empty() {
             parts.push(format!("---\n{param_doc}"));
@@ -1610,37 +1847,69 @@ pub fn hover_info(
                 ctx.arg_index,
             )
         {
-            // Look up @param doc using the declaration id — O(1) lookup
-            let fn_decl = id_index.get(&resolved.decl_id);
-            let param_doc = fn_decl.and_then(|decl| {
-                // Try DocIndex first (structured devdoc)
-                if let Some(doc_entry) = lookup_doc_entry(doc_index, decl, sources, id_idx) {
-                    for (pname, pdesc) in &doc_entry.params {
-                        if pname == &resolved.param_name {
-                            return Some(pdesc.clone());
+            // Look up @param doc — prefer typed DeclNode
+            let typed_fn = di.get(&(resolved.decl_id as i64));
+            let param_doc = typed_fn
+                .and_then(|fn_decl| {
+                    // Try DocIndex first (structured devdoc)
+                    if let Some(doc_entry) =
+                        lookup_doc_entry_typed(doc_index, fn_decl, di, id_to_path)
+                    {
+                        for (pname, pdesc) in &doc_entry.params {
+                            if pname == &resolved.param_name {
+                                return Some(pdesc.clone());
+                            }
                         }
                     }
-                }
-                // Fallback: parse raw NatSpec on the function definition
-                if let Some(doc_text) = extract_documentation(decl) {
-                    let resolved_doc = if doc_text.contains("@inheritdoc") {
-                        resolve_inheritdoc(sources, decl, &doc_text, id_idx)
-                    } else {
-                        None
-                    };
-                    let text = resolved_doc.as_deref().unwrap_or(&doc_text);
-                    for line in text.lines() {
-                        let trimmed = line.trim().trim_start_matches('*').trim();
-                        if let Some(rest) = trimmed.strip_prefix("@param ")
-                            && let Some((name, desc)) = rest.split_once(' ')
-                            && name == resolved.param_name
-                        {
-                            return Some(desc.to_string());
+                    // Fallback: parse typed NatSpec on the function definition
+                    if let Some(doc_text) = fn_decl.extract_doc_text() {
+                        let resolved_doc = if doc_text.contains("@inheritdoc") {
+                            resolve_inheritdoc_typed(fn_decl, &doc_text, di)
+                        } else {
+                            None
+                        };
+                        let text = resolved_doc.as_deref().unwrap_or(&doc_text);
+                        for line in text.lines() {
+                            let trimmed = line.trim().trim_start_matches('*').trim();
+                            if let Some(rest) = trimmed.strip_prefix("@param ")
+                                && let Some((name, desc)) = rest.split_once(' ')
+                                && name == resolved.param_name
+                            {
+                                return Some(desc.to_string());
+                            }
                         }
                     }
-                }
-                None
-            });
+                    None
+                })
+                .or_else(|| {
+                    // Fall back to raw Value if typed lookup not available
+                    let raw_fn = id_index.get(&resolved.decl_id)?;
+                    if let Some(doc_entry) = lookup_doc_entry(doc_index, raw_fn, sources, id_idx) {
+                        for (pname, pdesc) in &doc_entry.params {
+                            if pname == &resolved.param_name {
+                                return Some(pdesc.clone());
+                            }
+                        }
+                    }
+                    if let Some(doc_text) = extract_documentation(raw_fn) {
+                        let resolved_doc = if doc_text.contains("@inheritdoc") {
+                            resolve_inheritdoc(sources, raw_fn, &doc_text, id_idx)
+                        } else {
+                            None
+                        };
+                        let text = resolved_doc.as_deref().unwrap_or(&doc_text);
+                        for line in text.lines() {
+                            let trimmed = line.trim().trim_start_matches('*').trim();
+                            if let Some(rest) = trimmed.strip_prefix("@param ")
+                                && let Some((name, desc)) = rest.split_once(' ')
+                                && name == resolved.param_name
+                            {
+                                return Some(desc.to_string());
+                            }
+                        }
+                    }
+                    None
+                });
             if let Some(desc) = param_doc
                 && !desc.is_empty()
             {

@@ -117,6 +117,10 @@ pub struct CachedBuild {
     /// Built from the typed AST via visitor. Contains functions, variables,
     /// contracts, events, errors, structs, enums, modifiers, and UDVTs.
     pub decl_index: HashMap<i64, crate::solc_ast::DeclNode>,
+    /// O(1) lookup from any declaration/source-unit node ID to its source file path.
+    /// Built from `typed_ast` during construction. Replaces the O(N)
+    /// `find_source_path_for_node()` that walked raw JSON.
+    pub node_id_to_source_path: HashMap<i64, String>,
     /// Pre-built gas index from contract output. Built once, reused by
     /// hover, inlay hints, and code lens.
     pub gas_index: crate::gas::GasIndex,
@@ -195,15 +199,60 @@ impl CachedBuild {
         });
 
         // Build typed declaration index from the typed AST via visitor.
-        let decl_index = if let Some(ref sources) = typed_ast {
+        // Also build node_id → source_path reverse index for O(1) path lookups.
+        let (decl_index, node_id_to_source_path) = if let Some(ref sources) = typed_ast {
             use crate::solc_ast::visitor::Node as AstNode;
+            use crate::solc_ast::{ContractDefinitionNode, SourceUnitNode};
+
             let mut visitor = crate::solc_ast::DeclIndexVisitor::new();
-            for source_unit in sources.values() {
+            let mut id_to_path = HashMap::new();
+
+            for (path, source_unit) in sources {
+                // Record the source unit itself
+                id_to_path.insert(source_unit.id, path.clone());
+
+                // Record all top-level nodes
+                for node in &source_unit.nodes {
+                    let node_id = match node {
+                        SourceUnitNode::PragmaDirective(n) => n.id,
+                        SourceUnitNode::ImportDirective(n) => n.id,
+                        SourceUnitNode::ContractDefinition(n) => {
+                            // Also record all contract children
+                            for child in &n.nodes {
+                                let child_id = match child {
+                                    ContractDefinitionNode::FunctionDefinition(c) => c.id,
+                                    ContractDefinitionNode::VariableDeclaration(c) => c.id,
+                                    ContractDefinitionNode::EventDefinition(c) => c.id,
+                                    ContractDefinitionNode::ErrorDefinition(c) => c.id,
+                                    ContractDefinitionNode::StructDefinition(c) => c.id,
+                                    ContractDefinitionNode::EnumDefinition(c) => c.id,
+                                    ContractDefinitionNode::ModifierDefinition(c) => c.id,
+                                    ContractDefinitionNode::UserDefinedValueTypeDefinition(c) => {
+                                        c.id
+                                    }
+                                    ContractDefinitionNode::UsingForDirective(c) => c.id,
+                                };
+                                id_to_path.insert(child_id, path.clone());
+                            }
+                            n.id
+                        }
+                        SourceUnitNode::FunctionDefinition(n) => n.id,
+                        SourceUnitNode::StructDefinition(n) => n.id,
+                        SourceUnitNode::EnumDefinition(n) => n.id,
+                        SourceUnitNode::ErrorDefinition(n) => n.id,
+                        SourceUnitNode::UsingForDirective(n) => n.id,
+                        SourceUnitNode::VariableDeclaration(n) => n.id,
+                        SourceUnitNode::UserDefinedValueTypeDefinition(n) => n.id,
+                    };
+                    id_to_path.insert(node_id, path.clone());
+                }
+
                 source_unit.accept(&mut visitor);
             }
-            visitor.decls
+
+            (visitor.decls, id_to_path)
         } else {
-            HashMap::new()
+            (HashMap::new(), HashMap::new())
         };
 
         Self {
@@ -215,6 +264,7 @@ impl CachedBuild {
             id_index,
             typed_ast,
             decl_index,
+            node_id_to_source_path,
             gas_index,
             hint_index,
             doc_index,
