@@ -327,72 +327,6 @@ impl ForgeLsp {
             }
         }
 
-        // Trigger project index on first successful build of a source file.
-        // Skip for test (.t.sol) and script (.s.sol) files — their own compilation
-        // already pulls in the dependencies they need.
-        // This compiles all source files in a single solc invocation so that
-        // cross-file features (references, rename) discover the full project.
-        // Runs before publishing diagnostics so the cache is populated before
-        // the client can send any requests.
-        let is_test_or_script = path_str.ends_with(".t.sol") || path_str.ends_with(".s.sol");
-        if build_succeeded
-            && self.use_solc
-            && !is_test_or_script
-            && !self
-                .project_indexed
-                .load(std::sync::atomic::Ordering::Relaxed)
-        {
-            self.project_indexed
-                .store(true, std::sync::atomic::Ordering::Relaxed);
-            let foundry_config = self.foundry_config.read().await.clone();
-            let root_uri = self.root_uri.read().await.clone();
-
-            // Use the project root URI as the cache key for the global index.
-            let cache_key = root_uri.as_ref().map(|u| u.to_string());
-
-            if let Some(cache_key) = cache_key {
-                if foundry_config
-                    .root
-                    .join(&foundry_config.sources_dir)
-                    .is_dir()
-                {
-                    match crate::solc::solc_project_index(&foundry_config, Some(&self.client)).await
-                    {
-                        Ok(ast_data) => {
-                            let cached_build = Arc::new(crate::goto::CachedBuild::new(ast_data, 0));
-                            let source_count = cached_build.nodes.len();
-                            self.ast_cache.write().await.insert(cache_key, cached_build);
-                            self.client
-                                .log_message(
-                                    MessageType::INFO,
-                                    format!("project index: cached {} source files", source_count),
-                                )
-                                .await;
-                        }
-                        Err(e) => {
-                            self.client
-                                .log_message(
-                                    MessageType::WARNING,
-                                    format!("project index failed: {e}"),
-                                )
-                                .await;
-                        }
-                    }
-                } else {
-                    self.client
-                        .log_message(
-                            MessageType::INFO,
-                            format!(
-                                "project index: {}/{} not found, skipping",
-                                foundry_config.root.display(),
-                                foundry_config.sources_dir
-                            ),
-                        )
-                        .await;
-                }
-            }
-        }
-
         // Sanitize: some LSP clients (e.g. trunk.io) crash on diagnostics with
         // empty message fields. Replace any empty message with a safe fallback
         // before publishing regardless of which diagnostic source produced it.
@@ -402,7 +336,7 @@ impl ForgeLsp {
             }
         }
 
-        // publish diags with no version, so we are sure they get displayed
+        // Publish diagnostics immediately — don't block on project indexing.
         self.client
             .publish_diagnostics(uri, all_diagnostics, None)
             .await;
@@ -412,6 +346,113 @@ impl ForgeLsp {
             let client = self.client.clone();
             tokio::spawn(async move {
                 let _ = client.inlay_hint_refresh().await;
+            });
+        }
+
+        // Trigger project index in the background on first successful build.
+        // This compiles all project files (src, test, script) in a single solc
+        // invocation so that cross-file features (references, rename) discover
+        // the full project. Runs asynchronously after diagnostics are published
+        // so the user sees diagnostics immediately without waiting for the index.
+        if build_succeeded
+            && self.use_solc
+            && !self
+                .project_indexed
+                .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            self.project_indexed
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+            let foundry_config = self.foundry_config.read().await.clone();
+            let root_uri = self.root_uri.read().await.clone();
+            let cache_key = root_uri.as_ref().map(|u| u.to_string());
+            let ast_cache = self.ast_cache.clone();
+            let client = self.client.clone();
+
+            tokio::spawn(async move {
+                let Some(cache_key) = cache_key else {
+                    return;
+                };
+                if !foundry_config.root.is_dir() {
+                    client
+                        .log_message(
+                            MessageType::INFO,
+                            format!(
+                                "project index: {} not found, skipping",
+                                foundry_config.root.display(),
+                            ),
+                        )
+                        .await;
+                    return;
+                }
+
+                // Create a progress token to show indexing status in the editor.
+                let token = NumberOrString::String("solidity/projectIndex".to_string());
+                let _ = client
+                    .send_request::<request::WorkDoneProgressCreate>(WorkDoneProgressCreateParams {
+                        token: token.clone(),
+                    })
+                    .await;
+
+                // Begin progress: show spinner in the status bar.
+                client
+                    .send_notification::<notification::Progress>(ProgressParams {
+                        token: token.clone(),
+                        value: ProgressParamsValue::WorkDone(WorkDoneProgress::Begin(
+                            WorkDoneProgressBegin {
+                                title: "Indexing project".to_string(),
+                                message: Some("Discovering source files...".to_string()),
+                                cancellable: Some(false),
+                                percentage: None,
+                            },
+                        )),
+                    })
+                    .await;
+
+                match crate::solc::solc_project_index(&foundry_config, Some(&client)).await {
+                    Ok(ast_data) => {
+                        let cached_build = Arc::new(crate::goto::CachedBuild::new(ast_data, 0));
+                        let source_count = cached_build.nodes.len();
+                        ast_cache.write().await.insert(cache_key, cached_build);
+                        client
+                            .log_message(
+                                MessageType::INFO,
+                                format!("project index: cached {} source files", source_count),
+                            )
+                            .await;
+
+                        // End progress: indexing complete.
+                        client
+                            .send_notification::<notification::Progress>(ProgressParams {
+                                token: token.clone(),
+                                value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(
+                                    WorkDoneProgressEnd {
+                                        message: Some(format!(
+                                            "Indexed {} source files",
+                                            source_count
+                                        )),
+                                    },
+                                )),
+                            })
+                            .await;
+                    }
+                    Err(e) => {
+                        client
+                            .log_message(MessageType::WARNING, format!("project index failed: {e}"))
+                            .await;
+
+                        // End progress on failure too.
+                        client
+                            .send_notification::<notification::Progress>(ProgressParams {
+                                token: token.clone(),
+                                value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(
+                                    WorkDoneProgressEnd {
+                                        message: Some("Indexing failed".to_string()),
+                                    },
+                                )),
+                            })
+                            .await;
+                    }
+                }
             });
         }
     }

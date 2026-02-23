@@ -135,6 +135,9 @@ pub struct FoundryConfig {
     pub ignored_error_codes: Vec<u64>,
     /// Source directory relative to `root` (default: `src` for Foundry, `contracts` for Hardhat).
     pub sources_dir: String,
+    /// Library directories to exclude from project-wide indexing.
+    /// Parsed from `libs = ["lib"]` in foundry.toml (default: `["lib"]`).
+    pub libs: Vec<String>,
 }
 
 impl Default for FoundryConfig {
@@ -149,6 +152,7 @@ impl Default for FoundryConfig {
             evm_version: None,
             ignored_error_codes: Vec::new(),
             sources_dir: "src".to_string(),
+            libs: vec!["lib".to_string()],
         }
     }
 }
@@ -255,6 +259,18 @@ pub fn load_foundry_config_from_toml(toml_path: &Path) -> FoundryConfig {
         .map(|s| s.to_string())
         .unwrap_or_else(|| "src".to_string());
 
+    // Parse libs: `libs = ["lib", "node_modules"]` (default: ["lib"])
+    let libs = profile
+        .get("libs")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str())
+                .map(|s| s.to_string())
+                .collect()
+        })
+        .unwrap_or_else(|| vec!["lib".to_string()]);
+
     // Parse ignored_error_codes: `ignored_error_codes = [2394, 6321, 3860, 5574]`
     let ignored_error_codes = profile
         .get("ignored_error_codes")
@@ -277,6 +293,7 @@ pub fn load_foundry_config_from_toml(toml_path: &Path) -> FoundryConfig {
         evm_version,
         ignored_error_codes,
         sources_dir,
+        libs,
     }
 }
 
@@ -785,6 +802,7 @@ src = "src"
         assert!(!config.via_ir);
         assert_eq!(config.evm_version, None);
         assert!(config.ignored_error_codes.is_empty());
+        assert_eq!(config.libs, vec!["lib".to_string()]);
     }
 
     #[test]
@@ -807,6 +825,47 @@ evm_version = "cancun"
         assert_eq!(config.optimizer_runs, 200); // default
         assert_eq!(config.evm_version, Some("cancun".to_string()));
         assert!(config.ignored_error_codes.is_empty());
+    }
+
+    #[test]
+    fn test_load_foundry_config_libs() {
+        let dir = tempfile::tempdir().unwrap();
+        let toml_path = dir.path().join("foundry.toml");
+        fs::write(
+            &toml_path,
+            r#"
+[profile.default]
+libs = ["lib", "node_modules", "dependencies"]
+"#,
+        )
+        .unwrap();
+
+        let config = load_foundry_config_from_toml(&toml_path);
+        assert_eq!(
+            config.libs,
+            vec![
+                "lib".to_string(),
+                "node_modules".to_string(),
+                "dependencies".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn test_load_foundry_config_libs_defaults_when_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let toml_path = dir.path().join("foundry.toml");
+        fs::write(
+            &toml_path,
+            r#"
+[profile.default]
+src = "src"
+"#,
+        )
+        .unwrap();
+
+        let config = load_foundry_config_from_toml(&toml_path);
+        assert_eq!(config.libs, vec!["lib".to_string()]);
     }
 
     // ── Settings parsing ──────────────────────────────────────────────
