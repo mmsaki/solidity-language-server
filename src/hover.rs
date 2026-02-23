@@ -1695,6 +1695,92 @@ fn gas_hover_for_contract(
     Some(lines.join("\n"))
 }
 
+/// Typed version of `gas_hover_for_function` using `DeclNode`.
+fn gas_hover_for_function_typed(
+    decl: &crate::solc_ast::DeclNode,
+    gas_index: &GasIndex,
+    decl_index: &std::collections::HashMap<i64, crate::solc_ast::DeclNode>,
+    typed_ast: Option<&std::collections::HashMap<String, crate::solc_ast::SourceUnit>>,
+) -> Option<String> {
+    use crate::solc_ast::DeclNode;
+
+    let func = match decl {
+        DeclNode::FunctionDefinition(f) => f,
+        _ => return None,
+    };
+
+    // Try by selector first (external/public functions)
+    if let Some(sel) = &func.function_selector {
+        if let Some((_contract, cost)) = gas::gas_by_selector(gas_index, &FuncSelector::new(sel)) {
+            return Some(format!("Gas: `{}`", gas::format_gas(cost)));
+        }
+    }
+
+    // Try by name (internal functions)
+    let contract_key = gas::resolve_contract_key_typed(decl, gas_index, decl_index, typed_ast)?;
+    let contract_gas = gas_index.get(&contract_key)?;
+
+    let prefix = format!("{}(", func.name);
+    for (sig, cost) in &contract_gas.internal {
+        if sig.starts_with(&prefix) {
+            return Some(format!("Gas: `{}`", gas::format_gas(cost)));
+        }
+    }
+
+    None
+}
+
+/// Typed version of `gas_hover_for_contract` using `DeclNode`.
+fn gas_hover_for_contract_typed(
+    decl: &crate::solc_ast::DeclNode,
+    gas_index: &GasIndex,
+    decl_index: &std::collections::HashMap<i64, crate::solc_ast::DeclNode>,
+    typed_ast: Option<&std::collections::HashMap<String, crate::solc_ast::SourceUnit>>,
+) -> Option<String> {
+    use crate::solc_ast::DeclNode;
+
+    if !matches!(decl, DeclNode::ContractDefinition(_)) {
+        return None;
+    }
+
+    let contract_key = gas::resolve_contract_key_typed(decl, gas_index, decl_index, typed_ast)?;
+    let contract_gas = gas_index.get(&contract_key)?;
+
+    let mut lines = Vec::new();
+
+    if !contract_gas.creation.is_empty() {
+        lines.push("**Deploy Cost**".to_string());
+        if let Some(cost) = contract_gas.creation.get("totalCost") {
+            lines.push(format!("- Total: `{}`", gas::format_gas(cost)));
+        }
+        if let Some(cost) = contract_gas.creation.get("codeDepositCost") {
+            lines.push(format!("- Code deposit: `{}`", gas::format_gas(cost)));
+        }
+        if let Some(cost) = contract_gas.creation.get("executionCost") {
+            lines.push(format!("- Execution: `{}`", gas::format_gas(cost)));
+        }
+    }
+
+    if !contract_gas.external_by_sig.is_empty() {
+        lines.push(String::new());
+        lines.push("**Function Gas**".to_string());
+
+        let mut fns: Vec<(&crate::types::MethodId, &String)> =
+            contract_gas.external_by_sig.iter().collect();
+        fns.sort_by_key(|(k, _)| k.as_str().to_string());
+
+        for (sig, cost) in fns {
+            lines.push(format!("- `{}`: `{}`", sig.name(), gas::format_gas(cost)));
+        }
+    }
+
+    if lines.is_empty() {
+        return None;
+    }
+
+    Some(lines.join("\n"))
+}
+
 /// Produce hover information for the symbol at the given position.
 pub fn hover_info(
     cached_build: &crate::goto::CachedBuild,
@@ -1783,22 +1869,27 @@ pub fn hover_info(
 
     let id_idx = Some(id_index);
 
+    let di = &cached_build.decl_index;
+
     // Gas estimates — only shown when `@lsp-enable gas-estimates` is present
-    // (still uses raw Value — will be converted in Phase 3+)
+    // Prefer typed DeclNode, fall back to raw Value
     if !gas_index.is_empty() {
         let source_str = String::from_utf8_lossy(source_bytes);
         if source_has_gas_sentinel(&source_str, decl_node) {
-            if let Some(gas_text) = gas_hover_for_function(decl_node, sources, gas_index, id_idx) {
+            let ta = cached_build.typed_ast.as_ref();
+            if let Some(gas_text) = typed_decl
+                .and_then(|d| gas_hover_for_function_typed(d, gas_index, di, ta))
+                .or_else(|| gas_hover_for_function(decl_node, sources, gas_index, id_idx))
+            {
                 parts.push(gas_text);
-            } else if let Some(gas_text) =
-                gas_hover_for_contract(decl_node, sources, gas_index, id_idx)
+            } else if let Some(gas_text) = typed_decl
+                .and_then(|d| gas_hover_for_contract_typed(d, gas_index, di, ta))
+                .or_else(|| gas_hover_for_contract(decl_node, sources, gas_index, id_idx))
             {
                 parts.push(gas_text);
             }
         }
     }
-
-    let di = &cached_build.decl_index;
     let id_to_path = &cached_build.node_id_to_source_path;
 
     // Documentation — try typed lookup first, fall back to raw Value
