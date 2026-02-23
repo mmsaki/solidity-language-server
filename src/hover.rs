@@ -323,11 +323,13 @@ pub fn build_doc_index(ast_data: &Value) -> DocIndex {
                 && let Some(state_vars) = dd.get("stateVariables").and_then(|s| s.as_object())
             {
                 for (var_name, var_doc) in state_vars {
-                    let mut entry = DocEntry::default();
-                    entry.details = var_doc
-                        .get("details")
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string());
+                    let mut entry = DocEntry {
+                        details: var_doc
+                            .get("details")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string()),
+                        ..DocEntry::default()
+                    };
 
                     if let Some(returns) = var_doc.get("return").and_then(|v| v.as_str()) {
                         entry.returns.push(("_0".to_string(), returns.to_string()));
@@ -402,19 +404,16 @@ pub fn lookup_doc_entry_typed(
             }
 
             // For state variables without selector, try statevar key
-            if matches!(decl, DeclNode::VariableDeclaration(_)) {
-                let var_name = decl.name();
-                if let Some(scope_id) = decl.scope() {
-                    if let Some(scope_decl) = decl_index.get(&scope_id) {
-                        let contract_name = scope_decl.name();
-                        if let Some(path) = node_id_to_source_path.get(&scope_id) {
-                            let key =
-                                DocKey::StateVar(format!("{path}:{contract_name}:{var_name}"));
-                            if let Some(entry) = doc_index.get(&key) {
-                                return Some(entry.clone());
-                            }
-                        }
-                    }
+            if matches!(decl, DeclNode::VariableDeclaration(_))
+                && let var_name = decl.name()
+                && let Some(scope_id) = decl.scope()
+                && let Some(scope_decl) = decl_index.get(&scope_id)
+                && let Some(path) = node_id_to_source_path.get(&scope_id)
+            {
+                let contract_name = scope_decl.name();
+                let key = DocKey::StateVar(format!("{path}:{contract_name}:{var_name}"));
+                if let Some(entry) = doc_index.get(&key) {
+                    return Some(entry.clone());
                 }
             }
 
@@ -1271,10 +1270,10 @@ fn gas_hover_for_function_typed(
     };
 
     // Try by selector first (external/public functions)
-    if let Some(sel) = &func.function_selector {
-        if let Some((_contract, cost)) = gas::gas_by_selector(gas_index, &FuncSelector::new(sel)) {
-            return Some(format!("Gas: `{}`", gas::format_gas(cost)));
-        }
+    if let Some(sel) = &func.function_selector
+        && let Some((_contract, cost)) = gas::gas_by_selector(gas_index, &FuncSelector::new(sel))
+    {
+        return Some(format!("Gas: `{}`", gas::format_gas(cost)));
     }
 
     // Try by name (internal functions)

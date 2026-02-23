@@ -205,12 +205,12 @@ impl DeclNode {
                 };
 
                 // Add visibility (skip for constructor and receive)
-                if !matches!(n.kind, FunctionKind::Constructor | FunctionKind::Receive) {
-                    if let Some(vis) = &n.visibility {
-                        let vis_str = vis.to_string();
-                        if !vis_str.is_empty() {
-                            sig.push_str(&format!(" {vis_str}"));
-                        }
+                if !matches!(n.kind, FunctionKind::Constructor | FunctionKind::Receive)
+                    && let Some(vis) = &n.visibility
+                {
+                    let vis_str = vis.to_string();
+                    if !vis_str.is_empty() {
+                        sig.push_str(&format!(" {vis_str}"));
                     }
                 }
 

@@ -137,23 +137,23 @@ pub fn build_constructor_index(
 ) -> ConstructorIndex {
     let mut index = HashMap::new();
     for (id, decl) in decl_index {
-        if decl.is_constructor() {
-            if let Some(scope) = decl.scope() {
-                let names = decl.param_names().unwrap_or_default();
-                // Look up contract name from the scope's decl entry
-                let contract_name = decl_index
-                    .get(&scope)
-                    .map(|d| d.name().to_string())
-                    .unwrap_or_default();
-                index.insert(
-                    scope as u64,
-                    ConstructorInfo {
-                        constructor_id: *id as u64,
-                        contract_name,
-                        param_names: names,
-                    },
-                );
-            }
+        if decl.is_constructor()
+            && let Some(scope) = decl.scope()
+        {
+            let names = decl.param_names().unwrap_or_default();
+            // Look up contract name from the scope's decl entry
+            let contract_name = decl_index
+                .get(&scope)
+                .map(|d| d.name().to_string())
+                .unwrap_or_default();
+            index.insert(
+                scope as u64,
+                ConstructorInfo {
+                    constructor_id: *id as u64,
+                    contract_name,
+                    param_names: names,
+                },
+            );
         }
     }
     index

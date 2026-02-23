@@ -730,11 +730,11 @@ pub fn goto_declaration_by_name(
     // Collect all matching nodes: (distance_to_hint, span_size, ref_id)
     let mut candidates: Vec<(usize, usize, NodeId)> = Vec::new();
 
-    let mut tmp = {
+    let tmp = {
         let this = cached_build.nodes.get(abs_path)?;
         this.iter()
     };
-    while let Some((_id, node)) = tmp.next() {
+    for (_id, node) in tmp {
         let ref_id = match node.referenced_declaration {
             Some(id) => id,
             None => continue,
@@ -960,26 +960,24 @@ fn find_variable_type(from: Node, source: &str, var_name: &str) -> Option<String
                 // Check local variable declarations
                 let mut c = node.walk();
                 for child in node.children(&mut c) {
-                    if child.kind() == "variable_declaration_statement"
-                        || child.kind() == "variable_declaration"
+                    if (child.kind() == "variable_declaration_statement"
+                        || child.kind() == "variable_declaration")
+                        && let Some(id) = ts_child_id_text(child, source)
+                        && id == var_name
                     {
-                        if let Some(id) = ts_child_id_text(child, source)
-                            && id == var_name
-                        {
-                            let mut pc = child.walk();
-                            return child
-                                .children(&mut pc)
-                                .find(|c| {
-                                    matches!(
-                                        c.kind(),
-                                        "type_name"
-                                            | "primitive_type"
-                                            | "user_defined_type"
-                                            | "mapping"
-                                    )
-                                })
-                                .map(|t| source[t.byte_range()].trim().to_string());
-                        }
+                        let mut pc = child.walk();
+                        return child
+                            .children(&mut pc)
+                            .find(|c| {
+                                matches!(
+                                    c.kind(),
+                                    "type_name"
+                                        | "primitive_type"
+                                        | "user_defined_type"
+                                        | "mapping"
+                                )
+                            })
+                            .map(|t| source[t.byte_range()].trim().to_string());
                     }
                 }
             }
