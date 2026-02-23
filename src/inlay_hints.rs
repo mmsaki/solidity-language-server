@@ -135,7 +135,7 @@ pub type ConstructorIndex = HashMap<u64, ConstructorInfo>;
 pub fn build_constructor_index(
     decl_index: &HashMap<i64, crate::solc_ast::DeclNode>,
 ) -> ConstructorIndex {
-    let mut index = HashMap::new();
+    let mut index = HashMap::with_capacity(decl_index.len() / 8);
     for (id, decl) in decl_index {
         if decl.is_constructor()
             && let Some(scope) = decl.scope()
@@ -168,7 +168,8 @@ pub fn build_hint_index(
     decl_index: &HashMap<i64, crate::solc_ast::DeclNode>,
     constructor_index: &ConstructorIndex,
 ) -> HintIndex {
-    let mut hint_index = HashMap::new();
+    let source_count = sources.as_object().map_or(0, |obj| obj.len());
+    let mut hint_index = HashMap::with_capacity(source_count);
 
     if let Some(obj) = sources.as_object() {
         for (_, source_data) in obj {

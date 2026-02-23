@@ -578,8 +578,11 @@ pub struct ExtractedDecls {
 /// - All transient expression/statement/yul parsing (~40 MB)
 pub fn extract_decl_nodes(sources: &serde_json::Value) -> Option<ExtractedDecls> {
     let sources_obj = sources.as_object()?;
-    let mut decl_index = HashMap::new();
-    let mut id_to_path = HashMap::new();
+    // Pre-size based on source count. Typical project averages ~30 decl nodes
+    // per source file and ~30 id-to-path entries per source file.
+    let source_count = sources_obj.len();
+    let mut decl_index = HashMap::with_capacity(source_count * 32);
+    let mut id_to_path = HashMap::with_capacity(source_count * 32);
 
     for (path, source_data) in sources_obj {
         let ast_node = source_data.get("ast")?;
@@ -631,16 +634,16 @@ fn walk_and_extract(
     if DECL_NODE_TYPES.contains(&node_type)
         && let Some(id) = node_id
     {
-        // Clone just this node (not the entire source file Value)
-        let mut node_value = node.clone();
-
-        if node_type == "ContractDefinition" {
-            strip_contract_node(&mut node_value);
+        // Build a filtered Value from the borrowed node, copying only
+        // the fields needed for deserialization (skips body, modifiers, value, etc.).
+        // This avoids cloning the entire node (previously ~117 MB of transient churn).
+        let node_value = if node_type == "ContractDefinition" {
+            build_filtered_contract(obj)
         } else {
-            strip_decl_fields(&mut node_value);
-        }
+            build_filtered_decl(obj)
+        };
 
-        // Deserialize the stripped node into the typed struct
+        // Deserialize the filtered node into the typed struct
         if let Some(decl) = deserialize_decl_node(node_type, node_value) {
             decl_index.insert(id, decl);
         }
@@ -680,39 +683,60 @@ fn walk_and_extract(
     }
 }
 
-/// Strip heavy fields from a declaration node Value before deserialization.
-fn strip_decl_fields(node: &mut serde_json::Value) {
-    if let Some(obj) = node.as_object_mut() {
-        for field in STRIP_FIELDS {
-            obj.remove(*field);
+/// Build a filtered Value from a borrowed declaration node, cloning only the
+/// fields needed for deserialization. Heavy fields (body, modifiers, value, etc.)
+/// are never copied. This replaces the old clone-then-strip pattern that caused
+/// ~117 MB of transient allocation churn.
+fn build_filtered_decl(obj: &serde_json::Map<String, serde_json::Value>) -> serde_json::Value {
+    let mut filtered = serde_json::Map::with_capacity(obj.len());
+    for (key, value) in obj {
+        if !STRIP_FIELDS.contains(&key.as_str()) {
+            filtered.insert(key.clone(), value.clone());
         }
     }
+    serde_json::Value::Object(filtered)
 }
 
-/// Strip heavy fields from a ContractDefinition, including from its child nodes.
+/// Build a filtered Value from a borrowed ContractDefinition node.
 ///
-/// Preserves the `nodes` array itself (needed for `resolve_inheritdoc_typed`)
-/// but strips heavy fields from each child within it.
-fn strip_contract_node(node: &mut serde_json::Value) {
-    if let Some(obj) = node.as_object_mut() {
-        // Strip contract-level heavy fields (but NOT `nodes` — we need it)
-        for field in STRIP_FIELDS {
-            obj.remove(*field);
+/// Preserves the `nodes` array (needed for `resolve_inheritdoc_typed`) but
+/// filters heavy fields from each child within it. Contract-level heavy fields
+/// are also skipped.
+fn build_filtered_contract(obj: &serde_json::Map<String, serde_json::Value>) -> serde_json::Value {
+    let mut filtered = serde_json::Map::with_capacity(obj.len());
+    for (key, value) in obj {
+        if STRIP_FIELDS.contains(&key.as_str()) {
+            continue;
         }
-
-        // Strip heavy fields from each child in `nodes`
-        if let Some(nodes_val) = obj.get_mut("nodes")
-            && let Some(nodes_arr) = nodes_val.as_array_mut()
-        {
-            for child in nodes_arr.iter_mut() {
-                if let Some(child_obj) = child.as_object_mut() {
-                    for field in STRIP_CHILD_FIELDS {
-                        child_obj.remove(*field);
-                    }
-                }
+        if key == "nodes" {
+            // Filter heavy fields from each child node in the `nodes` array
+            if let Some(arr) = value.as_array() {
+                let filtered_nodes: Vec<serde_json::Value> = arr
+                    .iter()
+                    .map(|child| {
+                        if let Some(child_obj) = child.as_object() {
+                            let mut filtered_child =
+                                serde_json::Map::with_capacity(child_obj.len());
+                            for (ck, cv) in child_obj {
+                                if !STRIP_CHILD_FIELDS.contains(&ck.as_str()) {
+                                    filtered_child.insert(ck.clone(), cv.clone());
+                                }
+                            }
+                            serde_json::Value::Object(filtered_child)
+                        } else {
+                            child.clone()
+                        }
+                    })
+                    .collect();
+                filtered.insert(key.clone(), serde_json::Value::Array(filtered_nodes));
+            } else {
+                filtered.insert(key.clone(), value.clone());
             }
+        } else {
+            filtered.insert(key.clone(), value.clone());
         }
     }
+    serde_json::Value::Object(filtered)
 }
 
 /// Deserialize a stripped JSON Value into a `DeclNode` based on `nodeType`.

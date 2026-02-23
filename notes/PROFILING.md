@@ -200,63 +200,107 @@ Each allocation site (`pp`) in the JSON has:
 | `eb`  | Bytes live at t-end (steady-state / what's still allocated at exit) |
 | `fs`  | Backtrace frame indices into `ftbl` |
 
-## Key findings (PoolManager.t.sol benchmark)
+## Key findings (PoolManager.t.sol benchmark, 95 source files)
 
 ### Solc output
 
 The real solc output for `PoolManager.t.sol` is **20.7 MB** of JSON (95 source
 files, 101 contracts). As a `serde_json::Value` in memory this expands to
-~80-100 MB due to per-node heap allocations.
+~80-100 MB due to per-node heap allocations (BTreeMap, String, Vec per node).
 
-### Before `decl_clone` optimization
+### Optimization history
 
-| Metric | Standalone | Full LSP |
-|--------|-----------|----------|
-| Total  | 606 MB    | 624 MB   |
-| Peak   | 314 MB    | 281 MB   |
-| Steady | 114 MB    | 0 MB*    |
+Three major optimizations were applied to reduce memory from the typed AST work:
 
-*Full LSP shows 0 MB at t-end because everything is freed on clean shutdown.
+#### 1. extract_decl_nodes + remove `CachedBuild.ast` (PR #131)
 
-### After `decl_clone` optimization
+Replaced full `SourceUnit` deserialization with `extract_decl_nodes()` — walks
+the raw JSON Value tree, finds nodes by `nodeType`, strips heavy fields, then
+deserializes only the 9 declaration types. The raw `ast: Value` field was removed
+from `CachedBuild` since all data is consumed into pre-built indexes.
 
-| Metric | Standalone | Full LSP | Savings |
-|--------|-----------|----------|---------|
-| Total  | 581 MB    | 600 MB   | -24 MB  |
-| Peak   | 290 MB    | 257 MB   | -24 MB  |
-| Steady | 89 MB     | 0 MB*    | -25 MB  |
+| Metric | Before | After | Savings |
+|--------|--------|-------|---------|
+| RSS    | 394 MB | 309 MB | -85 MB |
 
-The optimization: `DeclNode` clones now skip unused fields (function bodies,
-modifier invocations, initializer expressions, override specifiers). These
-fields are deserialized by the typed AST but never queried through `DeclNode`
-methods.
+#### 2. build-filtered-map (branch: cleanup/dead-code-and-memory)
 
-### RSS (measured by lsp-bench)
+Replaced `node.clone()` → `strip_decl_fields()` with `build_filtered_decl()` /
+`build_filtered_contract()`. Instead of cloning the entire node (including heavy
+`body`, `modifiers`, `value` subtrees) and then removing fields, the new
+functions iterate over the borrowed node's entries and only clone the fields
+that pass the STRIP_FIELDS filter. This eliminated **234 MB** of transient
+allocations — `Value::clone()` was the single biggest allocation hotspot at
+117 MB.
 
-| Version          | RSS    |
-|-----------------|--------|
-| v0.1.24 baseline | 228 MB |
-| Before decl_clone| 394 MB |
-| After decl_clone | 374 MB |
+| Metric         | Before P2 | After P2 | Savings       |
+|----------------|-----------|----------|---------------|
+| Total allocated| 629 MB    | 395 MB   | **-234 MB (-37%)** |
+| Peak (t-gmax)  | 277 MB    | 243 MB   | -34 MB (-12%) |
+| Retained (t-end)| 60 MB    | 60 MB    | unchanged     |
 
-RSS reflects peak memory because freed pages aren't returned to the OS on macOS.
-The remaining 146 MB gap vs v0.1.24 is from typed AST deserialization (transient)
-and the `serde_json::Value` tree for 95 source files (vs 43 in the fixture).
+#### 3. Pre-sized HashMaps (branch: cleanup/dead-code-and-memory)
 
-### Top peak allocators (after optimization)
+Added `with_capacity()` to all HashMap/Vec allocations in `cache_ids()`,
+`extract_decl_nodes()`, `build_completion_cache()`, `build_hint_index()`, and
+`build_constructor_index()`. Sizes are estimated from the source file count.
+This eliminated ~5 MB of rehash reallocations — modest on its own, but good
+practice to avoid worst-case rehash spikes.
 
-1. **cache_ids HashMap** — 16 MB (nodes index, 61K entries)
-2. **decl_index HashMap** — 13 MB (12K entries)
-3. **ParameterList deserialization** — 4 MB
-4. **ContractDefinition.nodes clone** — 2 MB (kept for inheritdoc)
-5. **YulBlock deserialization** — 3 MB (inline assembly)
-6. **Expression deserialization** — 3 MB (MemberAccess, Identifier)
+### RSS progression (measured by lsp-bench)
 
-### Remaining optimization opportunities
+| State | RSS | vs v0.1.24 |
+|---|---|---|
+| v0.1.24 baseline | 230 MB | — |
+| Before optimization work | 394 MB | +164 MB |
+| After extract_decl_nodes + remove ast | 309 MB | +79 MB |
+| After build-filtered-map + with_capacity | **254 MB** | **+24 MB** |
 
-- **Stop deserializing the full typed AST**: Only deserialize the declaration
-  nodes needed for `decl_index`, skip function bodies, expressions, and
-  statements entirely. This would eliminate ~100 MB of transient allocations.
-- **Strip `contracts` from `ast: Value`** after building gas/doc indexes.
-- **Use `serde_json::from_str` with `#[serde(borrow)]`** instead of
-  `from_value(clone())` to avoid cloning the Value tree.
+Reclaimed **140 MB** of the 164 MB regression. The remaining +24 MB is real
+retained data from the new `decl_index` structures (~23 MB), not fragmentation.
+
+### DHAT results (current, poolmanager-t-full.json)
+
+```
+Total allocated: 395 MB in 3.2M blocks
+Peak (t-gmax):   243 MB in 2.2M blocks
+Retained (t-end): 60 MB in 443K blocks
+```
+
+### Retained memory breakdown (t-end)
+
+| # | Retained | Source | Notes |
+|---|---|---|---|
+| 1 | 16.4 MB | `cache_ids()` → `nodes` HashMap | All AST nodes with src, referencedDeclaration, etc. Existed in v0.1.24. |
+| 2 | 12.6 MB | `walk_and_extract()` → `decl_index` + `node_id_to_source_path` | **New** — typed declaration index. |
+| 3 | 4.1 MB | `FunctionDefinition` structs in `decl_index` | **New** |
+| 4 | 4.1 MB | `ContractDefinition` structs (includes child `nodes` array) | **New** — P1 target. |
+| 5 | 2.0 MB | `VariableDeclaration` structs | **New** |
+| 6 | 1.9 MB | `CompletionCache` | Partially new. |
+| 7+ | 3.4 MB | Strings, other indexes | Mixed. |
+
+### Top transient allocation sites (current)
+
+After the build-filtered-map optimization, the biggest remaining transient
+sources are:
+
+1. **Initial JSON parse** (`serde_json::from_str`) — ~70+ MB to build the full
+   `Value` tree from the 20 MB JSON string. This is the initial deserialization
+   of the entire solc output into BTreeMap nodes.
+2. **cache_ids() HashMap rehashing** — ~30 MB total. The `nodes` HashMap for
+   large files (e.g., Pool.sol with 1616 AST nodes) triggers multiple resizes.
+   Mitigated by `with_capacity()` size hints.
+3. **build_filtered_decl/contract** — remaining `Value::clone()` calls for the
+   fields we DO keep (parameters, returnParameters, typeDescriptions, etc.).
+   These are small per-node but add up across 9432 declaration nodes.
+
+### Remaining optimization targets (diminishing returns)
+
+1. **P1: ContractDefinition.nodes** (4.1 MB retained) — only needs selectors +
+   doc text for `resolve_inheritdoc_typed()`, not the full child nodes. Could
+   save ~2-3 MB retained.
+2. **P3: CompletionCache** (1.9 MB) — check for name duplication with `nodes`.
+3. **Streaming parse** — replace `serde_json::from_str` → `Value` with a
+   streaming/SAX-style parser that directly feeds `cache_ids()` and
+   `extract_decl_nodes()` without materializing the full tree. Large refactor,
+   would eliminate ~70 MB of transient allocations.

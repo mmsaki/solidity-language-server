@@ -13,40 +13,39 @@ There are many examples on ./benchmarks on how to write a simple yaml config to 
 
 Always build with `--release` flag
 
-## Memory Optimization Notes (branch: 129-solc-ast-module)
+## Memory Optimization Notes (branch: cleanup/dead-code-and-memory)
 
-### Current state (as of ba14676)
+### Current state
 
 | State | RSS | vs v0.1.24 |
 |---|---|---|
-| v0.1.24 baseline | 228 MB | — |
-| Before this work (pre-branch) | 394 MB | +166 MB |
-| After extract_decl_nodes + remove ast field | 309 MB | +81 MB |
+| v0.1.24 baseline | 230 MB | — |
+| Before this work (pre-branch) | 394 MB | +164 MB |
+| After extract_decl_nodes + remove ast field | 309 MB | +79 MB |
+| After with_capacity + build-filtered-map (P2) | **254 MB** | **+24 MB** |
 
-Reclaimed ~85 MB of the 166 MB regression. The remaining +81 MB gap needs DHAT
-profiling to identify where the bytes are going. Suspected sources:
+Reclaimed **140 MB** of the 164 MB regression. The remaining +24 MB matches the
+~23 MB of new retained data structures (`decl_index` + `DeclNode` contents).
 
-- **P1: ContractDefinition.nodes full clone** (~10-20 MB) — retained for
-  `resolve_inheritdoc_typed()`. Only needs selectors + doc text, not the full
-  child nodes. Could build a lightweight struct instead.
-- **P2: extract_decl_nodes clone-then-strip** (~5-10 MB peak) — clones each
-  node Value before stripping heavy fields. Could build a filtered Map directly
-  instead of clone-then-mutate.
-- **P3: CompletionCache.general_completions** (~2-5 MB) — duplicates `names`
-  from the node index.
-- **New data structures** — `decl_index` and `node_id_to_source_path` are new
-  indexes that didn't exist in v0.1.24, contributing some baseline overhead.
+### Completed optimizations
+
+- **Removed `CachedBuild.ast` field** — raw JSON no longer retained after construction.
+- **P2: build-filtered-map** — replaced `node.clone()` → strip with selective field
+  copy in `walk_and_extract()`. Eliminated 234 MB of transient allocations (629→395 MB).
+- **Pre-sized HashMaps** — `with_capacity()` in `cache_ids()`, `extract_decl_nodes()`,
+  `build_completion_cache()`, `build_hint_index()`, `build_constructor_index()`.
 
 ### DHAT profiling results (poolmanager-t-full.json, 95 files)
 
 ```
-Total allocated: 634 MB (transient + retained)
-Peak (t-gmax):   277 MB
-Retained (t-end):  60 MB  (what CachedBuild actually holds)
-RSS observed:     309 MB  (60 MB data + allocator fragmentation from 634 MB churn)
+                 Before P2    After P2
+Total allocated: 629 MB   →   395 MB  (-37%)
+Peak (t-gmax):   277 MB   →   243 MB  (-12%)
+Retained (t-end): 60 MB   →    60 MB  (unchanged)
+RSS observed:    310 MB   →   254 MB  (-18%)
 ```
 
-**Retained memory breakdown (t-end):**
+**Retained memory breakdown (t-end, unchanged):**
 
 | # | Retained | Source | Notes |
 |---|---|---|---|
@@ -58,18 +57,15 @@ RSS observed:     309 MB  (60 MB data + allocator fragmentation from 634 MB chur
 | 6 | 1.9 MB | `CompletionCache` | Partially new. |
 | 7+ | 3.4 MB | Strings, other indexes | Mixed. |
 
-**Key insight:** The ~81 MB RSS gap vs v0.1.24 is NOT 81 MB of retained data. It's
-~23 MB of new data structures (`decl_index` + `DeclNode` contents) plus ~58 MB of
-allocator fragmentation from the 634 MB of transient allocations during `CachedBuild::new()`.
+**Key insight:** The remaining +24 MB RSS gap is real retained data (~23 MB of new
+`decl_index` structures), not fragmentation. The 395 MB of transient churn still
+causes some fragmentation, but the gap is now within the expected range.
 
-### Next steps
+### Remaining optimization targets (diminishing returns)
 
-1. **Reduce transient churn** — the 634 MB of total allocations causes fragmentation
-   that inflates RSS. The biggest source is `cache_ids()` which builds `nodes` from
-   scratch on every build. Consider:
-   - Pre-sizing HashMaps with `with_capacity()` based on source count
-   - Reducing `node_value.clone()` in `extract_decl_nodes` (P2)
-2. **P1: ContractDefinition.nodes** (4.1 MB) — only needs selectors + doc text for
-   `resolve_inheritdoc_typed()`, not the full child nodes
-3. **P3: CompletionCache** (1.9 MB) — check for name duplication with `nodes`
-4. Re-measure after each change
+1. **P1: ContractDefinition.nodes** (4.1 MB retained) — only needs selectors + doc text for
+   `resolve_inheritdoc_typed()`, not the full child nodes. Could save ~2-3 MB retained.
+2. **P3: CompletionCache** (1.9 MB) — check for name duplication with `nodes`.
+3. **Further transient reduction** — the initial JSON parse (`serde_json::from_str`) allocates
+   the full AST tree (~70+ MB for BTreeMap nodes), which is then walked by `cache_ids()` and
+   `extract_decl_nodes()`. Streaming parse could avoid this but is a large refactor.
