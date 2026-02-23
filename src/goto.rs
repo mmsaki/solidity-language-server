@@ -109,6 +109,10 @@ pub struct CachedBuild {
     /// O(1) node-id → raw AST node lookup. Built once, replaces the O(N)
     /// `find_node_by_id` that walked the entire AST per call.
     pub id_index: HashMap<u64, Value>,
+    /// Typed AST deserialized from the solc JSON sources.
+    /// Each entry maps a source file path to its typed `SourceUnit`.
+    /// `None` if deserialization failed (graceful degradation).
+    pub typed_ast: Option<HashMap<String, crate::solc_ast::SourceUnit>>,
     /// Pre-built gas index from contract output. Built once, reused by
     /// hover, inlay hints, and code lens.
     pub gas_index: crate::gas::GasIndex,
@@ -163,6 +167,29 @@ impl CachedBuild {
             HashMap::new()
         };
 
+        // Attempt typed AST deserialization from the sources section.
+        // This is best-effort — if it fails (e.g. unknown nodeType in a
+        // newer solc version), we gracefully fall back to raw Value access.
+        let typed_ast = ast.get("sources").and_then(|sources| {
+            let sources_obj = sources.as_object()?;
+            let mut result = HashMap::new();
+            for (path, source_data) in sources_obj {
+                if let Some(ast_node) = source_data.get("ast") {
+                    match serde_json::from_value::<crate::solc_ast::SourceUnit>(ast_node.clone()) {
+                        Ok(source_unit) => {
+                            result.insert(path.clone(), source_unit);
+                        }
+                        Err(_e) => {
+                            // Deserialization failed for this file — skip typed AST entirely.
+                            // This ensures all-or-nothing: either all files parse or we fall back.
+                            return None;
+                        }
+                    }
+                }
+            }
+            Some(result)
+        });
+
         Self {
             ast,
             nodes,
@@ -170,6 +197,7 @@ impl CachedBuild {
             external_refs,
             id_to_path_map,
             id_index,
+            typed_ast,
             gas_index,
             hint_index,
             doc_index,
@@ -555,6 +583,49 @@ pub fn goto_declaration(
         &path_to_abs,
         &id_to_path_map,
         &external_refs,
+        file_uri.as_ref(),
+        byte_position,
+    ) {
+        let target_file_path = std::path::Path::new(&file_path);
+        let absolute_path = if target_file_path.is_absolute() {
+            target_file_path.to_path_buf()
+        } else {
+            std::env::current_dir().ok()?.join(target_file_path)
+        };
+
+        if let Ok(target_source_bytes) = std::fs::read(&absolute_path)
+            && let Some(start_pos) = bytes_to_pos(&target_source_bytes, location_bytes)
+            && let Some(end_pos) = bytes_to_pos(&target_source_bytes, location_bytes + length)
+            && let Ok(target_uri) = Url::from_file_path(&absolute_path)
+        {
+            return Some(Location {
+                uri: target_uri,
+                range: Range {
+                    start: start_pos,
+                    end: end_pos,
+                },
+            });
+        }
+    };
+
+    None
+}
+
+/// Like `goto_declaration` but uses pre-built `CachedBuild` indices instead of
+/// re-calling `cache_ids`. Avoids redundant O(N) AST traversal.
+pub fn goto_declaration_cached(
+    build: &CachedBuild,
+    file_uri: &Url,
+    position: Position,
+    source_bytes: &[u8],
+) -> Option<Location> {
+    let byte_position = pos_to_bytes(source_bytes, position);
+
+    if let Some((file_path, location_bytes, length)) = goto_bytes(
+        &build.nodes,
+        &build.path_to_abs,
+        &build.id_to_path_map,
+        &build.external_refs,
         file_uri.as_ref(),
         byte_position,
     ) {

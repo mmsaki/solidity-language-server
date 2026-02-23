@@ -1202,7 +1202,7 @@ impl LanguageServer for ForgeLsp {
             // CLEAN: AST first → tree-sitter fallback (validated)
             if let Some(ref cb) = cached_build
                 && let Some(location) =
-                    goto::goto_declaration(&cb.ast, &uri, position, &source_bytes)
+                    goto::goto_declaration_cached(cb, &uri, position, &source_bytes)
             {
                 self.client
                     .log_message(
@@ -1285,7 +1285,7 @@ impl LanguageServer for ForgeLsp {
         };
 
         if let Some(location) =
-            goto::goto_declaration(&cached_build.ast, &uri, position, &source_bytes)
+            goto::goto_declaration_cached(&cached_build, &uri, position, &source_bytes)
         {
             self.client
                 .log_message(
@@ -1334,12 +1334,13 @@ impl LanguageServer for ForgeLsp {
             None => return Ok(None),
         };
 
-        // Get references from the current file's AST
-        let mut locations = references::goto_references(
-            &cached_build.ast,
+        // Get references from the current file's AST — uses pre-built indices
+        let mut locations = references::goto_references_cached(
+            &cached_build,
             &uri,
             position,
             &source_bytes,
+            None,
             params.context.include_declaration,
         );
 

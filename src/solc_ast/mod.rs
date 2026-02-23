@@ -288,4 +288,23 @@ mod tests {
             counter.total_nodes
         );
     }
+
+    #[test]
+    fn cached_build_populates_typed_ast() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("poolmanager.json");
+        let json = std::fs::read_to_string(&path).unwrap();
+        let raw: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        let build = crate::goto::CachedBuild::new(raw, 0);
+
+        let typed = build
+            .typed_ast
+            .as_ref()
+            .expect("typed_ast should be Some for poolmanager.json");
+
+        assert_eq!(typed.len(), 45, "typed_ast should have 45 source files");
+
+        // Verify the typed AST agrees with the raw node index
+        assert_eq!(build.nodes.len(), typed.len());
+    }
 }
