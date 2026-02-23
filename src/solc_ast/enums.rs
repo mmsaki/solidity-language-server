@@ -3,6 +3,8 @@
 //! These mirror the enums defined in the official solc source at
 //! `libsolidity/ast/ASTEnums.h` and serialized by `ASTJsonExporter.cpp`.
 
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 
 // ── Contract ───────────────────────────────────────────────────────────────
@@ -16,6 +18,16 @@ pub enum ContractKind {
     Contract,
     Interface,
     Library,
+}
+
+impl fmt::Display for ContractKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Contract => write!(f, "contract"),
+            Self::Interface => write!(f, "interface"),
+            Self::Library => write!(f, "library"),
+        }
+    }
 }
 
 // ── Visibility ─────────────────────────────────────────────────────────────
@@ -33,6 +45,18 @@ pub enum Visibility {
     External,
 }
 
+impl fmt::Display for Visibility {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Default => write!(f, ""),
+            Self::Private => write!(f, "private"),
+            Self::Internal => write!(f, "internal"),
+            Self::Public => write!(f, "public"),
+            Self::External => write!(f, "external"),
+        }
+    }
+}
+
 // ── State mutability ───────────────────────────────────────────────────────
 
 /// How a function or variable can mutate EVM state.
@@ -45,6 +69,17 @@ pub enum StateMutability {
     View,
     Nonpayable,
     Payable,
+}
+
+impl fmt::Display for StateMutability {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Pure => write!(f, "pure"),
+            Self::View => write!(f, "view"),
+            Self::Nonpayable => write!(f, "nonpayable"),
+            Self::Payable => write!(f, "payable"),
+        }
+    }
 }
 
 // ── Variable mutability ────────────────────────────────────────────────────
@@ -60,6 +95,17 @@ pub enum Mutability {
     Constant,
     /// Transient storage (EIP-1153, solc 0.8.28+).
     Transient,
+}
+
+impl fmt::Display for Mutability {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Mutable => write!(f, "mutable"),
+            Self::Immutable => write!(f, "immutable"),
+            Self::Constant => write!(f, "constant"),
+            Self::Transient => write!(f, "transient"),
+        }
+    }
 }
 
 // ── Storage location ───────────────────────────────────────────────────────
@@ -78,6 +124,18 @@ pub enum StorageLocation {
     Transient,
 }
 
+impl fmt::Display for StorageLocation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Default => write!(f, "default"),
+            Self::Storage => write!(f, "storage"),
+            Self::Memory => write!(f, "memory"),
+            Self::Calldata => write!(f, "calldata"),
+            Self::Transient => write!(f, "transient"),
+        }
+    }
+}
+
 // ── Function kind ──────────────────────────────────────────────────────────
 
 /// The kind of a function definition.
@@ -91,6 +149,18 @@ pub enum FunctionKind {
     Constructor,
     Fallback,
     FreeFunction,
+}
+
+impl fmt::Display for FunctionKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Function => write!(f, "function"),
+            Self::Receive => write!(f, "receive"),
+            Self::Constructor => write!(f, "constructor"),
+            Self::Fallback => write!(f, "fallback"),
+            Self::FreeFunction => write!(f, "function"),
+        }
+    }
 }
 
 // ── Function call kind ─────────────────────────────────────────────────────

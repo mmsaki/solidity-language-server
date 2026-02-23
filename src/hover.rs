@@ -872,7 +872,7 @@ pub fn format_natspec(text: &str, inherited_doc: Option<&str>) -> String {
 }
 
 /// Build a function/modifier signature string from a raw AST node.
-fn build_function_signature(node: &Value) -> Option<String> {
+pub(crate) fn build_function_signature(node: &Value) -> Option<String> {
     let node_type = node.get("nodeType").and_then(|v| v.as_str())?;
     let name = node.get("name").and_then(|v| v.as_str()).unwrap_or("");
 
@@ -1243,14 +1243,22 @@ pub fn signature_help(
         lookup.resolve_callsite_with_skip(ctx.call_start_byte, ctx.name, ctx.arg_count)
     })?;
 
-    // Find the declaration AST node — O(1) lookup
+    // Try typed DeclNode first, fall back to raw Value
+    let typed_decl = cached_build.decl_index.get(&(decl_id as i64));
+
+    // Find the raw declaration AST node — O(1) lookup (still needed for
+    // lookup_doc_entry which hasn't been converted to typed yet)
     let decl_node = id_index.get(&decl_id)?;
 
-    // Build the signature label
-    let sig_label = build_function_signature(decl_node)?;
+    // Build the signature label — prefer typed
+    let sig_label = typed_decl
+        .and_then(|d| d.build_signature())
+        .or_else(|| build_function_signature(decl_node))?;
 
-    // Build individual parameter strings for offset calculation
-    let param_strings = build_parameter_strings(decl_node.get("parameters"));
+    // Build individual parameter strings for offset calculation — prefer typed
+    let param_strings = typed_decl
+        .map(|d| d.param_strings())
+        .unwrap_or_else(|| build_parameter_strings(decl_node.get("parameters")));
 
     // Look up @param docs from DocIndex
     let doc_entry = lookup_doc_entry(doc_index, decl_node, sources, Some(id_index));
@@ -1266,15 +1274,21 @@ pub fn signature_help(
         let start = offset;
         let end = start + param_str.len();
 
-        // Find @param doc for this parameter
-        let param_name = decl_node
-            .get("parameters")
-            .and_then(|p| p.get("parameters"))
-            .and_then(|arr| arr.as_array())
-            .and_then(|arr| arr.get(i))
-            .and_then(|p| p.get("name"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        // Find @param doc for this parameter — prefer typed params
+        let param_name = typed_decl
+            .and_then(|d| d.parameters())
+            .and_then(|pl| pl.parameters.get(i))
+            .map(|p| p.name.as_str())
+            .unwrap_or_else(|| {
+                decl_node
+                    .get("parameters")
+                    .and_then(|p| p.get("parameters"))
+                    .and_then(|arr| arr.as_array())
+                    .and_then(|arr| arr.get(i))
+                    .and_then(|p| p.get("name"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+            });
 
         let param_doc = doc_entry.as_ref().and_then(|entry| {
             entry
@@ -1495,35 +1509,55 @@ pub fn hover_info(
     // Follow referenced_declaration to the declaration node
     let decl_id = node_info.referenced_declaration.unwrap_or(node_id);
 
-    // Find the raw AST node for the declaration — O(1) lookup
+    // Try typed DeclNode first (O(1) from decl_index), fall back to raw Value
+    let typed_decl = cached_build.decl_index.get(&(decl_id.0 as i64));
+
+    // Find the raw AST node for the declaration — O(1) lookup (still needed
+    // for gas estimates, lookup_doc_entry, lookup_param_doc, resolve_inheritdoc
+    // which haven't been converted to typed yet)
     let decl_node = cached_build.find_node(decl_id)?;
 
     // Build hover content
     let mut parts: Vec<String> = Vec::new();
 
-    // Signature in a code block
-    if let Some(sig) = build_function_signature(decl_node) {
+    // Signature in a code block — prefer typed DeclNode
+    if let Some(sig) = typed_decl
+        .and_then(|d| d.build_signature())
+        .or_else(|| build_function_signature(decl_node))
+    {
         parts.push(format!("```solidity\n{sig}\n```"));
     } else {
         // Fallback: show type description for any node
-        if let Some(type_str) = decl_node
-            .get("typeDescriptions")
-            .and_then(|v| v.get("typeString"))
-            .and_then(|v| v.as_str())
-        {
-            let name = decl_node.get("name").and_then(|v| v.as_str()).unwrap_or("");
+        let type_and_name = typed_decl
+            .and_then(|d| {
+                d.type_string()
+                    .map(|ts| (ts.to_string(), d.name().to_string()))
+            })
+            .or_else(|| {
+                let type_str = decl_node
+                    .get("typeDescriptions")
+                    .and_then(|v| v.get("typeString"))
+                    .and_then(|v| v.as_str())?;
+                let name = decl_node.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                Some((type_str.to_string(), name.to_string()))
+            });
+        if let Some((type_str, name)) = type_and_name {
             parts.push(format!("```solidity\n{type_str} {name}\n```"));
         }
     }
 
-    // Selector (function, error, or event)
-    if let Some(selector) = extract_selector(decl_node) {
+    // Selector (function, error, or event) — prefer typed DeclNode
+    if let Some(selector) = typed_decl
+        .and_then(|d| d.extract_typed_selector())
+        .or_else(|| extract_selector(decl_node))
+    {
         parts.push(format!("Selector: `{}`", selector.to_prefixed()));
     }
 
     let id_idx = Some(id_index);
 
     // Gas estimates — only shown when `@lsp-enable gas-estimates` is present
+    // (still uses raw Value — will be converted in Phase 3+)
     if !gas_index.is_empty() {
         let source_str = String::from_utf8_lossy(source_bytes);
         if source_has_gas_sentinel(&source_str, decl_node) {
@@ -1538,12 +1572,16 @@ pub fn hover_info(
     }
 
     // Documentation — try userdoc/devdoc first, fall back to AST docs
+    // (lookup_doc_entry / lookup_param_doc / resolve_inheritdoc still use raw Value)
     if let Some(doc_entry) = lookup_doc_entry(doc_index, decl_node, sources, id_idx) {
         let formatted = format_doc_entry(&doc_entry);
         if !formatted.is_empty() {
             parts.push(format!("---\n{formatted}"));
         }
-    } else if let Some(doc_text) = extract_documentation(decl_node) {
+    } else if let Some(doc_text) = typed_decl
+        .and_then(|d| d.extract_doc_text())
+        .or_else(|| extract_documentation(decl_node))
+    {
         let inherited_doc = resolve_inheritdoc(sources, decl_node, &doc_text, id_idx);
         let formatted = format_natspec(&doc_text, inherited_doc.as_deref());
         if !formatted.is_empty() {

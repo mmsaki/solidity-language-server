@@ -113,6 +113,10 @@ pub struct CachedBuild {
     /// Each entry maps a source file path to its typed `SourceUnit`.
     /// `None` if deserialization failed (graceful degradation).
     pub typed_ast: Option<HashMap<String, crate::solc_ast::SourceUnit>>,
+    /// O(1) typed declaration node lookup by AST node ID.
+    /// Built from the typed AST via visitor. Contains functions, variables,
+    /// contracts, events, errors, structs, enums, modifiers, and UDVTs.
+    pub decl_index: HashMap<i64, crate::solc_ast::DeclNode>,
     /// Pre-built gas index from contract output. Built once, reused by
     /// hover, inlay hints, and code lens.
     pub gas_index: crate::gas::GasIndex,
@@ -190,6 +194,18 @@ impl CachedBuild {
             Some(result)
         });
 
+        // Build typed declaration index from the typed AST via visitor.
+        let decl_index = if let Some(ref sources) = typed_ast {
+            use crate::solc_ast::visitor::Node as AstNode;
+            let mut visitor = crate::solc_ast::DeclIndexVisitor::new();
+            for source_unit in sources.values() {
+                source_unit.accept(&mut visitor);
+            }
+            visitor.decls
+        } else {
+            HashMap::new()
+        };
+
         Self {
             ast,
             nodes,
@@ -198,6 +214,7 @@ impl CachedBuild {
             id_to_path_map,
             id_index,
             typed_ast,
+            decl_index,
             gas_index,
             hint_index,
             doc_index,
