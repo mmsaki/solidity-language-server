@@ -34,7 +34,16 @@ fn solar_diag_to_lsp(
             .map(|id| NumberOrString::String(id.as_string())),
         code_description: None,
         source: Some("solar".into()),
-        message: diag.label().into_owned(),
+        // label() can be empty for some diagnostic kinds; fall back to the
+        // rendered message so LSP clients that require non-empty messages don't crash.
+        message: {
+            let label = diag.label().into_owned();
+            if !label.is_empty() {
+                label
+            } else {
+                "Compiler error".to_string()
+            }
+        },
         related_information: None, // TODO: Implement
         tags: None,
         data: None,
@@ -161,7 +170,6 @@ impl Runner for SolarRunner {
             });
 
             let mut diagnostics = Vec::new();
-            println!("Diag buffer has {} items", diag_buffer.read().len());
             for diag in diag_buffer.read().iter() {
                 // Convert solar diagnostic to LSP diagnostic
                 if let Some(lsp_diag) =
