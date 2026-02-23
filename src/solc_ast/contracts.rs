@@ -187,3 +187,80 @@ pub struct ContractDefinition {
     #[serde(default)]
     pub canonical_name: Option<String>,
 }
+
+impl ContractDefinition {
+    /// Clone only the fields used by `DeclNode` consumers.
+    ///
+    /// Skips `name_location`, `is_abstract`, `contract_dependencies`,
+    /// `used_errors`, `used_events`, `fully_implemented`,
+    /// `linearized_base_contracts`, and `canonical_name`.
+    ///
+    /// Keeps `nodes` (needed for `resolve_inheritdoc_typed`) and
+    /// `base_contracts` (needed for inheritance resolution).
+    pub fn decl_clone(&self) -> Self {
+        Self {
+            id: self.id,
+            src: self.src.clone(),
+            name: self.name.clone(),
+            name_location: None,
+            documentation: self.documentation.clone(),
+            contract_kind: self.contract_kind.clone(),
+            is_abstract: None,
+            base_contracts: self.base_contracts.clone(),
+            contract_dependencies: Vec::new(),
+            used_errors: None,
+            used_events: None,
+            nodes: self.nodes.clone(),
+            scope: self.scope,
+            fully_implemented: None,
+            linearized_base_contracts: None,
+            canonical_name: None,
+        }
+    }
+}
+
+impl StructDefinition {
+    /// Clone only the fields used by `DeclNode` consumers.
+    pub fn decl_clone(&self) -> Self {
+        Self {
+            id: self.id,
+            src: self.src.clone(),
+            name: self.name.clone(),
+            name_location: None,
+            documentation: self.documentation.clone(),
+            visibility: None,
+            members: self.members.clone(),
+            scope: self.scope,
+            canonical_name: None,
+        }
+    }
+}
+
+impl EnumDefinition {
+    /// Clone only the fields used by `DeclNode` consumers.
+    pub fn decl_clone(&self) -> Self {
+        Self {
+            id: self.id,
+            src: self.src.clone(),
+            name: self.name.clone(),
+            name_location: None,
+            documentation: self.documentation.clone(),
+            members: self.members.clone(),
+            canonical_name: None,
+        }
+    }
+}
+
+impl UserDefinedValueTypeDefinition {
+    /// Clone only the fields used by `DeclNode` consumers.
+    pub fn decl_clone(&self) -> Self {
+        Self {
+            id: self.id,
+            src: self.src.clone(),
+            name: self.name.clone(),
+            name_location: None,
+            underlying_type: self.underlying_type.clone(),
+            canonical_name: None,
+        }
+    }
+}

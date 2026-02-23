@@ -358,6 +358,51 @@ impl DeclNode {
             _ => None,
         }
     }
+
+    /// Returns parameter/member names for inlay hint resolution.
+    ///
+    /// For functions, events, errors, modifiers: returns `parameters.parameters[].name`.
+    /// For structs: returns `members[].name`.
+    /// Typed equivalent of `get_parameter_names(&Value)` in `inlay_hints.rs`.
+    pub fn param_names(&self) -> Option<Vec<String>> {
+        match self {
+            Self::FunctionDefinition(n) => Some(
+                n.parameters
+                    .parameters
+                    .iter()
+                    .map(|p| p.name.clone())
+                    .collect(),
+            ),
+            Self::ModifierDefinition(n) => Some(
+                n.parameters
+                    .parameters
+                    .iter()
+                    .map(|p| p.name.clone())
+                    .collect(),
+            ),
+            Self::EventDefinition(n) => Some(
+                n.parameters
+                    .parameters
+                    .iter()
+                    .map(|p| p.name.clone())
+                    .collect(),
+            ),
+            Self::ErrorDefinition(n) => Some(
+                n.parameters
+                    .parameters
+                    .iter()
+                    .map(|p| p.name.clone())
+                    .collect(),
+            ),
+            Self::StructDefinition(n) => Some(n.members.iter().map(|m| m.name.clone()).collect()),
+            _ => None,
+        }
+    }
+
+    /// For constructors, returns true if this is a constructor function.
+    pub fn is_constructor(&self) -> bool {
+        matches!(self, Self::FunctionDefinition(n) if matches!(n.kind, crate::solc_ast::enums::FunctionKind::Constructor))
+    }
 }
 
 // ── Typed formatting helpers ──────────────────────────────────────────────────
@@ -464,49 +509,49 @@ impl DeclIndexVisitor {
 impl AstVisitor for DeclIndexVisitor {
     fn visit_function_definition(&mut self, node: &FunctionDefinition) -> bool {
         self.decls
-            .insert(node.id, DeclNode::FunctionDefinition(node.clone()));
+            .insert(node.id, DeclNode::FunctionDefinition(node.decl_clone()));
         self.visit_node(node.id, &node.src)
     }
 
     fn visit_variable_declaration(&mut self, node: &VariableDeclaration) -> bool {
         self.decls
-            .insert(node.id, DeclNode::VariableDeclaration(node.clone()));
+            .insert(node.id, DeclNode::VariableDeclaration(node.decl_clone()));
         self.visit_node(node.id, &node.src)
     }
 
     fn visit_contract_definition(&mut self, node: &ContractDefinition) -> bool {
         self.decls
-            .insert(node.id, DeclNode::ContractDefinition(node.clone()));
+            .insert(node.id, DeclNode::ContractDefinition(node.decl_clone()));
         self.visit_node(node.id, &node.src)
     }
 
     fn visit_event_definition(&mut self, node: &EventDefinition) -> bool {
         self.decls
-            .insert(node.id, DeclNode::EventDefinition(node.clone()));
+            .insert(node.id, DeclNode::EventDefinition(node.decl_clone()));
         self.visit_node(node.id, &node.src)
     }
 
     fn visit_error_definition(&mut self, node: &ErrorDefinition) -> bool {
         self.decls
-            .insert(node.id, DeclNode::ErrorDefinition(node.clone()));
+            .insert(node.id, DeclNode::ErrorDefinition(node.decl_clone()));
         self.visit_node(node.id, &node.src)
     }
 
     fn visit_struct_definition(&mut self, node: &StructDefinition) -> bool {
         self.decls
-            .insert(node.id, DeclNode::StructDefinition(node.clone()));
+            .insert(node.id, DeclNode::StructDefinition(node.decl_clone()));
         self.visit_node(node.id, &node.src)
     }
 
     fn visit_enum_definition(&mut self, node: &EnumDefinition) -> bool {
         self.decls
-            .insert(node.id, DeclNode::EnumDefinition(node.clone()));
+            .insert(node.id, DeclNode::EnumDefinition(node.decl_clone()));
         self.visit_node(node.id, &node.src)
     }
 
     fn visit_modifier_definition(&mut self, node: &ModifierDefinition) -> bool {
         self.decls
-            .insert(node.id, DeclNode::ModifierDefinition(node.clone()));
+            .insert(node.id, DeclNode::ModifierDefinition(node.decl_clone()));
         self.visit_node(node.id, &node.src)
     }
 
@@ -516,7 +561,7 @@ impl AstVisitor for DeclIndexVisitor {
     ) -> bool {
         self.decls.insert(
             node.id,
-            DeclNode::UserDefinedValueTypeDefinition(node.clone()),
+            DeclNode::UserDefinedValueTypeDefinition(node.decl_clone()),
         );
         self.visit_node(node.id, &node.src)
     }
@@ -771,25 +816,6 @@ mod tests {
     }
 
     #[test]
-    fn cached_build_populates_typed_ast() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("poolmanager.json");
-        let json = std::fs::read_to_string(&path).unwrap();
-        let raw: serde_json::Value = serde_json::from_str(&json).unwrap();
-
-        let build = crate::goto::CachedBuild::new(raw, 0);
-
-        let typed = build
-            .typed_ast
-            .as_ref()
-            .expect("typed_ast should be Some for poolmanager.json");
-
-        assert_eq!(typed.len(), 45, "typed_ast should have 45 source files");
-
-        // Verify the typed AST agrees with the raw node index
-        assert_eq!(build.nodes.len(), typed.len());
-    }
-
-    #[test]
     fn cached_build_populates_decl_index() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("poolmanager.json");
         let json = std::fs::read_to_string(&path).unwrap();
@@ -827,255 +853,6 @@ mod tests {
         assert_eq!(events, 12, "expected 12 EventDefinitions in decl_index");
         assert_eq!(errors, 42, "expected 42 ErrorDefinitions in decl_index");
         assert!(vars > 0, "expected VariableDeclarations in decl_index");
-    }
-
-    /// Verify that `DeclNode::build_signature()` produces identical output to
-    /// `build_function_signature(&Value)` for every declaration in the fixture.
-    #[test]
-    fn build_signature_parity_with_raw() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("poolmanager.json");
-        let json = std::fs::read_to_string(&path).unwrap();
-        let raw: serde_json::Value = serde_json::from_str(&json).unwrap();
-
-        let build = crate::goto::CachedBuild::new(raw, 0);
-
-        let mut checked = 0;
-        let mut mismatches = Vec::new();
-
-        for (id, decl) in &build.decl_index {
-            let raw_node = build.id_index.get(&(*id as u64));
-            let raw_node = match raw_node {
-                Some(n) => n,
-                None => continue,
-            };
-
-            let typed_sig = decl.build_signature();
-            let raw_sig = crate::hover::build_function_signature(raw_node);
-
-            if typed_sig != raw_sig {
-                mismatches.push(format!(
-                    "id={id} name={:?} type={}: typed={:?} raw={:?}",
-                    decl.name(),
-                    decl.node_type(),
-                    typed_sig,
-                    raw_sig,
-                ));
-            }
-            checked += 1;
-        }
-
-        assert!(
-            mismatches.is_empty(),
-            "Signature parity failures ({}/{checked}):\n{}",
-            mismatches.len(),
-            mismatches.join("\n"),
-        );
-        assert!(
-            checked > 200,
-            "expected to check >200 declarations, got {checked}"
-        );
-    }
-
-    /// Verify that `DeclNode::extract_typed_selector()` produces identical output to
-    /// `extract_selector(&Value)` for every declaration.
-    #[test]
-    fn extract_selector_parity_with_raw() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("poolmanager.json");
-        let json = std::fs::read_to_string(&path).unwrap();
-        let raw: serde_json::Value = serde_json::from_str(&json).unwrap();
-
-        let build = crate::goto::CachedBuild::new(raw, 0);
-
-        let mut checked = 0;
-        let mut mismatches = Vec::new();
-
-        for (id, decl) in &build.decl_index {
-            let raw_node = match build.id_index.get(&(*id as u64)) {
-                Some(n) => n,
-                None => continue,
-            };
-
-            let typed_sel = decl.extract_typed_selector().map(|s| s.to_prefixed());
-            let raw_sel = crate::hover::extract_selector(raw_node).map(|s| s.to_prefixed());
-
-            if typed_sel != raw_sel {
-                mismatches.push(format!(
-                    "id={id} name={:?}: typed={:?} raw={:?}",
-                    decl.name(),
-                    typed_sel,
-                    raw_sel,
-                ));
-            }
-            checked += 1;
-        }
-
-        assert!(
-            mismatches.is_empty(),
-            "Selector parity failures ({}/{checked}):\n{}",
-            mismatches.len(),
-            mismatches.join("\n"),
-        );
-    }
-
-    /// Verify that `DeclNode::extract_doc_text()` produces identical output to
-    /// `extract_documentation(&Value)` for every declaration.
-    #[test]
-    fn extract_documentation_parity_with_raw() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("poolmanager.json");
-        let json = std::fs::read_to_string(&path).unwrap();
-        let raw: serde_json::Value = serde_json::from_str(&json).unwrap();
-
-        let build = crate::goto::CachedBuild::new(raw, 0);
-
-        let mut checked = 0;
-        let mut mismatches = Vec::new();
-
-        for (id, decl) in &build.decl_index {
-            let raw_node = match build.id_index.get(&(*id as u64)) {
-                Some(n) => n,
-                None => continue,
-            };
-
-            let typed_doc = decl.extract_doc_text();
-            let raw_doc = crate::hover::extract_documentation(raw_node);
-
-            if typed_doc != raw_doc {
-                mismatches.push(format!(
-                    "id={id} name={:?}: typed={:?} raw={:?}",
-                    decl.name(),
-                    typed_doc,
-                    raw_doc,
-                ));
-            }
-            checked += 1;
-        }
-
-        assert!(
-            mismatches.is_empty(),
-            "Documentation parity failures ({}/{checked}):\n{}",
-            mismatches.len(),
-            mismatches.join("\n"),
-        );
-    }
-
-    /// Verify that `lookup_doc_entry_typed` produces identical output to
-    /// `lookup_doc_entry` for every declaration in the fixture.
-    #[test]
-    fn lookup_doc_entry_parity_with_raw() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("poolmanager.json");
-        let json = std::fs::read_to_string(&path).unwrap();
-        let raw: serde_json::Value = serde_json::from_str(&json).unwrap();
-
-        let build = crate::goto::CachedBuild::new(raw, 0);
-        let sources = build.ast.get("sources").unwrap();
-        let mut checked = 0;
-        let mut mismatches = Vec::new();
-
-        for (id, decl) in &build.decl_index {
-            let raw_node = match build.id_index.get(&(*id as u64)) {
-                Some(n) => n,
-                None => continue,
-            };
-
-            let typed_result = crate::hover::lookup_doc_entry_typed(
-                &build.doc_index,
-                decl,
-                &build.decl_index,
-                &build.node_id_to_source_path,
-            );
-            let raw_result = crate::hover::lookup_doc_entry(
-                &build.doc_index,
-                raw_node,
-                sources,
-                &build.id_index,
-            );
-
-            // Compare the notice/details/title fields (params/returns order may vary)
-            let typed_key = typed_result.as_ref().map(|e| {
-                (
-                    e.notice.clone(),
-                    e.details.clone(),
-                    e.title.clone(),
-                    e.author.clone(),
-                )
-            });
-            let raw_key = raw_result.as_ref().map(|e| {
-                (
-                    e.notice.clone(),
-                    e.details.clone(),
-                    e.title.clone(),
-                    e.author.clone(),
-                )
-            });
-
-            if typed_key != raw_key {
-                mismatches.push(format!(
-                    "id={id} name={:?} type={}: typed={:?} raw={:?}",
-                    decl.name(),
-                    decl.node_type(),
-                    typed_key,
-                    raw_key,
-                ));
-            }
-            checked += 1;
-        }
-
-        assert!(
-            mismatches.is_empty(),
-            "lookup_doc_entry parity failures ({}/{checked}):\n{}",
-            mismatches.len(),
-            mismatches.join("\n"),
-        );
-        assert!(checked > 200, "expected to check >200, got {checked}");
-    }
-
-    /// Verify that `resolve_inheritdoc_typed` produces identical output to
-    /// `resolve_inheritdoc` for declarations with `@inheritdoc`.
-    #[test]
-    fn resolve_inheritdoc_parity_with_raw() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("poolmanager.json");
-        let json = std::fs::read_to_string(&path).unwrap();
-        let raw: serde_json::Value = serde_json::from_str(&json).unwrap();
-
-        let build = crate::goto::CachedBuild::new(raw, 0);
-
-        let mut checked = 0;
-        let mut mismatches = Vec::new();
-
-        for (id, decl) in &build.decl_index {
-            let doc_text = match decl.extract_doc_text() {
-                Some(t) if t.contains("@inheritdoc") => t,
-                _ => continue,
-            };
-
-            let raw_node = match build.id_index.get(&(*id as u64)) {
-                Some(n) => n,
-                None => continue,
-            };
-
-            let typed_result =
-                crate::hover::resolve_inheritdoc_typed(decl, &doc_text, &build.decl_index);
-            let raw_result = crate::hover::resolve_inheritdoc(raw_node, &doc_text, &build.id_index);
-
-            if typed_result != raw_result {
-                mismatches.push(format!(
-                    "id={id} name={:?}: typed={:?} raw={:?}",
-                    decl.name(),
-                    typed_result,
-                    raw_result,
-                ));
-            }
-            checked += 1;
-        }
-
-        assert!(
-            mismatches.is_empty(),
-            "resolve_inheritdoc parity failures ({}/{checked}):\n{}",
-            mismatches.len(),
-            mismatches.join("\n"),
-        );
-        // The fixture should have at least a few @inheritdoc declarations
-        assert!(checked > 0, "expected to find @inheritdoc declarations");
     }
 
     /// Verify that `node_id_to_source_path` covers all declaration nodes.

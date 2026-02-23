@@ -104,8 +104,10 @@ async fn test_references_namelocations_fallback() {
 
     // With name_location_index = Some(0), the old code would fail to resolve
     // the definition (StructDefinition has no nameLocations array).
-    let locations = references::goto_references_with_index(
-        &build.ast,
+    // Use goto_references_cached (the production path) since CachedBuild
+    // now strips sources after indexing.
+    let locations = references::goto_references_cached(
+        &build,
         &b_uri,
         pos,
         &b_source,

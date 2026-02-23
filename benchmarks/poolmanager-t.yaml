@@ -18,10 +18,11 @@ exclude:
 
 servers:
   - mmsaki@latest
-  - solc
-  - qiuxiang
-  - juanfranblanco
-  - nomicfoundation
+  - mmsaki@v0.1.24
+  # - solc
+  # - qiuxiang
+  # - juanfranblanco
+  # - nomicfoundation
 
 methods:
   textDocument/definition:

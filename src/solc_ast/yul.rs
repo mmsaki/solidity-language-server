@@ -202,8 +202,55 @@ pub struct YulCase {
     #[serde(default)]
     pub native_src: Option<String>,
     /// `None` for the `default` case.
+    /// Solc encodes the default case's value as the string `"default"` rather
+    /// than `null`, so we need a custom deserializer.
+    #[serde(default, deserialize_with = "deserialize_yul_case_value")]
     pub value: Option<YulLiteral>,
     pub body: YulBlock,
+}
+
+/// Deserialize a YulCase value field that can be:
+/// - a YulLiteral object (normal case)
+/// - the string `"default"` (default case — treated as None)
+/// - null (also default case)
+fn deserialize_yul_case_value<'de, D>(deserializer: D) -> Result<Option<YulLiteral>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de;
+
+    struct YulCaseValueVisitor;
+
+    impl<'de> de::Visitor<'de> for YulCaseValueVisitor {
+        type Value = Option<YulLiteral>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a YulLiteral object, the string \"default\", or null")
+        }
+
+        fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+            if v == "default" {
+                Ok(None)
+            } else {
+                Err(de::Error::invalid_value(de::Unexpected::Str(v), &self))
+            }
+        }
+
+        fn visit_none<E: de::Error>(self) -> Result<Self::Value, E> {
+            Ok(None)
+        }
+
+        fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+            Ok(None)
+        }
+
+        fn visit_map<A: de::MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
+            let literal = YulLiteral::deserialize(de::value::MapAccessDeserializer::new(map))?;
+            Ok(Some(literal))
+        }
+    }
+
+    deserializer.deserialize_any(YulCaseValueVisitor)
 }
 
 /// A Yul function definition.

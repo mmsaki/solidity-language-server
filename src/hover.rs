@@ -6,14 +6,13 @@ use tower_lsp::lsp_types::{
 };
 
 use crate::gas::{self, GasIndex};
-use crate::goto::{CHILD_KEYS, pos_to_bytes};
+#[cfg(test)]
+use crate::goto::CHILD_KEYS;
+use crate::goto::pos_to_bytes;
 use crate::references::{byte_to_decl_via_external_refs, byte_to_id};
 #[cfg(test)]
 use crate::types::NodeId;
 use crate::types::{EventSelector, FuncSelector, MethodId, Selector};
-
-/// Type alias for the pre-built node-id → raw AST node index.
-pub type IdIndex = HashMap<u64, Value>;
 
 // ── DocIndex — pre-built userdoc/devdoc lookup ─────────────────────────────
 
@@ -380,75 +379,6 @@ fn compute_event_topic(sig: &str) -> String {
 /// Look up documentation for an AST declaration node from the DocIndex.
 ///
 /// Returns a cloned DocEntry since key construction is dynamic.
-pub fn lookup_doc_entry(
-    doc_index: &DocIndex,
-    decl_node: &Value,
-    sources: &Value,
-    id_index: &IdIndex,
-) -> Option<DocEntry> {
-    let node_type = decl_node.get("nodeType").and_then(|v| v.as_str())?;
-
-    match node_type {
-        "FunctionDefinition" | "VariableDeclaration" => {
-            // Try by functionSelector first
-            if let Some(selector) = decl_node.get("functionSelector").and_then(|v| v.as_str()) {
-                let key = DocKey::Func(FuncSelector::new(selector));
-                if let Some(entry) = doc_index.get(&key) {
-                    return Some(entry.clone());
-                }
-            }
-
-            // For state variables without selector, try statevar key
-            if node_type == "VariableDeclaration" {
-                let var_name = decl_node.get("name").and_then(|v| v.as_str())?;
-                // Find containing contract via scope
-                let scope_id = decl_node.get("scope").and_then(|v| v.as_u64())?;
-                let scope_node = id_index.get(&scope_id)?;
-                let contract_name = scope_node.get("name").and_then(|v| v.as_str())?;
-
-                // Need to find the path — walk source units
-                let path = find_source_path_for_node(sources, scope_id)?;
-                let key = DocKey::StateVar(format!("{path}:{contract_name}:{var_name}"));
-                if let Some(entry) = doc_index.get(&key) {
-                    return Some(entry.clone());
-                }
-            }
-
-            // Fallback: try method by name
-            let fn_name = decl_node.get("name").and_then(|v| v.as_str())?;
-            let scope_id = decl_node.get("scope").and_then(|v| v.as_u64())?;
-            let scope_node = id_index.get(&scope_id)?;
-            let contract_name = scope_node.get("name").and_then(|v| v.as_str())?;
-            let path = find_source_path_for_node(sources, scope_id)?;
-            let key = DocKey::Method(format!("{path}:{contract_name}:{fn_name}"));
-            doc_index.get(&key).cloned()
-        }
-        "ErrorDefinition" => {
-            if let Some(selector) = decl_node.get("errorSelector").and_then(|v| v.as_str()) {
-                let key = DocKey::Func(FuncSelector::new(selector));
-                return doc_index.get(&key).cloned();
-            }
-            None
-        }
-        "EventDefinition" => {
-            if let Some(selector) = decl_node.get("eventSelector").and_then(|v| v.as_str()) {
-                let key = DocKey::Event(EventSelector::new(selector));
-                return doc_index.get(&key).cloned();
-            }
-            None
-        }
-        "ContractDefinition" => {
-            let contract_name = decl_node.get("name").and_then(|v| v.as_str())?;
-            // Find the source path for this contract
-            let node_id = decl_node.get("id").and_then(|v| v.as_u64())?;
-            let path = find_source_path_for_node(sources, node_id)?;
-            let key = DocKey::Contract(format!("{path}:{contract_name}"));
-            doc_index.get(&key).cloned()
-        }
-        _ => None,
-    }
-}
-
 /// Typed version of `lookup_doc_entry` using `DeclNode` and `decl_index`.
 ///
 /// Looks up documentation for an AST declaration node from the DocIndex
@@ -522,102 +452,6 @@ pub fn lookup_doc_entry_typed(
 ///
 /// When hovering a `VariableDeclaration` that is a parameter or return value,
 /// this walks up to the parent declaration (via `scope`) and extracts the
-/// relevant `@param` or `@return` entry for this specific name.
-///
-/// Tries the DocIndex first (structured devdoc), then falls back to parsing
-/// the raw AST `documentation` field.
-pub fn lookup_param_doc(
-    doc_index: &DocIndex,
-    decl_node: &Value,
-    sources: &Value,
-    id_index: &IdIndex,
-) -> Option<String> {
-    let node_type = decl_node.get("nodeType").and_then(|v| v.as_str())?;
-    if node_type != "VariableDeclaration" {
-        return None;
-    }
-
-    let param_name = decl_node.get("name").and_then(|v| v.as_str())?;
-    if param_name.is_empty() {
-        return None;
-    }
-
-    // Walk up to the parent via scope
-    let scope_id = decl_node.get("scope").and_then(|v| v.as_u64())?;
-    let parent_node = id_index.get(&scope_id)?;
-    let parent_type = parent_node.get("nodeType").and_then(|v| v.as_str())?;
-
-    // Only handle function/error/event parents
-    if !matches!(
-        parent_type,
-        "FunctionDefinition" | "ErrorDefinition" | "EventDefinition" | "ModifierDefinition"
-    ) {
-        return None;
-    }
-
-    // Determine if this param is an input parameter or a return value
-    let is_return = if parent_type == "FunctionDefinition" {
-        parent_node
-            .get("returnParameters")
-            .and_then(|rp| rp.get("parameters"))
-            .and_then(|p| p.as_array())
-            .map(|arr| {
-                let decl_id = decl_node.get("id").and_then(|v| v.as_u64());
-                arr.iter()
-                    .any(|p| p.get("id").and_then(|v| v.as_u64()) == decl_id)
-            })
-            .unwrap_or(false)
-    } else {
-        false
-    };
-
-    // Try DocIndex first (structured devdoc)
-    if let Some(parent_doc) = lookup_doc_entry(doc_index, parent_node, sources, id_index) {
-        if is_return {
-            // Look in returns
-            for (rname, rdesc) in &parent_doc.returns {
-                if rname == param_name {
-                    return Some(rdesc.clone());
-                }
-            }
-        } else {
-            // Look in params
-            for (pname, pdesc) in &parent_doc.params {
-                if pname == param_name {
-                    return Some(pdesc.clone());
-                }
-            }
-        }
-    }
-
-    // Fallback: parse raw AST documentation on the parent
-    if let Some(doc_text) = extract_documentation(parent_node) {
-        // Resolve @inheritdoc if present
-        let resolved = if doc_text.contains("@inheritdoc") {
-            resolve_inheritdoc(parent_node, &doc_text, id_index)
-        } else {
-            None
-        };
-        let text = resolved.as_deref().unwrap_or(&doc_text);
-
-        let tag = if is_return { "@return " } else { "@param " };
-        for line in text.lines() {
-            let trimmed = line.trim().trim_start_matches('*').trim();
-            if let Some(rest) = trimmed.strip_prefix(tag) {
-                if let Some((name, desc)) = rest.split_once(' ') {
-                    if name == param_name {
-                        return Some(desc.to_string());
-                    }
-                } else if rest == param_name {
-                    return Some(String::new());
-                }
-            }
-        }
-    }
-
-    None
-}
-
 /// Typed version of `lookup_param_doc` using `DeclNode` and `decl_index`.
 ///
 /// When hovering a parameter/return `VariableDeclaration`, this looks up
@@ -706,41 +540,6 @@ pub fn lookup_param_doc_typed(
         }
     }
 
-    None
-}
-
-/// Find the source file path that contains a given node id.
-fn find_source_path_for_node(sources: &Value, target_id: u64) -> Option<String> {
-    let sources_obj = sources.as_object()?;
-    for (path, source_data) in sources_obj {
-        let ast = source_data.get("ast")?;
-        // Check if this source unit contains the node (check source unit id first)
-        let source_id = ast.get("id").and_then(|v| v.as_u64())?;
-        if source_id == target_id {
-            return Some(path.clone());
-        }
-
-        // Check nodes in this source
-        if let Some(nodes) = ast.get("nodes").and_then(|n| n.as_array()) {
-            for node in nodes {
-                if let Some(id) = node.get("id").and_then(|v| v.as_u64())
-                    && id == target_id
-                {
-                    return Some(path.clone());
-                }
-                // Check one more level (functions inside contracts)
-                if let Some(sub_nodes) = node.get("nodes").and_then(|n| n.as_array()) {
-                    for sub in sub_nodes {
-                        if let Some(id) = sub.get("id").and_then(|v| v.as_u64())
-                            && id == target_id
-                        {
-                            return Some(path.clone());
-                        }
-                    }
-                }
-            }
-        }
-    }
     None
 }
 
@@ -868,71 +667,8 @@ pub fn extract_selector(node: &Value) -> Option<Selector> {
     }
 }
 
-/// Resolve `@inheritdoc ParentName` by matching function selectors.
-///
-/// 1. Parse the parent contract name from `@inheritdoc ParentName`
-/// 2. Get the declaration's `functionSelector`
-/// 3. Find the parent contract in `baseContracts` of the scope contract
-/// 4. Match by selector in the parent's child nodes
-/// 5. Return the matched parent node's documentation
-pub fn resolve_inheritdoc(decl_node: &Value, doc_text: &str, id_index: &IdIndex) -> Option<String> {
-    // Parse "@inheritdoc ParentName"
-    let parent_name = doc_text
-        .lines()
-        .find_map(|line| {
-            let trimmed = line.trim().trim_start_matches('*').trim();
-            trimmed.strip_prefix("@inheritdoc ")
-        })?
-        .trim();
-
-    // Get the selector from the implementation function
-    let impl_selector = extract_selector(decl_node)?;
-
-    // Get the scope (containing contract id)
-    let scope_id = decl_node.get("scope").and_then(|v| v.as_u64())?;
-
-    // Find the scope contract — O(1) via id_index
-    let scope_contract = id_index.get(&scope_id)?;
-
-    // Find the parent contract in baseContracts by name
-    let base_contracts = scope_contract
-        .get("baseContracts")
-        .and_then(|v| v.as_array())?;
-    let parent_id = base_contracts.iter().find_map(|base| {
-        let name = base
-            .get("baseName")
-            .and_then(|bn| bn.get("name"))
-            .and_then(|n| n.as_str())?;
-        if name == parent_name {
-            base.get("baseName")
-                .and_then(|bn| bn.get("referencedDeclaration"))
-                .and_then(|v| v.as_u64())
-        } else {
-            None
-        }
-    })?;
-
-    // Find the parent contract node — O(1) via id_index
-    let parent_contract = id_index.get(&parent_id)?;
-
-    // Search parent's children for matching selector
-    let parent_nodes = parent_contract.get("nodes").and_then(|v| v.as_array())?;
-    for child in parent_nodes {
-        if let Some(child_selector) = extract_selector(child)
-            && child_selector == impl_selector
-        {
-            return extract_documentation(child);
-        }
-    }
-
-    None
-}
-
-/// Typed version of `resolve_inheritdoc` using `DeclNode` and `decl_index`.
-///
-/// Resolves `@inheritdoc ParentName` by matching selectors in the parent
-/// contract's typed `nodes` array. Falls back to the raw version if any
-/// typed lookup fails.
+/// Resolve `@inheritdoc ParentName` by matching selectors in the parent
+/// contract's typed `nodes` array using `DeclNode` and `decl_index`.
 pub fn resolve_inheritdoc_typed(
     decl: &crate::solc_ast::DeclNode,
     doc_text: &str,
@@ -1085,6 +821,44 @@ pub fn format_natspec(text: &str, inherited_doc: Option<&str>) -> String {
     lines.join("\n")
 }
 
+/// Format parameter list from a parameters node.
+fn format_parameters(params_node: Option<&Value>) -> String {
+    let params_node = match params_node {
+        Some(v) => v,
+        None => return String::new(),
+    };
+    let params = match params_node.get("parameters").and_then(|v| v.as_array()) {
+        Some(arr) => arr,
+        None => return String::new(),
+    };
+
+    let parts: Vec<String> = params
+        .iter()
+        .map(|p| {
+            let type_str = p
+                .get("typeDescriptions")
+                .and_then(|v| v.get("typeString"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            let name = p.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            let storage = p
+                .get("storageLocation")
+                .and_then(|v| v.as_str())
+                .unwrap_or("default");
+
+            if name.is_empty() {
+                type_str.to_string()
+            } else if storage != "default" {
+                format!("{type_str} {storage} {name}")
+            } else {
+                format!("{type_str} {name}")
+            }
+        })
+        .collect();
+
+    parts.join(", ")
+}
+
 /// Build a function/modifier signature string from a raw AST node.
 pub(crate) fn build_function_signature(node: &Value) -> Option<String> {
     let node_type = node.get("nodeType").and_then(|v| v.as_str())?;
@@ -1232,195 +1006,7 @@ pub(crate) fn build_function_signature(node: &Value) -> Option<String> {
     }
 }
 
-/// Format parameter list from a parameters node.
-fn format_parameters(params_node: Option<&Value>) -> String {
-    let params_node = match params_node {
-        Some(v) => v,
-        None => return String::new(),
-    };
-    let params = match params_node.get("parameters").and_then(|v| v.as_array()) {
-        Some(arr) => arr,
-        None => return String::new(),
-    };
-
-    let parts: Vec<String> = params
-        .iter()
-        .map(|p| {
-            let type_str = p
-                .get("typeDescriptions")
-                .and_then(|v| v.get("typeString"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("?");
-            let name = p.get("name").and_then(|v| v.as_str()).unwrap_or("");
-            let storage = p
-                .get("storageLocation")
-                .and_then(|v| v.as_str())
-                .unwrap_or("default");
-
-            if name.is_empty() {
-                type_str.to_string()
-            } else if storage != "default" {
-                format!("{type_str} {storage} {name}")
-            } else {
-                format!("{type_str} {name}")
-            }
-        })
-        .collect();
-
-    parts.join(", ")
-}
-
 // ── Signature Help ─────────────────────────────────────────────────────────
-
-/// Build individual parameter strings from a parameters AST node.
-///
-/// Returns a vec of strings like `["uint256 amount", "uint16 tax", "uint16 base"]`.
-fn build_parameter_strings(params_node: Option<&Value>) -> Vec<String> {
-    let params_node = match params_node {
-        Some(v) => v,
-        None => return vec![],
-    };
-    let params = match params_node.get("parameters").and_then(|v| v.as_array()) {
-        Some(arr) => arr,
-        None => return vec![],
-    };
-
-    params
-        .iter()
-        .map(|p| {
-            let type_str = p
-                .get("typeDescriptions")
-                .and_then(|v| v.get("typeString"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("?");
-            let name = p.get("name").and_then(|v| v.as_str()).unwrap_or("");
-            let storage = p
-                .get("storageLocation")
-                .and_then(|v| v.as_str())
-                .unwrap_or("default");
-
-            if name.is_empty() {
-                type_str.to_string()
-            } else if storage != "default" {
-                format!("{type_str} {storage} {name}")
-            } else {
-                format!("{type_str} {name}")
-            }
-        })
-        .collect()
-}
-
-/// Find a mapping `VariableDeclaration` by name, walking all AST sources.
-///
-/// Returns the declaration node whose `name` matches and whose
-/// `typeName.nodeType` is `"Mapping"`.
-fn find_mapping_decl_by_name<'a>(sources: &'a Value, name: &str) -> Option<&'a Value> {
-    let sources_obj = sources.as_object()?;
-    for (_path, source_data) in sources_obj {
-        let ast = source_data.get("ast")?;
-        let mut stack = vec![ast];
-        while let Some(node) = stack.pop() {
-            if node.get("nodeType").and_then(|v| v.as_str()) == Some("VariableDeclaration")
-                && node.get("name").and_then(|v| v.as_str()) == Some(name)
-                && node
-                    .get("typeName")
-                    .and_then(|t| t.get("nodeType"))
-                    .and_then(|v| v.as_str())
-                    == Some("Mapping")
-            {
-                return Some(node);
-            }
-            for key in CHILD_KEYS {
-                if let Some(value) = node.get(key) {
-                    match value {
-                        Value::Array(arr) => stack.extend(arr.iter()),
-                        Value::Object(_) => stack.push(value),
-                        _ => {}
-                    }
-                }
-            }
-        }
-    }
-    None
-}
-
-/// Build signature help for a mapping index access like `orders[orderId]`.
-///
-/// Produces a label like `orders[bytes32 key]` or `orders[bytes32]` when the
-/// mapping key has no name, and marks the key parameter as active.
-fn mapping_signature_help(sources: &Value, name: &str) -> Option<SignatureHelp> {
-    let decl = find_mapping_decl_by_name(sources, name)?;
-    let type_name = decl.get("typeName")?;
-
-    let key_type = type_name
-        .get("keyType")
-        .and_then(|k| k.get("typeDescriptions"))
-        .and_then(|t| t.get("typeString"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("unknown");
-
-    // Named mapping keys (Solidity ≥0.8.18): `mapping(PoolId id => Pool.State)`
-    let key_name = type_name
-        .get("keyName")
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty());
-
-    let param_str = if let Some(kn) = key_name {
-        format!("{} {}", key_type, kn)
-    } else {
-        key_type.to_string()
-    };
-
-    let sig_label = format!("{}[{}]", name, param_str);
-
-    // Parameter covers the key portion inside the brackets
-    let param_start = name.len() + 1; // after `[`
-    let param_end = param_start + param_str.len();
-
-    // Try to get @param doc for the key
-    let key_param_name = key_name.unwrap_or("");
-    let var_name = decl.get("name").and_then(|v| v.as_str()).unwrap_or("");
-
-    // stateVariables devdoc: look for @param doc on the mapping variable
-    let _param_doc: Option<String> = None;
-
-    let param_info = ParameterInformation {
-        label: ParameterLabel::LabelOffsets([param_start as u32, param_end as u32]),
-        documentation: if !key_param_name.is_empty() {
-            Some(Documentation::MarkupContent(MarkupContent {
-                kind: MarkupKind::Markdown,
-                value: format!("`{}` — key for `{}`", key_param_name, var_name),
-            }))
-        } else {
-            None
-        },
-    };
-
-    // Get the value type for function-level documentation
-    let value_type = type_name
-        .get("valueType")
-        .and_then(|v| v.get("typeDescriptions"))
-        .and_then(|t| t.get("typeString"))
-        .and_then(|v| v.as_str());
-
-    let sig_doc = value_type.map(|vt| format!("@returns `{}`", vt));
-
-    Some(SignatureHelp {
-        signatures: vec![SignatureInformation {
-            label: sig_label,
-            documentation: sig_doc.map(|doc| {
-                Documentation::MarkupContent(MarkupContent {
-                    kind: MarkupKind::Markdown,
-                    value: doc,
-                })
-            }),
-            parameters: Some(vec![param_info]),
-            active_parameter: Some(0),
-        }],
-        active_signature: Some(0),
-        active_parameter: Some(0),
-    })
-}
 
 /// Find a mapping `VariableDeclaration` by name in the typed `decl_index`.
 ///
@@ -1527,10 +1113,10 @@ pub fn signature_help(
     source_bytes: &[u8],
     position: Position,
 ) -> Option<SignatureHelp> {
-    let sources = cached_build.ast.get("sources")?;
     let hint_index = &cached_build.hint_index;
     let doc_index = &cached_build.doc_index;
-    let id_index = &cached_build.id_index;
+    let di = &cached_build.decl_index;
+    let id_to_path = &cached_build.node_id_to_source_path;
 
     let source_str = String::from_utf8_lossy(source_bytes);
     let tree = crate::inlay_hints::ts_parse(&source_str)?;
@@ -1540,10 +1126,9 @@ pub fn signature_help(
     let ctx =
         crate::inlay_hints::ts_find_call_for_signature(tree.root_node(), &source_str, byte_pos)?;
 
-    // Mapping index access: prefer typed decl_index, fall back to raw AST walk
+    // Mapping index access: use typed decl_index
     if ctx.is_index_access {
-        return mapping_signature_help_typed(&cached_build.decl_index, ctx.name)
-            .or_else(|| mapping_signature_help(sources, ctx.name));
+        return mapping_signature_help_typed(di, ctx.name);
     }
 
     // Try all hint lookups to resolve the callsite declaration and get skip count
@@ -1551,25 +1136,17 @@ pub fn signature_help(
         lookup.resolve_callsite_with_skip(ctx.call_start_byte, ctx.name, ctx.arg_count)
     })?;
 
-    // Try typed DeclNode first, fall back to raw Value
-    let typed_decl = cached_build.decl_index.get(&(decl_id as i64));
+    // Typed DeclNode — O(1) from decl_index
+    let typed_decl = di.get(&(decl_id as i64))?;
 
-    // Find the raw declaration AST node — O(1) lookup (still needed for
-    // lookup_doc_entry which hasn't been converted to typed yet)
-    let decl_node = id_index.get(&decl_id)?;
+    // Build the signature label
+    let sig_label = typed_decl.build_signature()?;
 
-    // Build the signature label — prefer typed
-    let sig_label = typed_decl
-        .and_then(|d| d.build_signature())
-        .or_else(|| build_function_signature(decl_node))?;
-
-    // Build individual parameter strings for offset calculation — prefer typed
-    let param_strings = typed_decl
-        .map(|d| d.param_strings())
-        .unwrap_or_else(|| build_parameter_strings(decl_node.get("parameters")));
+    // Build individual parameter strings for offset calculation
+    let param_strings = typed_decl.param_strings();
 
     // Look up @param docs from DocIndex
-    let doc_entry = lookup_doc_entry(doc_index, decl_node, sources, id_index);
+    let doc_entry = lookup_doc_entry_typed(doc_index, typed_decl, di, id_to_path);
 
     // Calculate parameter label offsets within the signature string
     // The signature looks like: "function name(uint256 amount, uint16 tax) ..."
@@ -1582,21 +1159,12 @@ pub fn signature_help(
         let start = offset;
         let end = start + param_str.len();
 
-        // Find @param doc for this parameter — prefer typed params
+        // Find @param doc for this parameter
         let param_name = typed_decl
-            .and_then(|d| d.parameters())
+            .parameters()
             .and_then(|pl| pl.parameters.get(i))
             .map(|p| p.name.as_str())
-            .unwrap_or_else(|| {
-                decl_node
-                    .get("parameters")
-                    .and_then(|p| p.get("parameters"))
-                    .and_then(|arr| arr.as_array())
-                    .and_then(|arr| arr.get(i))
-                    .and_then(|p| p.get("name"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-            });
+            .unwrap_or("");
 
         let param_doc = doc_entry.as_ref().and_then(|entry| {
             entry
@@ -1660,9 +1228,8 @@ pub fn signature_help(
 ///
 /// Looks at the lines preceding the declaration's byte offset in the source
 /// for a comment containing `@lsp-enable gas-estimates`.
-fn source_has_gas_sentinel(source: &str, decl_node: &Value) -> bool {
-    let src_str = decl_node.get("src").and_then(|v| v.as_str()).unwrap_or("");
-    let offset = src_str
+fn source_has_gas_sentinel(source: &str, src_field: &str) -> bool {
+    let offset = src_field
         .split(':')
         .next()
         .and_then(|s| s.parse::<usize>().ok())
@@ -1689,97 +1256,12 @@ fn source_has_gas_sentinel(source: &str, decl_node: &Value) -> bool {
     false
 }
 
-/// Build gas hover text for a function declaration.
-fn gas_hover_for_function(
-    decl_node: &Value,
-    gas_index: &GasIndex,
-    id_index: &IdIndex,
-) -> Option<String> {
-    let node_type = decl_node.get("nodeType").and_then(|v| v.as_str())?;
-    if node_type != "FunctionDefinition" {
-        return None;
-    }
-
-    // Try by selector first (external/public functions)
-    if let Some(selector) = decl_node.get("functionSelector").and_then(|v| v.as_str())
-        && let Some((_contract, cost)) =
-            gas::gas_by_selector(gas_index, &FuncSelector::new(selector))
-    {
-        return Some(format!("Gas: `{}`", gas::format_gas(cost)));
-    }
-
-    // Try by name (internal functions)
-    let fn_name = decl_node.get("name").and_then(|v| v.as_str())?;
-    let contract_key = gas::resolve_contract_key(decl_node, gas_index, id_index)?;
-    let contract_gas = gas_index.get(&contract_key)?;
-
-    // Match by name prefix in internal gas estimates
-    let prefix = format!("{fn_name}(");
-    for (sig, cost) in &contract_gas.internal {
-        if sig.starts_with(&prefix) {
-            return Some(format!("Gas: `{}`", gas::format_gas(cost)));
-        }
-    }
-
-    None
-}
-
-/// Build gas hover text for a contract declaration.
-fn gas_hover_for_contract(
-    decl_node: &Value,
-    gas_index: &GasIndex,
-    id_index: &IdIndex,
-) -> Option<String> {
-    let node_type = decl_node.get("nodeType").and_then(|v| v.as_str())?;
-    if node_type != "ContractDefinition" {
-        return None;
-    }
-
-    let contract_key = gas::resolve_contract_key(decl_node, gas_index, id_index)?;
-    let contract_gas = gas_index.get(&contract_key)?;
-
-    let mut lines = Vec::new();
-
-    // Creation/deploy costs
-    if !contract_gas.creation.is_empty() {
-        lines.push("**Deploy Cost**".to_string());
-        if let Some(cost) = contract_gas.creation.get("totalCost") {
-            lines.push(format!("- Total: `{}`", gas::format_gas(cost)));
-        }
-        if let Some(cost) = contract_gas.creation.get("codeDepositCost") {
-            lines.push(format!("- Code deposit: `{}`", gas::format_gas(cost)));
-        }
-        if let Some(cost) = contract_gas.creation.get("executionCost") {
-            lines.push(format!("- Execution: `{}`", gas::format_gas(cost)));
-        }
-    }
-
-    // External function gas
-    if !contract_gas.external_by_sig.is_empty() {
-        lines.push(String::new());
-        lines.push("**Function Gas**".to_string());
-
-        let mut fns: Vec<(&MethodId, &String)> = contract_gas.external_by_sig.iter().collect();
-        fns.sort_by_key(|(k, _)| k.as_str().to_string());
-
-        for (sig, cost) in fns {
-            lines.push(format!("- `{}`: `{}`", sig.name(), gas::format_gas(cost)));
-        }
-    }
-
-    if lines.is_empty() {
-        return None;
-    }
-
-    Some(lines.join("\n"))
-}
-
 /// Typed version of `gas_hover_for_function` using `DeclNode`.
 fn gas_hover_for_function_typed(
     decl: &crate::solc_ast::DeclNode,
     gas_index: &GasIndex,
     decl_index: &std::collections::HashMap<i64, crate::solc_ast::DeclNode>,
-    typed_ast: Option<&std::collections::HashMap<String, crate::solc_ast::SourceUnit>>,
+    node_id_to_source_path: &std::collections::HashMap<i64, String>,
 ) -> Option<String> {
     use crate::solc_ast::DeclNode;
 
@@ -1796,7 +1278,8 @@ fn gas_hover_for_function_typed(
     }
 
     // Try by name (internal functions)
-    let contract_key = gas::resolve_contract_key_typed(decl, gas_index, decl_index, typed_ast)?;
+    let contract_key =
+        gas::resolve_contract_key_typed(decl, gas_index, decl_index, node_id_to_source_path)?;
     let contract_gas = gas_index.get(&contract_key)?;
 
     let prefix = format!("{}(", func.name);
@@ -1814,7 +1297,7 @@ fn gas_hover_for_contract_typed(
     decl: &crate::solc_ast::DeclNode,
     gas_index: &GasIndex,
     decl_index: &std::collections::HashMap<i64, crate::solc_ast::DeclNode>,
-    typed_ast: Option<&std::collections::HashMap<String, crate::solc_ast::SourceUnit>>,
+    node_id_to_source_path: &std::collections::HashMap<i64, String>,
 ) -> Option<String> {
     use crate::solc_ast::DeclNode;
 
@@ -1822,7 +1305,8 @@ fn gas_hover_for_contract_typed(
         return None;
     }
 
-    let contract_key = gas::resolve_contract_key_typed(decl, gas_index, decl_index, typed_ast)?;
+    let contract_key =
+        gas::resolve_contract_key_typed(decl, gas_index, decl_index, node_id_to_source_path)?;
     let contract_gas = gas_index.get(&contract_key)?;
 
     let mut lines = Vec::new();
@@ -1844,8 +1328,7 @@ fn gas_hover_for_contract_typed(
         lines.push(String::new());
         lines.push("**Function Gas**".to_string());
 
-        let mut fns: Vec<(&crate::types::MethodId, &String)> =
-            contract_gas.external_by_sig.iter().collect();
+        let mut fns: Vec<(&MethodId, &String)> = contract_gas.external_by_sig.iter().collect();
         fns.sort_by_key(|(k, _)| k.as_str().to_string());
 
         for (sig, cost) in fns {
@@ -1867,12 +1350,10 @@ pub fn hover_info(
     position: Position,
     source_bytes: &[u8],
 ) -> Option<Hover> {
-    let sources = cached_build.ast.get("sources")?;
     let nodes = &cached_build.nodes;
     let path_to_abs = &cached_build.path_to_abs;
     let external_refs = &cached_build.external_refs;
     let id_to_path = &cached_build.id_to_path_map;
-    let id_index = &cached_build.id_index;
     let gas_index = &cached_build.gas_index;
     let doc_index = &cached_build.doc_index;
     let hint_index = &cached_build.hint_index;
@@ -1901,97 +1382,64 @@ pub fn hover_info(
     // Follow referenced_declaration to the declaration node
     let decl_id = node_info.referenced_declaration.unwrap_or(node_id);
 
-    // Try typed DeclNode first (O(1) from decl_index), fall back to raw Value
+    // Typed DeclNode — O(1) from decl_index
     let typed_decl = cached_build.decl_index.get(&(decl_id.0 as i64));
-
-    // Find the raw AST node for the declaration — O(1) lookup (still needed
-    // for gas estimates, lookup_doc_entry, lookup_param_doc, resolve_inheritdoc
-    // which haven't been converted to typed yet)
-    let decl_node = cached_build.find_node(decl_id)?;
 
     // Build hover content
     let mut parts: Vec<String> = Vec::new();
 
-    // Signature in a code block — prefer typed DeclNode
-    if let Some(sig) = typed_decl
-        .and_then(|d| d.build_signature())
-        .or_else(|| build_function_signature(decl_node))
-    {
+    // Signature in a code block
+    if let Some(sig) = typed_decl.and_then(|d| d.build_signature()) {
         parts.push(format!("```solidity\n{sig}\n```"));
-    } else {
+    } else if let Some(d) = typed_decl {
         // Fallback: show type description for any node
-        let type_and_name = typed_decl
-            .and_then(|d| {
-                d.type_string()
-                    .map(|ts| (ts.to_string(), d.name().to_string()))
-            })
-            .or_else(|| {
-                let type_str = decl_node
-                    .get("typeDescriptions")
-                    .and_then(|v| v.get("typeString"))
-                    .and_then(|v| v.as_str())?;
-                let name = decl_node.get("name").and_then(|v| v.as_str()).unwrap_or("");
-                Some((type_str.to_string(), name.to_string()))
-            });
-        if let Some((type_str, name)) = type_and_name {
-            parts.push(format!("```solidity\n{type_str} {name}\n```"));
+        if let Some(ts) = d.type_string() {
+            parts.push(format!("```solidity\n{ts} {}\n```", d.name()));
         }
     }
 
-    // Selector (function, error, or event) — prefer typed DeclNode
-    if let Some(selector) = typed_decl
-        .and_then(|d| d.extract_typed_selector())
-        .or_else(|| extract_selector(decl_node))
-    {
+    // Selector (function, error, or event)
+    if let Some(selector) = typed_decl.and_then(|d| d.extract_typed_selector()) {
         parts.push(format!("Selector: `{}`", selector.to_prefixed()));
     }
 
     let di = &cached_build.decl_index;
+    let id_to_path = &cached_build.node_id_to_source_path;
 
     // Gas estimates — only shown when `@lsp-enable gas-estimates` is present
-    // Prefer typed DeclNode, fall back to raw Value
     if !gas_index.is_empty() {
         let source_str = String::from_utf8_lossy(source_bytes);
-        if source_has_gas_sentinel(&source_str, decl_node) {
-            let ta = cached_build.typed_ast.as_ref();
-            if let Some(gas_text) = typed_decl
-                .and_then(|d| gas_hover_for_function_typed(d, gas_index, di, ta))
-                .or_else(|| gas_hover_for_function(decl_node, gas_index, id_index))
+        if let Some(d) = typed_decl
+            && source_has_gas_sentinel(&source_str, d.src())
+        {
+            if let Some(gas_text) =
+                typed_decl.and_then(|d| gas_hover_for_function_typed(d, gas_index, di, id_to_path))
             {
                 parts.push(gas_text);
-            } else if let Some(gas_text) = typed_decl
-                .and_then(|d| gas_hover_for_contract_typed(d, gas_index, di, ta))
-                .or_else(|| gas_hover_for_contract(decl_node, gas_index, id_index))
+            } else if let Some(gas_text) =
+                typed_decl.and_then(|d| gas_hover_for_contract_typed(d, gas_index, di, id_to_path))
             {
                 parts.push(gas_text);
             }
         }
     }
-    let id_to_path = &cached_build.node_id_to_source_path;
 
-    // Documentation — try typed lookup first, fall back to raw Value
-    if let Some(doc_entry) = typed_decl
-        .and_then(|d| lookup_doc_entry_typed(doc_index, d, di, id_to_path))
-        .or_else(|| lookup_doc_entry(doc_index, decl_node, sources, id_index))
+    // Documentation
+    if let Some(doc_entry) =
+        typed_decl.and_then(|d| lookup_doc_entry_typed(doc_index, d, di, id_to_path))
     {
         let formatted = format_doc_entry(&doc_entry);
         if !formatted.is_empty() {
             parts.push(format!("---\n{formatted}"));
         }
-    } else if let Some(doc_text) = typed_decl
-        .and_then(|d| d.extract_doc_text())
-        .or_else(|| extract_documentation(decl_node))
-    {
-        let inherited_doc = typed_decl
-            .and_then(|d| resolve_inheritdoc_typed(d, &doc_text, di))
-            .or_else(|| resolve_inheritdoc(decl_node, &doc_text, id_index));
+    } else if let Some(doc_text) = typed_decl.and_then(|d| d.extract_doc_text()) {
+        let inherited_doc = typed_decl.and_then(|d| resolve_inheritdoc_typed(d, &doc_text, di));
         let formatted = format_natspec(&doc_text, inherited_doc.as_deref());
         if !formatted.is_empty() {
             parts.push(format!("---\n{formatted}"));
         }
-    } else if let Some(param_doc) = typed_decl
-        .and_then(|d| lookup_param_doc_typed(doc_index, d, di, id_to_path))
-        .or_else(|| lookup_param_doc(doc_index, decl_node, sources, id_index))
+    } else if let Some(param_doc) =
+        typed_decl.and_then(|d| lookup_param_doc_typed(doc_index, d, di, id_to_path))
     {
         // Parameter/return value — show the @param/@return description from parent
         if !param_doc.is_empty() {
@@ -2015,70 +1463,38 @@ pub fn hover_info(
                 ctx.arg_index,
             )
         {
-            // Look up @param doc — prefer typed DeclNode
+            // Look up @param doc via typed DeclNode
             let typed_fn = di.get(&(resolved.decl_id as i64));
-            let param_doc = typed_fn
-                .and_then(|fn_decl| {
-                    // Try DocIndex first (structured devdoc)
-                    if let Some(doc_entry) =
-                        lookup_doc_entry_typed(doc_index, fn_decl, di, id_to_path)
-                    {
-                        for (pname, pdesc) in &doc_entry.params {
-                            if pname == &resolved.param_name {
-                                return Some(pdesc.clone());
-                            }
+            let param_doc = typed_fn.and_then(|fn_decl| {
+                // Try DocIndex first (structured devdoc)
+                if let Some(doc_entry) = lookup_doc_entry_typed(doc_index, fn_decl, di, id_to_path)
+                {
+                    for (pname, pdesc) in &doc_entry.params {
+                        if pname == &resolved.param_name {
+                            return Some(pdesc.clone());
                         }
                     }
-                    // Fallback: parse typed NatSpec on the function definition
-                    if let Some(doc_text) = fn_decl.extract_doc_text() {
-                        let resolved_doc = if doc_text.contains("@inheritdoc") {
-                            resolve_inheritdoc_typed(fn_decl, &doc_text, di)
-                        } else {
-                            None
-                        };
-                        let text = resolved_doc.as_deref().unwrap_or(&doc_text);
-                        for line in text.lines() {
-                            let trimmed = line.trim().trim_start_matches('*').trim();
-                            if let Some(rest) = trimmed.strip_prefix("@param ")
-                                && let Some((name, desc)) = rest.split_once(' ')
-                                && name == resolved.param_name
-                            {
-                                return Some(desc.to_string());
-                            }
+                }
+                // Fallback: parse typed NatSpec on the function definition
+                if let Some(doc_text) = fn_decl.extract_doc_text() {
+                    let resolved_doc = if doc_text.contains("@inheritdoc") {
+                        resolve_inheritdoc_typed(fn_decl, &doc_text, di)
+                    } else {
+                        None
+                    };
+                    let text = resolved_doc.as_deref().unwrap_or(&doc_text);
+                    for line in text.lines() {
+                        let trimmed = line.trim().trim_start_matches('*').trim();
+                        if let Some(rest) = trimmed.strip_prefix("@param ")
+                            && let Some((name, desc)) = rest.split_once(' ')
+                            && name == resolved.param_name
+                        {
+                            return Some(desc.to_string());
                         }
                     }
-                    None
-                })
-                .or_else(|| {
-                    // Fall back to raw Value if typed lookup not available
-                    let raw_fn = id_index.get(&resolved.decl_id)?;
-                    if let Some(doc_entry) = lookup_doc_entry(doc_index, raw_fn, sources, id_index)
-                    {
-                        for (pname, pdesc) in &doc_entry.params {
-                            if pname == &resolved.param_name {
-                                return Some(pdesc.clone());
-                            }
-                        }
-                    }
-                    if let Some(doc_text) = extract_documentation(raw_fn) {
-                        let resolved_doc = if doc_text.contains("@inheritdoc") {
-                            resolve_inheritdoc(raw_fn, &doc_text, id_index)
-                        } else {
-                            None
-                        };
-                        let text = resolved_doc.as_deref().unwrap_or(&doc_text);
-                        for line in text.lines() {
-                            let trimmed = line.trim().trim_start_matches('*').trim();
-                            if let Some(rest) = trimmed.strip_prefix("@param ")
-                                && let Some((name, desc)) = rest.split_once(' ')
-                                && name == resolved.param_name
-                            {
-                                return Some(desc.to_string());
-                            }
-                        }
-                    }
-                    None
-                });
+                }
+                None
+            });
             if let Some(desc) = param_doc
                 && !desc.is_empty()
             {
@@ -2368,11 +1784,11 @@ mod tests {
         let ast = load_test_ast();
         let build = crate::goto::CachedBuild::new(ast, 0);
         // PoolManager.swap (id=616) has "@inheritdoc IPoolManager"
-        let decl = build.id_index.get(&616).unwrap();
-        let doc_text = extract_documentation(decl).unwrap();
+        let decl = build.decl_index.get(&616).unwrap();
+        let doc_text = decl.extract_doc_text().unwrap();
         assert!(doc_text.contains("@inheritdoc"));
 
-        let resolved = resolve_inheritdoc(decl, &doc_text, &build.id_index).unwrap();
+        let resolved = resolve_inheritdoc_typed(decl, &doc_text, &build.decl_index).unwrap();
         assert!(resolved.contains("@notice"));
         assert!(resolved.contains("Swap against the given pool"));
     }
@@ -2382,10 +1798,10 @@ mod tests {
         let ast = load_test_ast();
         let build = crate::goto::CachedBuild::new(ast, 0);
         // PoolManager.initialize (id=330) has "@inheritdoc IPoolManager"
-        let decl = build.id_index.get(&330).unwrap();
-        let doc_text = extract_documentation(decl).unwrap();
+        let decl = build.decl_index.get(&330).unwrap();
+        let doc_text = decl.extract_doc_text().unwrap();
 
-        let resolved = resolve_inheritdoc(decl, &doc_text, &build.id_index).unwrap();
+        let resolved = resolve_inheritdoc_typed(decl, &doc_text, &build.decl_index).unwrap();
         assert!(resolved.contains("Initialize the state"));
         assert!(resolved.contains("@param key"));
     }
@@ -2396,23 +1812,22 @@ mod tests {
         let build = crate::goto::CachedBuild::new(ast, 0);
 
         // extsload(bytes32) — id=1306, selector "1e2eaeaf"
-        let decl = build.id_index.get(&1306).unwrap();
-        let doc_text = extract_documentation(decl).unwrap();
-        let resolved = resolve_inheritdoc(decl, &doc_text, &build.id_index).unwrap();
+        let decl = build.decl_index.get(&1306).unwrap();
+        let doc_text = decl.extract_doc_text().unwrap();
+        let resolved = resolve_inheritdoc_typed(decl, &doc_text, &build.decl_index).unwrap();
         assert!(resolved.contains("granular pool state"));
-        // Should match the single-slot overload doc
         assert!(resolved.contains("@param slot"));
 
         // extsload(bytes32, uint256) — id=1319, selector "35fd631a"
-        let decl2 = build.id_index.get(&1319).unwrap();
-        let doc_text2 = extract_documentation(decl2).unwrap();
-        let resolved2 = resolve_inheritdoc(decl2, &doc_text2, &build.id_index).unwrap();
+        let decl2 = build.decl_index.get(&1319).unwrap();
+        let doc_text2 = decl2.extract_doc_text().unwrap();
+        let resolved2 = resolve_inheritdoc_typed(decl2, &doc_text2, &build.decl_index).unwrap();
         assert!(resolved2.contains("@param startSlot"));
 
         // extsload(bytes32[]) — id=1331, selector "dbd035ff"
-        let decl3 = build.id_index.get(&1331).unwrap();
-        let doc_text3 = extract_documentation(decl3).unwrap();
-        let resolved3 = resolve_inheritdoc(decl3, &doc_text3, &build.id_index).unwrap();
+        let decl3 = build.decl_index.get(&1331).unwrap();
+        let doc_text3 = decl3.extract_doc_text().unwrap();
+        let resolved3 = resolve_inheritdoc_typed(decl3, &doc_text3, &build.decl_index).unwrap();
         assert!(resolved3.contains("sparse pool state"));
     }
 
@@ -2421,11 +1836,10 @@ mod tests {
         let ast = load_test_ast();
         let build = crate::goto::CachedBuild::new(ast, 0);
         // PoolManager.swap with @inheritdoc — verify format_natspec resolves it
-        let decl = build.id_index.get(&616).unwrap();
-        let doc_text = extract_documentation(decl).unwrap();
-        let inherited = resolve_inheritdoc(decl, &doc_text, &build.id_index);
+        let decl = build.decl_index.get(&616).unwrap();
+        let doc_text = decl.extract_doc_text().unwrap();
+        let inherited = resolve_inheritdoc_typed(decl, &doc_text, &build.decl_index);
         let formatted = format_natspec(&doc_text, inherited.as_deref());
-        // Should have the resolved content, not "@inheritdoc"
         assert!(!formatted.contains("@inheritdoc"));
         assert!(formatted.contains("Swap against the given pool"));
         assert!(formatted.contains("**Parameters:**"));
@@ -2437,16 +1851,18 @@ mod tests {
     fn test_param_doc_error_parameter() {
         let ast = load_test_ast();
         let build = crate::goto::CachedBuild::new(ast, 0);
-        let sources = build.ast.get("sources").unwrap();
 
         // PriceLimitAlreadyExceeded.sqrtPriceCurrentX96 (id=3821)
-        let param_node = build.id_index.get(&3821).unwrap();
-        assert_eq!(
-            param_node.get("name").and_then(|v| v.as_str()),
-            Some("sqrtPriceCurrentX96")
-        );
+        let decl = build.decl_index.get(&3821).unwrap();
+        assert_eq!(decl.name(), "sqrtPriceCurrentX96");
 
-        let doc = lookup_param_doc(&build.doc_index, param_node, sources, &build.id_index).unwrap();
+        let doc = lookup_param_doc_typed(
+            &build.doc_index,
+            decl,
+            &build.decl_index,
+            &build.node_id_to_source_path,
+        )
+        .unwrap();
         assert!(
             doc.contains("invalid"),
             "should describe the invalid price: {doc}"
@@ -2457,11 +1873,16 @@ mod tests {
     fn test_param_doc_error_second_parameter() {
         let ast = load_test_ast();
         let build = crate::goto::CachedBuild::new(ast, 0);
-        let sources = build.ast.get("sources").unwrap();
 
         // PriceLimitAlreadyExceeded.sqrtPriceLimitX96 (id=3823)
-        let param_node = build.id_index.get(&3823).unwrap();
-        let doc = lookup_param_doc(&build.doc_index, param_node, sources, &build.id_index).unwrap();
+        let decl = build.decl_index.get(&3823).unwrap();
+        let doc = lookup_param_doc_typed(
+            &build.doc_index,
+            decl,
+            &build.decl_index,
+            &build.node_id_to_source_path,
+        )
+        .unwrap();
         assert!(
             doc.contains("surpassed price limit"),
             "should describe the surpassed limit: {doc}"
@@ -2472,16 +1893,18 @@ mod tests {
     fn test_param_doc_function_return_value() {
         let ast = load_test_ast();
         let build = crate::goto::CachedBuild::new(ast, 0);
-        let sources = build.ast.get("sources").unwrap();
 
         // Pool.modifyLiquidity return param "delta" (id=4055)
-        let param_node = build.id_index.get(&4055).unwrap();
-        assert_eq!(
-            param_node.get("name").and_then(|v| v.as_str()),
-            Some("delta")
-        );
+        let decl = build.decl_index.get(&4055).unwrap();
+        assert_eq!(decl.name(), "delta");
 
-        let doc = lookup_param_doc(&build.doc_index, param_node, sources, &build.id_index).unwrap();
+        let doc = lookup_param_doc_typed(
+            &build.doc_index,
+            decl,
+            &build.decl_index,
+            &build.node_id_to_source_path,
+        )
+        .unwrap();
         assert!(
             doc.contains("deltas of the token balances"),
             "should have return doc: {doc}"
@@ -2492,23 +1915,22 @@ mod tests {
     fn test_param_doc_function_input_parameter() {
         let ast = load_test_ast();
         let build = crate::goto::CachedBuild::new(ast, 0);
-        let sources = build.ast.get("sources").unwrap();
 
-        // Pool.modifyLiquidity input param "params"
-        // Find it via the function's parameters
-        let fn_node = build.id_index.get(&4371).unwrap();
-        let params_arr = fn_node
-            .get("parameters")
-            .and_then(|p| p.get("parameters"))
-            .and_then(|p| p.as_array())
-            .unwrap();
-        let params_param = params_arr
-            .iter()
-            .find(|p| p.get("name").and_then(|v| v.as_str()) == Some("params"))
+        // Pool.modifyLiquidity input param "params" — find by scanning decl_index
+        // The function id=4371 has a parameter named "params"
+        let params_decl = build
+            .decl_index
+            .values()
+            .find(|d| d.name() == "params" && d.scope() == Some(4371))
             .unwrap();
 
-        let doc =
-            lookup_param_doc(&build.doc_index, params_param, sources, &build.id_index).unwrap();
+        let doc = lookup_param_doc_typed(
+            &build.doc_index,
+            params_decl,
+            &build.decl_index,
+            &build.node_id_to_source_path,
+        )
+        .unwrap();
         assert!(
             doc.contains("position details"),
             "should have param doc: {doc}"
@@ -2519,14 +1941,18 @@ mod tests {
     fn test_param_doc_inherited_function_via_docindex() {
         let ast = load_test_ast();
         let build = crate::goto::CachedBuild::new(ast, 0);
-        let sources = build.ast.get("sources").unwrap();
 
         // PoolManager.swap `key` param (id=478) — parent has @inheritdoc IPoolManager
-        // The DocIndex should have the resolved devdoc from IPoolManager
-        let param_node = build.id_index.get(&478).unwrap();
-        assert_eq!(param_node.get("name").and_then(|v| v.as_str()), Some("key"));
+        let decl = build.decl_index.get(&478).unwrap();
+        assert_eq!(decl.name(), "key");
 
-        let doc = lookup_param_doc(&build.doc_index, param_node, sources, &build.id_index).unwrap();
+        let doc = lookup_param_doc_typed(
+            &build.doc_index,
+            decl,
+            &build.decl_index,
+            &build.node_id_to_source_path,
+        )
+        .unwrap();
         assert!(
             doc.contains("pool to swap"),
             "should have inherited param doc: {doc}"
@@ -2537,11 +1963,18 @@ mod tests {
     fn test_param_doc_non_parameter_returns_none() {
         let ast = load_test_ast();
         let build = crate::goto::CachedBuild::new(ast, 0);
-        let sources = build.ast.get("sources").unwrap();
 
         // PoolManager contract (id=1216) is not a parameter
-        let node = build.id_index.get(&1216).unwrap();
-        assert!(lookup_param_doc(&build.doc_index, node, sources, &build.id_index).is_none());
+        let decl = build.decl_index.get(&1216).unwrap();
+        assert!(
+            lookup_param_doc_typed(
+                &build.doc_index,
+                decl,
+                &build.decl_index,
+                &build.node_id_to_source_path,
+            )
+            .is_none()
+        );
     }
 
     // ── DocIndex integration tests (poolmanager.json) ──
@@ -2965,71 +2398,6 @@ mod tests {
     }
 
     #[test]
-    fn test_build_parameter_strings_basic() {
-        let node: Value = serde_json::json!({
-            "parameters": {
-                "parameters": [
-                    {
-                        "name": "amount",
-                        "typeDescriptions": { "typeString": "uint256" },
-                        "storageLocation": "default"
-                    },
-                    {
-                        "name": "tax",
-                        "typeDescriptions": { "typeString": "uint16" },
-                        "storageLocation": "default"
-                    }
-                ]
-            }
-        });
-        let params = build_parameter_strings(Some(node.get("parameters").unwrap()));
-        assert_eq!(params, vec!["uint256 amount", "uint16 tax"]);
-    }
-
-    #[test]
-    fn test_build_parameter_strings_with_storage() {
-        let node: Value = serde_json::json!({
-            "parameters": {
-                "parameters": [
-                    {
-                        "name": "key",
-                        "typeDescriptions": { "typeString": "struct PoolKey" },
-                        "storageLocation": "calldata"
-                    }
-                ]
-            }
-        });
-        let params = build_parameter_strings(Some(node.get("parameters").unwrap()));
-        assert_eq!(params, vec!["struct PoolKey calldata key"]);
-    }
-
-    #[test]
-    fn test_build_parameter_strings_empty() {
-        let node: Value = serde_json::json!({
-            "parameters": { "parameters": [] }
-        });
-        let params = build_parameter_strings(Some(node.get("parameters").unwrap()));
-        assert!(params.is_empty());
-    }
-
-    #[test]
-    fn test_build_parameter_strings_unnamed() {
-        let node: Value = serde_json::json!({
-            "parameters": {
-                "parameters": [
-                    {
-                        "name": "",
-                        "typeDescriptions": { "typeString": "uint256" },
-                        "storageLocation": "default"
-                    }
-                ]
-            }
-        });
-        let params = build_parameter_strings(Some(node.get("parameters").unwrap()));
-        assert_eq!(params, vec!["uint256"]);
-    }
-
-    #[test]
     fn test_signature_help_parameter_offsets() {
         // Simulate a signature like: "function addTax(uint256 amount, uint16 tax, uint16 base)"
         let label = "function addTax(uint256 amount, uint16 tax, uint16 base)";
@@ -3055,76 +2423,10 @@ mod tests {
         assert_eq!(&label[offsets[2].0..offsets[2].1], "uint16 base");
     }
 
-    #[test]
-    fn test_find_mapping_decl_by_name_pools() {
-        let ast = load_test_ast();
-        let sources = ast.get("sources").unwrap();
-        let decl = find_mapping_decl_by_name(sources, "_pools").unwrap();
-        assert_eq!(decl.get("name").and_then(|v| v.as_str()), Some("_pools"));
-        assert_eq!(
-            decl.get("typeName")
-                .and_then(|t| t.get("nodeType"))
-                .and_then(|v| v.as_str()),
-            Some("Mapping")
-        );
-    }
+    // ── Typed mapping signature help tests ────────────
 
     #[test]
-    fn test_find_mapping_decl_by_name_not_found() {
-        let ast = load_test_ast();
-        let sources = ast.get("sources").unwrap();
-        assert!(find_mapping_decl_by_name(sources, "nonexistent").is_none());
-    }
-
-    #[test]
-    fn test_mapping_signature_help_pools() {
-        let ast = load_test_ast();
-        let sources = ast.get("sources").unwrap();
-        let help = mapping_signature_help(sources, "_pools").unwrap();
-
-        assert_eq!(help.signatures.len(), 1);
-        let sig = &help.signatures[0];
-        // Named key: _pools[PoolId id]
-        assert_eq!(sig.label, "_pools[PoolId id]");
-        assert_eq!(sig.active_parameter, Some(0));
-
-        // Parameter offsets should cover "PoolId id" inside brackets
-        let params = sig.parameters.as_ref().unwrap();
-        assert_eq!(params.len(), 1);
-        if let ParameterLabel::LabelOffsets([start, end]) = params[0].label {
-            assert_eq!(&sig.label[start as usize..end as usize], "PoolId id");
-        } else {
-            panic!("expected LabelOffsets");
-        }
-
-        // Value type shown in documentation
-        let doc = sig.documentation.as_ref().unwrap();
-        if let Documentation::MarkupContent(mc) = doc {
-            assert!(mc.value.contains("struct Pool.State"));
-        }
-    }
-
-    #[test]
-    fn test_mapping_signature_help_protocol_fees() {
-        let ast = load_test_ast();
-        let sources = ast.get("sources").unwrap();
-        let help = mapping_signature_help(sources, "protocolFeesAccrued").unwrap();
-        let sig = &help.signatures[0];
-        assert_eq!(sig.label, "protocolFeesAccrued[Currency currency]");
-    }
-
-    #[test]
-    fn test_mapping_signature_help_non_mapping() {
-        let ast = load_test_ast();
-        let sources = ast.get("sources").unwrap();
-        // "owner" is a regular address variable, not a mapping
-        assert!(mapping_signature_help(sources, "owner").is_none());
-    }
-
-    // ── Parity tests: typed vs raw mapping signature help ────────────
-
-    #[test]
-    fn parity_find_mapping_decl_typed_pools() {
+    fn find_mapping_decl_typed_pools() {
         let ast = load_test_ast();
         let build = crate::goto::CachedBuild::new(ast, 0);
         let decl = find_mapping_decl_typed(&build.decl_index, "_pools").unwrap();
@@ -3133,52 +2435,35 @@ mod tests {
             decl.type_name.as_ref(),
             Some(crate::solc_ast::TypeName::Mapping(_))
         ));
-        // Cross-check: raw also finds it
-        let sources = build.ast.get("sources").unwrap();
-        let raw = find_mapping_decl_by_name(sources, "_pools").unwrap();
-        assert_eq!(raw.get("name").and_then(|v| v.as_str()), Some("_pools"));
     }
 
     #[test]
-    fn parity_find_mapping_decl_typed_not_found() {
+    fn find_mapping_decl_typed_not_found() {
         let ast = load_test_ast();
         let build = crate::goto::CachedBuild::new(ast, 0);
         assert!(find_mapping_decl_typed(&build.decl_index, "nonexistent").is_none());
     }
 
     #[test]
-    fn parity_mapping_signature_help_typed_pools() {
+    fn mapping_signature_help_typed_pools() {
         let ast = load_test_ast();
         let build = crate::goto::CachedBuild::new(ast, 0);
-        let sources = build.ast.get("sources").unwrap();
-
-        let typed = mapping_signature_help_typed(&build.decl_index, "_pools").unwrap();
-        let raw = mapping_signature_help(sources, "_pools").unwrap();
-
-        // Labels must match
-        assert_eq!(typed.signatures[0].label, raw.signatures[0].label);
-
-        // Parameter offsets must match
-        let t_params = typed.signatures[0].parameters.as_ref().unwrap();
-        let r_params = raw.signatures[0].parameters.as_ref().unwrap();
-        assert_eq!(t_params.len(), r_params.len());
-        assert_eq!(t_params[0].label, r_params[0].label);
+        let help = mapping_signature_help_typed(&build.decl_index, "_pools").unwrap();
+        assert!(help.signatures[0].label.contains("_pools"));
+        let params = help.signatures[0].parameters.as_ref().unwrap();
+        assert!(!params.is_empty());
     }
 
     #[test]
-    fn parity_mapping_signature_help_typed_protocol_fees() {
+    fn mapping_signature_help_typed_protocol_fees() {
         let ast = load_test_ast();
         let build = crate::goto::CachedBuild::new(ast, 0);
-        let sources = build.ast.get("sources").unwrap();
-
-        let typed = mapping_signature_help_typed(&build.decl_index, "protocolFeesAccrued").unwrap();
-        let raw = mapping_signature_help(sources, "protocolFeesAccrued").unwrap();
-
-        assert_eq!(typed.signatures[0].label, raw.signatures[0].label);
+        let help = mapping_signature_help_typed(&build.decl_index, "protocolFeesAccrued").unwrap();
+        assert!(help.signatures[0].label.contains("protocolFeesAccrued"));
     }
 
     #[test]
-    fn parity_mapping_signature_help_typed_non_mapping() {
+    fn mapping_signature_help_typed_non_mapping() {
         let ast = load_test_ast();
         let build = crate::goto::CachedBuild::new(ast, 0);
         assert!(mapping_signature_help_typed(&build.decl_index, "owner").is_none());

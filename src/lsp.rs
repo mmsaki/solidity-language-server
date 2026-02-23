@@ -232,19 +232,11 @@ impl ForgeLsp {
                 cache.insert(uri.to_string(), cached_build.clone());
                 drop(cache);
 
-                // Rebuild completion cache in the background; old cache stays usable until replaced
-                let completion_cache = self.completion_cache.clone();
-                let uri_string = uri.to_string();
-                tokio::spawn(async move {
-                    if let Some(sources) = cached_build.ast.get("sources") {
-                        let contracts = cached_build.ast.get("contracts");
-                        let cc = completion::build_completion_cache(sources, contracts);
-                        completion_cache
-                            .write()
-                            .await
-                            .insert(uri_string, Arc::new(cc));
-                    }
-                });
+                // Insert pre-built completion cache (built during CachedBuild::new)
+                {
+                    let mut cc = self.completion_cache.write().await;
+                    cc.insert(uri.to_string(), cached_build.completion_cache.clone());
+                }
                 self.client
                     .log_message(MessageType::INFO, "Build successful, AST cache updated")
                     .await;
@@ -1029,7 +1021,7 @@ impl LanguageServer for ForgeLsp {
         };
 
         if cached.is_none() {
-            // Spawn background cache build so the next request will have full completions
+            // Use pre-built completion cache from CachedBuild
             let ast_cache = self.ast_cache.clone();
             let completion_cache = self.completion_cache.clone();
             let uri_string = uri.to_string();
@@ -1041,14 +1033,10 @@ impl LanguageServer for ForgeLsp {
                         None => return,
                     }
                 };
-                if let Some(sources) = cached_build.ast.get("sources") {
-                    let contracts = cached_build.ast.get("contracts");
-                    let cc = completion::build_completion_cache(sources, contracts);
-                    completion_cache
-                        .write()
-                        .await
-                        .insert(uri_string, Arc::new(cc));
-                }
+                completion_cache
+                    .write()
+                    .await
+                    .insert(uri_string, cached_build.completion_cache.clone());
             });
         }
 

@@ -157,47 +157,6 @@ pub fn gas_for_contract<'a>(
 
 /// Resolve the gas index key for a declaration node.
 ///
-/// Walks up through `scope` to find the containing `ContractDefinition`,
-/// then further to the `SourceUnit` to get `absolutePath`.
-/// Returns the `"path:ContractName"` key used in the gas index.
-pub fn resolve_contract_key(
-    decl_node: &Value,
-    index: &GasIndex,
-    id_index: &crate::hover::IdIndex,
-) -> Option<String> {
-    let node_type = decl_node.get("nodeType").and_then(|v| v.as_str())?;
-
-    // If this IS a ContractDefinition, find its source path directly
-    let (contract_name, source_id) = if node_type == "ContractDefinition" {
-        let name = decl_node.get("name").and_then(|v| v.as_str())?;
-        let scope_id = decl_node.get("scope").and_then(|v| v.as_u64())?;
-        (name.to_string(), scope_id)
-    } else {
-        // Walk up to containing contract — O(1) via id_index
-        let scope_id = decl_node.get("scope").and_then(|v| v.as_u64())?;
-        let scope_node = id_index.get(&scope_id)?;
-        let contract_name = scope_node.get("name").and_then(|v| v.as_str())?;
-        let source_id = scope_node.get("scope").and_then(|v| v.as_u64())?;
-        (contract_name.to_string(), source_id)
-    };
-
-    // Find the SourceUnit to get the absolute path — O(1) via id_index
-    let source_unit = id_index.get(&source_id)?;
-    let abs_path = source_unit.get("absolutePath").and_then(|v| v.as_str())?;
-
-    // Build the exact key
-    let exact_key = format!("{abs_path}:{contract_name}");
-    if index.contains_key(&exact_key) {
-        return Some(exact_key);
-    }
-
-    // Fallback: the gas index may use a different path representation.
-    // Match by suffix — find a key ending with the filename:ContractName.
-    let file_name = std::path::Path::new(abs_path).file_name()?.to_str()?;
-    let suffix = format!("{file_name}:{contract_name}");
-    index.keys().find(|k| k.ends_with(&suffix)).cloned()
-}
-
 /// Typed version of `resolve_contract_key` using `DeclNode` and typed indices.
 ///
 /// Resolves a declaration node to its `"{abs_path}:{contract_name}"` gas index key
@@ -206,7 +165,7 @@ pub fn resolve_contract_key_typed(
     decl: &crate::solc_ast::DeclNode,
     index: &GasIndex,
     decl_index: &HashMap<i64, crate::solc_ast::DeclNode>,
-    typed_ast: Option<&HashMap<String, crate::solc_ast::SourceUnit>>,
+    node_id_to_source_path: &HashMap<i64, String>,
 ) -> Option<String> {
     use crate::solc_ast::DeclNode;
 
@@ -225,15 +184,8 @@ pub fn resolve_contract_key_typed(
         }
     };
 
-    // Find the source unit to get the absolute path
-    let sources = typed_ast?;
-    let abs_path = sources.values().find_map(|su| {
-        if su.id == source_unit_scope {
-            su.absolute_path.as_deref()
-        } else {
-            None
-        }
-    })?;
+    // Find the absolute path via node_id_to_source_path (O(1) lookup)
+    let abs_path = node_id_to_source_path.get(&source_unit_scope)?;
 
     // Build the exact key
     let exact_key = format!("{abs_path}:{contract_name}");
@@ -242,7 +194,9 @@ pub fn resolve_contract_key_typed(
     }
 
     // Fallback: match by suffix
-    let file_name = std::path::Path::new(abs_path).file_name()?.to_str()?;
+    let file_name = std::path::Path::new(abs_path.as_str())
+        .file_name()?
+        .to_str()?;
     let suffix = format!("{file_name}:{contract_name}");
     index.keys().find(|k| k.ends_with(&suffix)).cloned()
 }

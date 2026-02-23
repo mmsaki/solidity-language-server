@@ -4,7 +4,17 @@ use solidity_language_server::links;
 use std::fs;
 use tower_lsp::lsp_types::Url;
 
-/// Find the PoolManager.sol source key dynamically from the fixture.
+/// Load the normalized AST (with sources intact) for test helpers that inspect
+/// raw AST structure, plus a CachedBuild (which strips sources after indexing).
+fn load_fixture() -> (Value, CachedBuild) {
+    let raw: Value =
+        serde_json::from_str(&fs::read_to_string("poolmanager.json").unwrap()).unwrap();
+    let ast = solidity_language_server::solc::normalize_solc_output(raw, None);
+    let build = CachedBuild::new(ast.clone(), 0);
+    (ast, build)
+}
+
+/// Find the PoolManager.sol source key dynamically from the raw AST.
 fn pm_key(ast: &Value) -> String {
     ast["sources"]
         .as_object()
@@ -13,14 +23,6 @@ fn pm_key(ast: &Value) -> String {
         .find(|k| k.ends_with("src/PoolManager.sol"))
         .expect("fixture should contain PoolManager.sol")
         .clone()
-}
-
-/// Load the fixture as a CachedBuild.
-fn load_build() -> CachedBuild {
-    let raw: Value =
-        serde_json::from_str(&fs::read_to_string("poolmanager.json").unwrap()).unwrap();
-    let ast = solidity_language_server::solc::normalize_solc_output(raw, None);
-    CachedBuild::new(ast, 0)
 }
 
 /// Extract ImportDirective nodes from the normalized fixture AST.
@@ -111,9 +113,9 @@ fn import_links(
 
 #[test]
 fn test_returns_link_for_every_import() {
-    let build = load_build();
-    let key = pm_key(&build.ast);
-    let imports = extract_imports(&build.ast, &key);
+    let (ast, build) = load_fixture();
+    let key = pm_key(&ast);
+    let imports = extract_imports(&ast, &key);
     let source_bytes = build_source_bytes(&imports);
     let uri = Url::from_file_path(&key).unwrap();
 
@@ -131,9 +133,9 @@ fn test_returns_link_for_every_import() {
 
 #[test]
 fn test_tooltips_match_absolute_paths() {
-    let build = load_build();
-    let key = pm_key(&build.ast);
-    let imports = extract_imports(&build.ast, &key);
+    let (ast, build) = load_fixture();
+    let key = pm_key(&ast);
+    let imports = extract_imports(&ast, &key);
     let source_bytes = build_source_bytes(&imports);
     let uri = Url::from_file_path(&key).unwrap();
 
@@ -151,9 +153,9 @@ fn test_tooltips_match_absolute_paths() {
 
 #[test]
 fn test_targets_are_file_uris() {
-    let build = load_build();
-    let key = pm_key(&build.ast);
-    let imports = extract_imports(&build.ast, &key);
+    let (ast, build) = load_fixture();
+    let key = pm_key(&ast);
+    let imports = extract_imports(&ast, &key);
     let source_bytes = build_source_bytes(&imports);
     let uri = Url::from_file_path(&key).unwrap();
 
@@ -171,9 +173,9 @@ fn test_targets_are_file_uris() {
 
 #[test]
 fn test_import_range_length_matches_file_field() {
-    let build = load_build();
-    let key = pm_key(&build.ast);
-    let imports = extract_imports(&build.ast, &key);
+    let (ast, build) = load_fixture();
+    let key = pm_key(&ast);
+    let imports = extract_imports(&ast, &key);
     let source_bytes = build_source_bytes(&imports);
     let uri = Url::from_file_path(&key).unwrap();
 
@@ -193,9 +195,9 @@ fn test_import_range_length_matches_file_field() {
 
 #[test]
 fn test_import_links_each_on_own_line() {
-    let build = load_build();
-    let key = pm_key(&build.ast);
-    let imports = extract_imports(&build.ast, &key);
+    let (ast, build) = load_fixture();
+    let key = pm_key(&ast);
+    let imports = extract_imports(&ast, &key);
     let source_bytes = build_source_bytes(&imports);
     let uri = Url::from_file_path(&key).unwrap();
 
@@ -218,9 +220,9 @@ fn test_import_links_each_on_own_line() {
 
 #[test]
 fn test_links_are_in_ascending_line_order() {
-    let build = load_build();
-    let key = pm_key(&build.ast);
-    let imports = extract_imports(&build.ast, &key);
+    let (ast, build) = load_fixture();
+    let key = pm_key(&ast);
+    let imports = extract_imports(&ast, &key);
     let source_bytes = build_source_bytes(&imports);
     let uri = Url::from_file_path(&key).unwrap();
 
@@ -241,9 +243,9 @@ fn test_links_are_in_ascending_line_order() {
 
 #[test]
 fn test_first_import_hooks() {
-    let build = load_build();
-    let key = pm_key(&build.ast);
-    let imports = extract_imports(&build.ast, &key);
+    let (ast, build) = load_fixture();
+    let key = pm_key(&ast);
+    let imports = extract_imports(&ast, &key);
     let source_bytes = build_source_bytes(&imports);
     let uri = Url::from_file_path(&key).unwrap();
 
@@ -265,9 +267,9 @@ fn test_first_import_hooks() {
 
 #[test]
 fn test_last_import_custom_revert() {
-    let build = load_build();
-    let key = pm_key(&build.ast);
-    let imports = extract_imports(&build.ast, &key);
+    let (ast, build) = load_fixture();
+    let key = pm_key(&ast);
+    let imports = extract_imports(&ast, &key);
     let source_bytes = build_source_bytes(&imports);
     let uri = Url::from_file_path(&key).unwrap();
 
@@ -291,9 +293,9 @@ fn test_last_import_custom_revert() {
 
 #[test]
 fn test_reference_links_have_no_tooltip() {
-    let build = load_build();
-    let key = pm_key(&build.ast);
-    let imports = extract_imports(&build.ast, &key);
+    let (ast, build) = load_fixture();
+    let key = pm_key(&ast);
+    let imports = extract_imports(&ast, &key);
     let source_bytes = build_source_bytes(&imports);
     let uri = Url::from_file_path(&key).unwrap();
 
@@ -327,9 +329,9 @@ fn test_empty_sources() {
 
 #[test]
 fn test_file_uri_mismatch_returns_empty() {
-    let build = load_build();
-    let key = pm_key(&build.ast);
-    let imports = extract_imports(&build.ast, &key);
+    let (ast, build) = load_fixture();
+    let key = pm_key(&ast);
+    let imports = extract_imports(&ast, &key);
     let source_bytes = build_source_bytes(&imports);
     let uri = Url::from_file_path("/tmp/nonexistent.sol").unwrap();
 

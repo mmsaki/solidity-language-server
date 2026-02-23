@@ -99,6 +99,10 @@ pub type ExternalRefs = HashMap<String, NodeId>;
 
 /// Pre-computed AST index. Built once when an AST enters the cache,
 /// then reused on every goto/references/rename/hover request.
+///
+/// The raw `ast` field retains only `contracts` and `source_id_to_path`
+/// after construction — the `sources` key is stripped to save memory
+/// (all indexes are pre-built from it during `new()`).
 #[derive(Debug, Clone)]
 pub struct CachedBuild {
     pub ast: Value,
@@ -106,13 +110,6 @@ pub struct CachedBuild {
     pub path_to_abs: HashMap<String, String>,
     pub external_refs: ExternalRefs,
     pub id_to_path_map: HashMap<String, String>,
-    /// O(1) node-id → raw AST node lookup. Built once, replaces the O(N)
-    /// `find_node_by_id` that walked the entire AST per call.
-    pub id_index: HashMap<u64, Value>,
-    /// Typed AST deserialized from the solc JSON sources.
-    /// Each entry maps a source file path to its typed `SourceUnit`.
-    /// `None` if deserialization failed (graceful degradation).
-    pub typed_ast: Option<HashMap<String, crate::solc_ast::SourceUnit>>,
     /// O(1) typed declaration node lookup by AST node ID.
     /// Built from the typed AST via visitor. Contains functions, variables,
     /// contracts, events, errors, structs, enums, modifiers, and UDVTs.
@@ -130,6 +127,9 @@ pub struct CachedBuild {
     /// Pre-built documentation index from solc userdoc/devdoc.
     /// Merged and keyed by selector for fast hover lookup.
     pub doc_index: crate::hover::DocIndex,
+    /// Pre-built completion cache. Built from sources during construction
+    /// before the sources key is stripped.
+    pub completion_cache: std::sync::Arc<crate::completion::CompletionCache>,
     /// The text_cache version this build was created from.
     /// Used to detect dirty files (unsaved edits since last build).
     pub build_version: i32,
@@ -142,7 +142,7 @@ impl CachedBuild {
     /// - `sources[path] = { id, ast }`
     /// - `contracts[path][name] = { abi, evm, ... }`
     /// - `source_id_to_path = { "0": "path", ... }`
-    pub fn new(ast: Value, build_version: i32) -> Self {
+    pub fn new(mut ast: Value, build_version: i32) -> Self {
         let (nodes, path_to_abs, external_refs) = if let Some(sources) = ast.get("sources") {
             cache_ids(sources)
         } else {
@@ -160,18 +160,6 @@ impl CachedBuild {
             .unwrap_or_default();
 
         let gas_index = crate::gas::build_gas_index(&ast);
-
-        let id_index = if let Some(sources) = ast.get("sources") {
-            build_id_index_owned(sources)
-        } else {
-            HashMap::new()
-        };
-
-        let hint_index = if let Some(sources) = ast.get("sources") {
-            crate::inlay_hints::build_hint_index(sources, &id_index)
-        } else {
-            HashMap::new()
-        };
 
         let doc_index = crate::hover::build_doc_index(&ast);
 
@@ -255,59 +243,53 @@ impl CachedBuild {
             (HashMap::new(), HashMap::new())
         };
 
+        // Build constructor index and hint index from the typed decl_index.
+        let constructor_index = crate::inlay_hints::build_constructor_index(&decl_index);
+        let hint_index = if let Some(sources) = ast.get("sources") {
+            crate::inlay_hints::build_hint_index(sources, &decl_index, &constructor_index)
+        } else {
+            HashMap::new()
+        };
+
+        // typed_ast is consumed — it was only needed to build decl_index
+        // and node_id_to_source_path above. Not stored in the struct.
+        drop(typed_ast);
+
+        // Build completion cache before stripping sources.
+        let completion_cache = {
+            let sources = ast.get("sources");
+            let contracts = ast.get("contracts");
+            let cc = if let Some(s) = sources {
+                crate::completion::build_completion_cache(s, contracts)
+            } else {
+                crate::completion::build_completion_cache(
+                    &serde_json::Value::Object(Default::default()),
+                    contracts,
+                )
+            };
+            std::sync::Arc::new(cc)
+        };
+
+        // Strip the "sources" key from ast — all indexes have been built.
+        // This frees the raw AST JSON for all source files (the bulk of memory).
+        // Only "contracts" (ABI/devdoc/userdoc) and "source_id_to_path" remain.
+        if let Some(obj) = ast.as_object_mut() {
+            obj.remove("sources");
+        }
+
         Self {
             ast,
             nodes,
             path_to_abs,
             external_refs,
             id_to_path_map,
-            id_index,
-            typed_ast,
             decl_index,
             node_id_to_source_path,
             gas_index,
             hint_index,
             doc_index,
+            completion_cache,
             build_version,
-        }
-    }
-
-    /// O(1) lookup of a raw AST node by its id.
-    pub fn find_node(&self, id: NodeId) -> Option<&Value> {
-        self.id_index.get(&id.0)
-    }
-}
-
-/// Build a flat node-id → owned AST node index from all sources.
-///
-/// Clones each node `Value` so the index is self-contained and does not
-/// borrow from the AST. Built once in `CachedBuild::new()`.
-fn build_id_index_owned(sources: &Value) -> HashMap<u64, Value> {
-    let mut index = HashMap::new();
-    if let Some(obj) = sources.as_object() {
-        for (_, source_data) in obj {
-            if let Some(ast) = source_data.get("ast") {
-                collect_nodes_owned(ast, &mut index);
-            }
-        }
-    }
-    index
-}
-
-/// Recursively collect all nodes with an `id` field, cloning each into the index.
-fn collect_nodes_owned(node: &Value, index: &mut HashMap<u64, Value>) {
-    if let Some(id) = node.get("id").and_then(|v| v.as_u64()) {
-        index.insert(id, node.clone());
-    }
-    for key in CHILD_KEYS {
-        if let Some(child) = node.get(*key) {
-            if let Some(arr) = child.as_array() {
-                for item in arr {
-                    collect_nodes_owned(item, index);
-                }
-            } else if child.is_object() {
-                collect_nodes_owned(child, index);
-            }
         }
     }
 }

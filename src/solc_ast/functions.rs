@@ -94,6 +94,58 @@ pub struct ModifierInvocation {
     pub kind: Option<ModifierInvocationKind>,
 }
 
+impl FunctionDefinition {
+    /// Clone only the fields used by `DeclNode` consumers.
+    ///
+    /// Skips `body`, `modifiers`, `overrides`, `base_functions`, `name_location`,
+    /// `is_virtual`, and `implemented` — these are never read through `DeclNode`
+    /// and can contain large AST subtrees (body alone can be megabytes).
+    pub fn decl_clone(&self) -> Self {
+        Self {
+            id: self.id,
+            src: self.src.clone(),
+            name: self.name.clone(),
+            name_location: None,
+            documentation: self.documentation.clone(),
+            kind: self.kind.clone(),
+            state_mutability: self.state_mutability.clone(),
+            visibility: self.visibility.clone(),
+            is_virtual: None,
+            overrides: None,
+            parameters: self.parameters.clone(),
+            return_parameters: self.return_parameters.clone(),
+            modifiers: Vec::new(),
+            body: None,
+            implemented: None,
+            scope: self.scope,
+            function_selector: self.function_selector.clone(),
+            base_functions: None,
+        }
+    }
+}
+
+impl ModifierDefinition {
+    /// Clone only the fields used by `DeclNode` consumers.
+    ///
+    /// Skips `body`, `overrides`, `base_modifiers`, `name_location`, and
+    /// `is_virtual` — these are never read through `DeclNode`.
+    pub fn decl_clone(&self) -> Self {
+        Self {
+            id: self.id,
+            src: self.src.clone(),
+            name: self.name.clone(),
+            name_location: None,
+            documentation: self.documentation.clone(),
+            visibility: None,
+            parameters: self.parameters.clone(),
+            is_virtual: None,
+            overrides: None,
+            body: None,
+            base_modifiers: None,
+        }
+    }
+}
+
 /// An override specifier (`override` or `override(A, B)`).
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
