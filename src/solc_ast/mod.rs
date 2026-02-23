@@ -1079,7 +1079,7 @@ mod tests {
             if matches!(decl, DeclNode::VariableDeclaration(v) if v.state_variable != Some(true)) {
                 continue;
             }
-            if build.node_id_to_source_path.get(id).is_none() {
+            if !build.node_id_to_source_path.contains_key(id) {
                 missing.push(format!(
                     "id={id} name={:?} type={}",
                     decl.name(),
