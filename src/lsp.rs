@@ -2,6 +2,7 @@ use crate::completion;
 use crate::config::{self, FoundryConfig, LintConfig, Settings};
 use crate::folding;
 use crate::goto;
+use crate::highlight;
 use crate::hover;
 use crate::inlay_hints;
 use crate::links;
@@ -616,6 +617,7 @@ impl LanguageServer for ForgeLsp {
                 })),
                 workspace_symbol_provider: Some(OneOf::Left(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
+                document_highlight_provider: Some(OneOf::Left(true)),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 document_link_provider: Some(DocumentLinkOptions {
                     resolve_provider: Some(false),
@@ -1639,6 +1641,57 @@ impl LanguageServer for ForgeLsp {
                 )
                 .await;
             Ok(Some(DocumentSymbolResponse::Nested(symbols)))
+        }
+    }
+
+    async fn document_highlight(
+        &self,
+        params: DocumentHighlightParams,
+    ) -> tower_lsp::jsonrpc::Result<Option<Vec<DocumentHighlight>>> {
+        self.client
+            .log_message(
+                MessageType::INFO,
+                "got textDocument/documentHighlight request",
+            )
+            .await;
+
+        let uri = params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        let source = {
+            let cache = self.text_cache.read().await;
+            cache.get(&uri.to_string()).map(|(_, s)| s.clone())
+        };
+
+        let source = match source {
+            Some(s) => s,
+            None => {
+                let file_path = match uri.to_file_path() {
+                    Ok(p) => p,
+                    Err(_) => return Ok(None),
+                };
+                match std::fs::read_to_string(&file_path) {
+                    Ok(s) => s,
+                    Err(_) => return Ok(None),
+                }
+            }
+        };
+
+        let highlights = highlight::document_highlights(&source, position);
+
+        if highlights.is_empty() {
+            self.client
+                .log_message(MessageType::INFO, "no document highlights found")
+                .await;
+            Ok(None)
+        } else {
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    format!("found {} document highlights", highlights.len()),
+                )
+                .await;
+            Ok(Some(highlights))
         }
     }
 

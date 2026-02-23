@@ -50,7 +50,7 @@ See [FEATURES.md](FEATURES.md) for the full LSP feature set and roadmap.
 - [x] `textDocument/signatureHelp` - Function signature help (functions, events, mappings)
 - [ ] `textDocument/typeDefinition` - Go to type definition
 - [ ] `textDocument/implementation` - Go to implementation
-- [ ] `textDocument/documentHighlight` - Document highlighting
+- [x] `textDocument/documentHighlight` - Document highlighting (read/write classification)
 - [ ] `textDocument/codeAction` - Code actions (quick fixes, refactoring)
 - [ ] `textDocument/codeLens` - Code lens
 - [x] `textDocument/documentLink` - Document links (clickable references and import paths)

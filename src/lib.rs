@@ -4,6 +4,7 @@ pub mod config;
 pub mod folding;
 pub mod gas;
 pub mod goto;
+pub mod highlight;
 pub mod hover;
 pub mod inlay_hints;
 pub mod links;
