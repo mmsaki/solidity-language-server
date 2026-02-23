@@ -33,12 +33,15 @@ pub struct LspArgs {
 
 impl LspArgs {
     pub async fn run(self) -> Result<()> {
+        // In --stdio mode the LSP protocol runs over stdout, so logs must go to
+        // stderr to avoid corrupting the Content-Length framed JSON-RPC stream.
         let sub = tracing_subscriber::fmt()
             .compact()
             .without_time()
             .with_file(true)
             .with_line_number(true)
             .with_thread_ids(true)
+            .with_writer(std::io::stderr)
             .finish();
         tracing::subscriber::set_global_default(sub).unwrap();
         info!("Starting lsp server...");
