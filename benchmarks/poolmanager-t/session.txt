@@ -1,21 +1,21 @@
 # v4-core / test/PoolManager.t.sol
 
-── initialize (8.4ms) ──
+── initialize (18.3ms) ──
 
-← mmsaki [content] "ok"
+← mmsaki v0.1.25 [content] "ok"
 ← mmsaki v0.1.24 [content] "ok"
 
-── textDocument/diagnostic (2.1s, 375.0 MB) ──
+── textDocument/diagnostic (2.3s, 255.0 MB) ──
 
-← mmsaki [content] { diagnostics: Array(15) [{ code: "mixed-case-variable", message: "mutable variables should use mixedCase", range: { end: { character: 40, line: 354 }, start: { character: 16, line: 354 } }, severi...
+← mmsaki v0.1.25 [content] { diagnostics: Array(15) [{ code: "mixed-case-variable", message: "mutable variables should use mixedCase", range: { end: { character: 40, line: 354 }, start: { character: 16, line: 354 } }, severi...
 ← mmsaki v0.1.24 [content] { diagnostics: Array(15) [{ code: "mixed-case-variable", message: "mutable variables should use mixedCase", range: { end: { character: 40, line: 354 }, start: { character: 16, line: 354 } }, severi...
 
-── textDocument/semanticTokens/full/delta (9.9ms, 376.6 MB) ──
+── textDocument/semanticTokens/full/delta (9.7ms, 253.7 MB) ──
 
-← mmsaki [content] { edits: [], resultId: "3" }
+← mmsaki v0.1.25 [content] { edits: [], resultId: "3" }
 ← mmsaki v0.1.24 [content] { edits: [], resultId: "3" }
 
-── textDocument/definition (9.2ms, 371.5 MB) ──
+── textDocument/definition (8.0ms, 254.7 MB) ──
 
 {
   "id": 1,
@@ -32,10 +32,10 @@
   }
 }
 
-← mmsaki [content] { range: { end: { character: 16, line: 9 }, start: { character: 8, line: 9 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr..." }
+← mmsaki v0.1.25 [content] { range: { end: { character: 16, line: 9 }, start: { character: 8, line: 9 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr..." }
 ← mmsaki v0.1.24 [content] { range: { end: { character: 16, line: 9 }, start: { character: 8, line: 9 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr..." }
 
-── textDocument/declaration (0.8ms, 374.4 MB) ──
+── textDocument/declaration (0.8ms, 253.3 MB) ──
 
 {
   "id": 1,
@@ -52,10 +52,10 @@
   }
 }
 
-← mmsaki [content] { range: { end: { character: 16, line: 9 }, start: { character: 8, line: 9 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr..." }
+← mmsaki v0.1.25 [content] { range: { end: { character: 16, line: 9 }, start: { character: 8, line: 9 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr..." }
 ← mmsaki v0.1.24 [content] { range: { end: { character: 16, line: 9 }, start: { character: 8, line: 9 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr..." }
 
-── textDocument/hover (6.6ms, 372.3 MB) ──
+── textDocument/hover (6.4ms, 255.0 MB) ──
 
 {
   "id": 1,
@@ -72,7 +72,7 @@
   }
 }
 
-← mmsaki [content] { contents: { kind: "markdown", value: "```solidity
+← mmsaki v0.1.25 [content] { contents: { kind: "markdown", value: "```solidity
 error PoolNotInitialized()
 ```
 
@@ -89,7 +89,7 @@ Selector: `0x486aa307`
 ---
 Throw..." } }
 
-── textDocument/references (4.5ms, 373.3 MB) ──
+── textDocument/references (4.4ms, 254.5 MB) ──
 
 {
   "id": 1,
@@ -109,10 +109,10 @@ Throw..." } }
   }
 }
 
-← mmsaki [content] Array(7) [{ range: { end: { character: 62, line: 97 }, start: { character: 46, line: 97 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/Poo..." }, { range: { en...
-← mmsaki v0.1.24 [content] Array(7) [{ range: { end: { character: 24, line: 206 }, start: { character: 8, line: 206 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/uti..." }, { range: { e...
+← mmsaki v0.1.25 [content] Array(7) [{ range: { end: { character: 24, line: 208 }, start: { character: 8, line: 208 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/uti..." }, { range: { e...
+← mmsaki v0.1.24 [content] Array(7) [{ range: { end: { character: 24, line: 208 }, start: { character: 8, line: 208 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/uti..." }, { range: { e...
 
-── textDocument/completion (0.2ms, 375.2 MB) ──
+── textDocument/completion (0.2ms, 254.0 MB) ──
 
 {
   "id": 1,
@@ -133,10 +133,10 @@ Throw..." } }
   }
 }
 
-← mmsaki [content] { isIncomplete: false, items: Array(23) [{ detail: "function amount0(BalanceDelta balanceDelta) internal pure returns (int128 _am...", kind: 3, label: "amount0" }, { detail: "function amount1(Balan...
+← mmsaki v0.1.25 [content] { isIncomplete: false, items: Array(23) [{ detail: "function amount0(BalanceDelta balanceDelta) internal pure returns (int128 _am...", kind: 3, label: "amount0" }, { detail: "function amount1(Balan...
 ← mmsaki v0.1.24 [content] { isIncomplete: false, items: Array(23) [{ detail: "amount0(BalanceDelta balanceDelta) returns (int128 _amount0)", kind: 3, label: "amount0" }, { detail: "amount1(BalanceDelta balanceDelta) returns...
 
-── textDocument/signatureHelp (5.7ms, 374.5 MB) ──
+── textDocument/signatureHelp (9.9ms, 254.9 MB) ──
 
 {
   "id": 1,
@@ -153,10 +153,10 @@ Throw..." } }
   }
 }
 
-← mmsaki [content] { activeParameter: 0, activeSignature: 0, signatures: Array(1) [{ activeParameter: 0, label: "function bound(uint256 x, uint256 min, uint256 max) internal pure returns (ui...", parameters: Array(3)...
+← mmsaki v0.1.25 [content] { activeParameter: 0, activeSignature: 0, signatures: Array(1) [{ activeParameter: 0, label: "function bound(uint256 x, uint256 min, uint256 max) internal pure returns (ui...", parameters: Array(3)...
 ← mmsaki v0.1.24 [content] { activeParameter: 0, activeSignature: 0, signatures: Array(1) [{ activeParameter: 0, label: "function bound(uint256 x, uint256 min, uint256 max) internal pure returns (ui...", parameters: Array(3)...
 
-── textDocument/rename (6.3ms, 371.8 MB) ──
+── textDocument/rename (6.0ms, 254.0 MB) ──
 
 {
   "id": 1,
@@ -174,10 +174,10 @@ Throw..." } }
   }
 }
 
-← mmsaki [content] { changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/PoolManager.t.sol: Array(9) [{ newText: "__lsp_bench_rename__", range: { end: { character: 17, line: 266 }, st...
-← mmsaki v0.1.24 [content] { changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/PoolManager.t.sol: Array(9) [{ newText: "__lsp_bench_rename__", range: { end: { character: 42, line: 259 }, st...
+← mmsaki v0.1.25 [content] { changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/PoolManager.t.sol: Array(9) [{ newText: "__lsp_bench_rename__", range: { end: { character: 17, line: 259 }, st...
+← mmsaki v0.1.24 [content] { changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/PoolManager.t.sol: Array(9) [{ newText: "__lsp_bench_rename__", range: { end: { character: 17, line: 259 }, st...
 
-── textDocument/prepareRename (0.2ms, 374.6 MB) ──
+── textDocument/prepareRename (0.2ms, 254.7 MB) ──
 
 {
   "id": 1,
@@ -194,10 +194,10 @@ Throw..." } }
   }
 }
 
-← mmsaki [content] { end: { character: 59, line: 116 }, start: { character: 51, line: 116 } }
+← mmsaki v0.1.25 [content] { end: { character: 59, line: 116 }, start: { character: 51, line: 116 } }
 ← mmsaki v0.1.24 [content] { end: { character: 59, line: 116 }, start: { character: 51, line: 116 } }
 
-── textDocument/documentSymbol (6.3ms, 377.1 MB) ──
+── textDocument/documentSymbol (8.7ms, 254.4 MB) ──
 
 {
   "id": 1,
@@ -210,10 +210,10 @@ Throw..." } }
   }
 }
 
-← mmsaki [content] Array(35) [{ kind: 15, name: "pragma solidity ^0.8.20", range: { end: { character: 24, line: 1 }, start: { character: 0, line: 1 } }, selectionRange: { end: { character: 24, line: 1 }, start: { cha...
+← mmsaki v0.1.25 [content] Array(35) [{ kind: 15, name: "pragma solidity ^0.8.20", range: { end: { character: 24, line: 1 }, start: { character: 0, line: 1 } }, selectionRange: { end: { character: 24, line: 1 }, start: { cha...
 ← mmsaki v0.1.24 [content] Array(35) [{ kind: 15, name: "pragma solidity ^0.8.20", range: { end: { character: 24, line: 1 }, start: { character: 0, line: 1 } }, selectionRange: { end: { character: 24, line: 1 }, start: { cha...
 
-── textDocument/documentLink (2.3ms, 372.6 MB) ──
+── textDocument/documentLink (2.4ms, 254.4 MB) ──
 
 {
   "id": 1,
@@ -226,10 +226,10 @@ Throw..." } }
   }
 }
 
-← mmsaki [content] Array(33) [{ range: { end: { character: 38, line: 3 }, start: { character: 20, line: 3 } }, target: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/lib/forg...", tooltip: "lib...
+← mmsaki v0.1.25 [content] Array(33) [{ range: { end: { character: 38, line: 3 }, start: { character: 20, line: 3 } }, target: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/lib/forg...", tooltip: "lib...
 ← mmsaki v0.1.24 [content] Array(33) [{ range: { end: { character: 38, line: 3 }, start: { character: 20, line: 3 } }, target: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/lib/forg...", tooltip: "lib...
 
-── textDocument/formatting (23.4ms, 371.9 MB) ──
+── textDocument/formatting (25.3ms, 253.9 MB) ──
 
 {
   "id": 1,
@@ -246,7 +246,7 @@ Throw..." } }
   }
 }
 
-← mmsaki [content] Array(1) [{ newText: "// SPDX-License-Identifier: UNLICENSED
+← mmsaki v0.1.25 [content] Array(1) [{ newText: "// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
 
 import {Test...", range: { end: { character: 0, line: 1272 }, start: { character: 0, line: 0 } } }]
@@ -255,7 +255,7 @@ pragma solidity ^0.8.20;
 
 import {Test...", range: { end: { character: 0, line: 1272 }, start: { character: 0, line: 0 } } }]
 
-── textDocument/inlayHint (9.0ms, 373.5 MB) ──
+── textDocument/inlayHint (9.1ms, 254.2 MB) ──
 
 {
   "id": 1,
@@ -278,10 +278,10 @@ import {Test...", range: { end: { character: 0, line: 1272 }, start: { character
   }
 }
 
-← mmsaki [content] Array(1082) [{ kind: 2, label: "name:", paddingRight: true, position: { character: 40, line: 76 } }, { kind: 2, label: "hooks:", paddingRight: true, position: { character: 48, line: 79 } }, { kind:...
+← mmsaki v0.1.25 [content] Array(1082) [{ kind: 2, label: "name:", paddingRight: true, position: { character: 40, line: 76 } }, { kind: 2, label: "hooks:", paddingRight: true, position: { character: 48, line: 79 } }, { kind:...
 ← mmsaki v0.1.24 [content] Array(1080) [{ kind: 2, label: "name:", paddingRight: true, position: { character: 40, line: 76 } }, { kind: 2, label: "hooks:", paddingRight: true, position: { character: 48, line: 79 } }, { kind:...
 
-── textDocument/semanticTokens/full (9.9ms, 375.2 MB) ──
+── textDocument/semanticTokens/full (9.9ms, 255.6 MB) ──
 
 {
   "id": 1,
@@ -294,10 +294,10 @@ import {Test...", range: { end: { character: 0, line: 1272 }, start: { character
   }
 }
 
-← mmsaki [content] { data: Array(7560) [0, 0, 38, ... 7557 more], resultId: "2" }
+← mmsaki v0.1.25 [content] { data: Array(7560) [0, 0, 38, ... 7557 more], resultId: "2" }
 ← mmsaki v0.1.24 [content] { data: Array(7560) [0, 0, 38, ... 7557 more], resultId: "2" }
 
-── textDocument/semanticTokens/range (6.6ms, 374.5 MB) ──
+── textDocument/semanticTokens/range (7.2ms, 254.9 MB) ──
 
 {
   "id": 1,
@@ -320,10 +320,10 @@ import {Test...", range: { end: { character: 0, line: 1272 }, start: { character
   }
 }
 
-← mmsaki [content] { data: Array(2085) [0, 0, 38, ... 2082 more] }
+← mmsaki v0.1.25 [content] { data: Array(2085) [0, 0, 38, ... 2082 more] }
 ← mmsaki v0.1.24 [content] { data: Array(2085) [0, 0, 38, ... 2082 more] }
 
-── workspace/symbol (6.0ms, 374.6 MB) ──
+── workspace/symbol (6.5ms, 253.2 MB) ──
 
 {
   "id": 1,
@@ -334,5 +334,5 @@ import {Test...", range: { end: { character: 0, line: 1272 }, start: { character
   }
 }
 
-← mmsaki [content] Array(90) [{ kind: 5, location: { range: { end: { character: 1, line: 1261 }, start: { character: 0, line: 37 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/Po...
+← mmsaki v0.1.25 [content] Array(90) [{ kind: 5, location: { range: { end: { character: 1, line: 1261 }, start: { character: 0, line: 37 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/Po...
 ← mmsaki v0.1.24 [content] Array(90) [{ kind: 5, location: { range: { end: { character: 1, line: 1261 }, start: { character: 0, line: 37 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/Po...

@@ -1,30 +1,21 @@
 # v4-core / src/libraries/Pool.sol
 
-── initialize (7.1ms) ──
+── initialize (9.5ms) ──
 
-← mmsaki [content] "ok"
-← solc [content] "ok"
-← qiuxiang [content] "ok"
-← juanfranblanco [content] "ok"
-← nomicfoundation [content] "ok"
+← mmsaki v0.1.25 [content] "ok"
+← mmsaki v0.1.24 [content] "ok"
 
-── textDocument/diagnostic (509.5ms, 54.4 MB) ──
+── textDocument/diagnostic (593.6ms, 52.2 MB) ──
 
-← mmsaki [content] { diagnostics: Array(4) [{ code: "mixed-case-function", message: "function names should use mixedCase", range: { end: { character: 21, line: 114 }, start: { character: 13, line: 114 } }, severity: ...
-← solc [content] { diagnostics: [], uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/lib/forg..." }
-← qiuxiang [content] { diagnostics: [], uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr..." }
-← juanfranblanco [error] crash
-← nomicfoundation [content] { diagnostics: [], uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr..." }
+← mmsaki v0.1.25 [content] { diagnostics: Array(4) [{ code: "mixed-case-function", message: "function names should use mixedCase", range: { end: { character: 21, line: 114 }, start: { character: 13, line: 114 } }, severity: ...
+← mmsaki v0.1.24 [content] { diagnostics: Array(4) [{ code: "mixed-case-function", message: "function names should use mixedCase", range: { end: { character: 21, line: 114 }, start: { character: 13, line: 114 } }, severity: ...
 
-── textDocument/semanticTokens/full/delta (3.8ms, 53.0 MB) ──
+── textDocument/semanticTokens/full/delta (3.5ms, 49.0 MB) ──
 
-← mmsaki [content] { edits: [], resultId: "3" }
-← solc [error] error
-← qiuxiang [unsupported] unsupported
-← juanfranblanco [error] crash
-← nomicfoundation [unsupported] unsupported
+← mmsaki v0.1.25 [content] { edits: [], resultId: "3" }
+← mmsaki v0.1.24 [content] { edits: [], resultId: "3" }
 
-── textDocument/definition (14.4ms, 54.5 MB) ──
+── textDocument/definition (2.4ms, 50.9 MB) ──
 
 {
   "id": 1,
@@ -41,13 +32,10 @@
   }
 }
 
-← mmsaki [content] { range: { end: { character: 16, line: 9 }, start: { character: 8, line: 9 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr..." }
-← solc [error] empty
-← qiuxiang [content] { range: { end: { character: 0, line: 103 }, start: { character: 10, line: 102 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr..." }
-← juanfranblanco [error] crash
-← nomicfoundation [error] empty
+← mmsaki v0.1.25 [content] { range: { end: { character: 16, line: 9 }, start: { character: 8, line: 9 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr..." }
+← mmsaki v0.1.24 [content] { range: { end: { character: 16, line: 9 }, start: { character: 8, line: 9 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr..." }
 
-── textDocument/declaration (8.4ms, 52.7 MB) ──
+── textDocument/declaration (0.3ms, 49.1 MB) ──
 
 {
   "id": 1,
@@ -64,13 +52,10 @@
   }
 }
 
-← mmsaki [content] { range: { end: { character: 16, line: 9 }, start: { character: 8, line: 9 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr..." }
-← solc [unsupported] unsupported
-← qiuxiang [unsupported] unsupported
-← juanfranblanco [error] crash
-← nomicfoundation [unsupported] unsupported
+← mmsaki v0.1.25 [content] { range: { end: { character: 16, line: 9 }, start: { character: 8, line: 9 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr..." }
+← mmsaki v0.1.24 [content] { range: { end: { character: 16, line: 9 }, start: { character: 8, line: 9 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr..." }
 
-── textDocument/hover (14.1ms, 53.5 MB) ──
+── textDocument/hover (2.3ms, 49.9 MB) ──
 
 {
   "id": 1,
@@ -87,14 +72,12 @@
   }
 }
 
-← mmsaki [content] { contents: { kind: "markdown", value: "```solidity
+← mmsaki v0.1.25 [content] { contents: { kind: "markdown", value: "```solidity
 function modifyLiquidity(struct Pool.State storage self, struct P..." } }
-← solc [error] crash
-← qiuxiang [error] empty
-← juanfranblanco [error] crash
-← nomicfoundation [error] empty
+← mmsaki v0.1.24 [content] { contents: { kind: "markdown", value: "```solidity
+function modifyLiquidity(struct Pool.State storage self, struct P..." } }
 
-── textDocument/references (11.4ms, 52.2 MB) ──
+── textDocument/references (3.6ms, 50.0 MB) ──
 
 {
   "id": 1,
@@ -114,13 +97,10 @@ function modifyLiquidity(struct Pool.State storage self, struct P..." } }
   }
 }
 
-← mmsaki [content] Array(24) [{ range: { end: { character: 16, line: 8 }, start: { character: 8, line: 8 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr..." }, { range: { end:...
-← solc [unsupported] unsupported
-← qiuxiang [error] empty
-← juanfranblanco [error] crash
-← nomicfoundation [error] empty
+← mmsaki v0.1.25 [content] Array(24) [{ range: { end: { character: 32, line: 213 }, start: { character: 24, line: 213 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr..." }, { range: {...
+← mmsaki v0.1.24 [content] Array(24) [{ range: { end: { character: 16, line: 8 }, start: { character: 8, line: 8 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr..." }, { range: { end:...
 
-── textDocument/completion (0.2ms, 54.2 MB) ──
+── textDocument/completion (0.2ms, 50.1 MB) ──
 
 {
   "id": 1,
@@ -141,13 +121,10 @@ function modifyLiquidity(struct Pool.State storage self, struct P..." } }
   }
 }
 
-← mmsaki [content] { isIncomplete: false, items: Array(28) [{ detail: "Slot0", kind: 5, label: "slot0" }, { detail: "uint256", kind: 5, label: "feeGrowthGlobal0X128" }, { detail: "uint256", kind: 5, label: "feeGrowth...
-← solc [unsupported] unsupported
-← qiuxiang [content] Array(7) [{ detail: "(member) Slot0 slot0", kind: 6, label: "slot0" }, { detail: "(member) uint256 feeGrowthGlobal0X128", kind: 6, label: "feeGrowthGlobal0X128" }, { detail: "(member) uint256 feeGr...
-← juanfranblanco [error] crash
-← nomicfoundation [content] { isIncomplete: false, items: Array(7) [{ documentation: { kind: "markdown", value: "*(variable)* Slot0 slot0" }, kind: 6, label: "slot0" }, { documentation: { kind: "markdown", value: "*(variable)...
+← mmsaki v0.1.25 [content] { isIncomplete: false, items: Array(28) [{ detail: "Slot0", kind: 5, label: "slot0" }, { detail: "uint256", kind: 5, label: "feeGrowthGlobal0X128" }, { detail: "uint256", kind: 5, label: "feeGrowth...
+← mmsaki v0.1.24 [content] { isIncomplete: false, items: Array(28) [{ detail: "Slot0", kind: 5, label: "slot0" }, { detail: "uint256", kind: 5, label: "feeGrowthGlobal0X128" }, { detail: "uint256", kind: 5, label: "feeGrowth...
 
-── textDocument/signatureHelp (12.7ms, 52.5 MB) ──
+── textDocument/signatureHelp (2.4ms, 49.2 MB) ──
 
 {
   "id": 1,
@@ -164,13 +141,10 @@ function modifyLiquidity(struct Pool.State storage self, struct P..." } }
   }
 }
 
-← mmsaki [content] { activeParameter: 0, activeSignature: 0, signatures: Array(1) [{ activeParameter: 0, label: "function getTickAtSqrtPrice(uint160 sqrtPriceX96) internal pure returns (int2...", parameters: Array(1)...
-← solc [unsupported] unsupported
-← qiuxiang [error] empty
-← juanfranblanco [error] crash
-← nomicfoundation [error] empty
+← mmsaki v0.1.25 [content] { activeParameter: 0, activeSignature: 0, signatures: Array(1) [{ activeParameter: 0, label: "function getTickAtSqrtPrice(uint160 sqrtPriceX96) internal pure returns (int2...", parameters: Array(1)...
+← mmsaki v0.1.24 [content] { activeParameter: 0, activeSignature: 0, signatures: Array(1) [{ activeParameter: 0, label: "function getTickAtSqrtPrice(uint160 sqrtPriceX96) internal pure returns (int2...", parameters: Array(1)...
 
-── textDocument/rename (18.8ms, 54.0 MB) ──
+── textDocument/rename (3.1ms, 50.7 MB) ──
 
 {
   "id": 1,
@@ -188,13 +162,10 @@ function modifyLiquidity(struct Pool.State storage self, struct P..." } }
   }
 }
 
-← mmsaki [content] { changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol: Array(13) [{ newText: "__lsp_bench_rename__", range: { end: { character: 30, line: 158 }, s...
-← solc [error] error
-← qiuxiang [content] { changes: {} }
-← juanfranblanco [error] crash
-← nomicfoundation [content] { changes: {} }
+← mmsaki v0.1.25 [content] { changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol: Array(13) [{ newText: "__lsp_bench_rename__", range: { end: { character: 26, line: 205 }, s...
+← mmsaki v0.1.24 [content] { changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol: Array(13) [{ newText: "__lsp_bench_rename__", range: { end: { character: 118, line: 213 }, ...
 
-── textDocument/prepareRename (0.5ms, 55.3 MB) ──
+── textDocument/prepareRename (0.1ms, 49.1 MB) ──
 
 {
   "id": 1,
@@ -211,13 +182,10 @@ function modifyLiquidity(struct Pool.State storage self, struct P..." } }
   }
 }
 
-← mmsaki [content] { end: { character: 23, line: 102 }, start: { character: 15, line: 102 } }
-← solc [unsupported] unsupported
-← qiuxiang [unsupported] unsupported
-← juanfranblanco [error] crash
-← nomicfoundation [unsupported] unsupported
+← mmsaki v0.1.25 [content] { end: { character: 23, line: 102 }, start: { character: 15, line: 102 } }
+← mmsaki v0.1.24 [content] { end: { character: 23, line: 102 }, start: { character: 15, line: 102 } }
 
-── textDocument/documentSymbol (2.6ms, 54.3 MB) ──
+── textDocument/documentSymbol (8.5ms, 51.0 MB) ──
 
 {
   "id": 1,
@@ -230,13 +198,10 @@ function modifyLiquidity(struct Pool.State storage self, struct P..." } }
   }
 }
 
-← mmsaki [content] Array(16) [{ kind: 15, name: "pragma solidity ^0.8.0", range: { end: { character: 23, line: 1 }, start: { character: 0, line: 1 } }, selectionRange: { end: { character: 23, line: 1 }, start: { char...
-← solc [unsupported] unsupported
-← qiuxiang [unsupported] unsupported
-← juanfranblanco [error] crash
-← nomicfoundation [content] Array(1) [{ children: Array(30) [{ children: [], kind: 24, name: "TicksMisordered", range: { end: { character: 0, line: 33 }, start: { character: 0, line: 28 } }, selectionRange: { end: { character...
+← mmsaki v0.1.25 [content] Array(16) [{ kind: 15, name: "pragma solidity ^0.8.0", range: { end: { character: 23, line: 1 }, start: { character: 0, line: 1 } }, selectionRange: { end: { character: 23, line: 1 }, start: { char...
+← mmsaki v0.1.24 [content] Array(16) [{ kind: 15, name: "pragma solidity ^0.8.0", range: { end: { character: 23, line: 1 }, start: { character: 0, line: 1 } }, selectionRange: { end: { character: 23, line: 1 }, start: { char...
 
-── textDocument/documentLink (1.0ms, 53.2 MB) ──
+── textDocument/documentLink (0.7ms, 49.3 MB) ──
 
 {
   "id": 1,
@@ -249,13 +214,10 @@ function modifyLiquidity(struct Pool.State storage self, struct P..." } }
   }
 }
 
-← mmsaki [content] Array(14) [{ range: { end: { character: 38, line: 3 }, start: { character: 24, line: 3 } }, target: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr...", tooltip: "src...
-← solc [unsupported] unsupported
-← qiuxiang [unsupported] unsupported
-← juanfranblanco [error] crash
-← nomicfoundation [unsupported] unsupported
+← mmsaki v0.1.25 [content] Array(14) [{ range: { end: { character: 38, line: 3 }, start: { character: 24, line: 3 } }, target: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr...", tooltip: "src...
+← mmsaki v0.1.24 [content] Array(14) [{ range: { end: { character: 38, line: 3 }, start: { character: 24, line: 3 } }, target: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr...", tooltip: "src...
 
-── textDocument/formatting (19.6ms, 54.1 MB) ──
+── textDocument/formatting (25.5ms, 49.5 MB) ──
 
 {
   "id": 1,
@@ -272,19 +234,16 @@ function modifyLiquidity(struct Pool.State storage self, struct P..." } }
   }
 }
 
-← mmsaki [content] Array(1) [{ newText: "// SPDX-License-Identifier: BUSL-1.1
+← mmsaki v0.1.25 [content] Array(1) [{ newText: "// SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.0;
 
 import {SafeCas...", range: { end: { character: 0, line: 623 }, start: { character: 0, line: 0 } } }]
-← solc [error] { error: "Unknown method textDocument/formatting" }
-← qiuxiang [error] { error: "Request textDocument/formatting failed with message: resolveConfig.sync is no..." }
-← juanfranblanco [error] crash
-← nomicfoundation [content] Array(1) [{ newText: "// SPDX-License-Identifier: BUSL-1.1
+← mmsaki v0.1.24 [content] Array(1) [{ newText: "// SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.0;
 
 import {SafeCas...", range: { end: { character: 0, line: 623 }, start: { character: 0, line: 0 } } }]
 
-── textDocument/inlayHint (2.9ms, 54.3 MB) ──
+── textDocument/inlayHint (5.1ms, 50.2 MB) ──
 
 {
   "id": 1,
@@ -307,13 +266,10 @@ import {SafeCas...", range: { end: { character: 0, line: 623 }, start: { charact
   }
 }
 
-← mmsaki [content] Array(114) [{ kind: 2, label: "value1:", paddingRight: true, position: { character: 72, line: 94 } }, { kind: 2, label: "value2:", paddingRight: true, position: { character: 83, line: 94 } }, { kin...
-← solc [unsupported] unsupported
-← qiuxiang [unsupported] unsupported
-← juanfranblanco [error] crash
-← nomicfoundation [unsupported] unsupported
+← mmsaki v0.1.25 [content] Array(114) [{ kind: 2, label: "value1:", paddingRight: true, position: { character: 72, line: 94 } }, { kind: 2, label: "value2:", paddingRight: true, position: { character: 83, line: 94 } }, { kin...
+← mmsaki v0.1.24 [content] Array(114) [{ kind: 2, label: "value1:", paddingRight: true, position: { character: 72, line: 94 } }, { kind: 2, label: "value2:", paddingRight: true, position: { character: 83, line: 94 } }, { kin...
 
-── textDocument/semanticTokens/full (4.7ms, 53.4 MB) ──
+── textDocument/semanticTokens/full (18.4ms, 49.8 MB) ──
 
 {
   "id": 1,
@@ -326,13 +282,10 @@ import {SafeCas...", range: { end: { character: 0, line: 623 }, start: { charact
   }
 }
 
-← mmsaki [content] { data: Array(3485) [0, 0, 36, ... 3482 more], resultId: "2" }
-← solc [error] error
-← qiuxiang [unsupported] unsupported
-← juanfranblanco [error] crash
-← nomicfoundation [content] { data: Array(410) [19, 8, 4, ... 407 more] }
+← mmsaki v0.1.25 [content] { data: Array(3485) [0, 0, 36, ... 3482 more], resultId: "2" }
+← mmsaki v0.1.24 [content] { data: Array(3485) [0, 0, 36, ... 3482 more], resultId: "2" }
 
-── textDocument/semanticTokens/range (2.5ms, 53.6 MB) ──
+── textDocument/semanticTokens/range (4.0ms, 50.4 MB) ──
 
 {
   "id": 1,
@@ -355,13 +308,10 @@ import {SafeCas...", range: { end: { character: 0, line: 623 }, start: { charact
   }
 }
 
-← mmsaki [content] { data: Array(1370) [0, 0, 36, ... 1367 more] }
-← solc [unsupported] unsupported
-← qiuxiang [unsupported] unsupported
-← juanfranblanco [error] crash
-← nomicfoundation [unsupported] unsupported
+← mmsaki v0.1.25 [content] { data: Array(1370) [0, 0, 36, ... 1367 more] }
+← mmsaki v0.1.24 [content] { data: Array(1370) [0, 0, 36, ... 1367 more] }
 
-── workspace/symbol (2.2ms, 53.2 MB) ──
+── workspace/symbol (2.2ms, 49.1 MB) ──
 
 {
   "id": 1,
@@ -372,8 +322,5 @@ import {SafeCas...", range: { end: { character: 0, line: 623 }, start: { charact
   }
 }
 
-← mmsaki [content] Array(68) [{ kind: 3, location: { range: { end: { character: 1, line: 612 }, start: { character: 0, line: 19 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr...
-← solc [unsupported] unsupported
-← qiuxiang [unsupported] unsupported
-← juanfranblanco [error] crash
-← nomicfoundation [unsupported] unsupported
+← mmsaki v0.1.25 [content] Array(68) [{ kind: 3, location: { range: { end: { character: 1, line: 612 }, start: { character: 0, line: 19 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr...
+← mmsaki v0.1.24 [content] Array(68) [{ kind: 3, location: { range: { end: { character: 1, line: 612 }, start: { character: 0, line: 19 } }, uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr...

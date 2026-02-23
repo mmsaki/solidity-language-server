@@ -6,7 +6,7 @@
 
 **Responses:**
 
-**mmsaki** (7.1ms) — ok
+**mmsaki v0.1.25** (9.5ms) — ok
 
 <details>
 <summary>Summary: <code>"ok"</code></summary>
@@ -14,10 +14,9 @@
 ```json
 "ok"
 ```
-
 </details>
 
-**solc** (109.9ms) — ok
+**mmsaki v0.1.24** (12.5ms) — ok
 
 <details>
 <summary>Summary: <code>"ok"</code></summary>
@@ -25,40 +24,6 @@
 ```json
 "ok"
 ```
-
-</details>
-
-**qiuxiang** (110.1ms) — ok
-
-<details>
-<summary>Summary: <code>"ok"</code></summary>
-
-```json
-"ok"
-```
-
-</details>
-
-**juanfranblanco** (537.4ms) — ok
-
-<details>
-<summary>Summary: <code>"ok"</code></summary>
-
-```json
-"ok"
-```
-
-</details>
-
-**nomicfoundation** (878.2ms) — ok
-
-<details>
-<summary>Summary: <code>"ok"</code></summary>
-
-```json
-"ok"
-```
-
 </details>
 
 ---
@@ -69,7 +34,7 @@
 
 **Responses:**
 
-**mmsaki** (509.5ms, 54.4 MB) — 4 diagnostics
+**mmsaki v0.1.25** (593.6ms, 52.2 MB) — 4 diagnostics
 
 <details>
 <summary>Summary: <code>{ diagnostics: Array(4) [{ code: "mixed-case-function", message: "function names should use mixedCase", range: { end:...</code></summary>
@@ -145,51 +110,84 @@
   "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
 }
 ```
-
 </details>
 
-**solc** (183.2ms, 26.2 MB) — 0 diagnostics
+**mmsaki v0.1.24** (489.6ms, 54.3 MB) — 4 diagnostics
 
 <details>
-<summary>Summary: <code>{ diagnostics: [], uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/lib/forg..." }</code></summary>
+<summary>Summary: <code>{ diagnostics: Array(4) [{ code: "mixed-case-function", message: "function names should use mixedCase", range: { end:...</code></summary>
 
 ```json
 {
-  "diagnostics": [],
-  "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/lib/forge-std/src/Base.sol"
-}
-```
-
-</details>
-
-**qiuxiang** (258.0ms, 72.5 MB) — 0 diagnostics
-
-<details>
-<summary>Summary: <code>{ diagnostics: [], uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr..." }</code></summary>
-
-```json
-{
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "mixed-case-function",
+      "message": "function names should use mixedCase",
+      "range": {
+        "end": {
+          "character": 21,
+          "line": 114
+        },
+        "start": {
+          "character": 13,
+          "line": 114
+        }
+      },
+      "severity": 3,
+      "source": "forge-lint"
+    },
+    {
+      "code": "mixed-case-variable",
+      "message": "mutable variables should use mixedCase",
+      "range": {
+        "end": {
+          "character": 22,
+          "line": 571
+        },
+        "start": {
+          "character": 14,
+          "line": 571
+        }
+      },
+      "severity": 3,
+      "source": "forge-lint"
+    },
+    {
+      "code": "mixed-case-variable",
+      "message": "mutable variables should use mixedCase",
+      "range": {
+        "end": {
+          "character": 22,
+          "line": 572
+        },
+        "start": {
+          "character": 14,
+          "line": 572
+        }
+      },
+      "severity": 3,
+      "source": "forge-lint"
+    },
+    {
+      "code": "unsafe-typecast",
+      "message": "typecasts that can truncate values should be checked",
+      "range": {
+        "end": {
+          "character": 68,
+          "line": 306
+        },
+        "start": {
+          "character": 49,
+          "line": 306
+        }
+      },
+      "severity": 2,
+      "source": "forge-lint"
+    }
+  ],
   "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
 }
 ```
-
-</details>
-
-**juanfranblanco** — crash
-
-**nomicfoundation** (941.3ms, 527.3 MB) — 0 diagnostics
-
-<details>
-<summary>Summary: <code>{ diagnostics: [], uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libr..." }</code></summary>
-
-```json
-{
-  "diagnostics": [],
-  "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
-}
-```
-
 </details>
 
 ---
@@ -200,7 +198,7 @@
 
 **Responses:**
 
-**mmsaki** (3.8ms, 53.0 MB) — delta
+**mmsaki v0.1.25** (3.5ms, 49.0 MB) — delta
 
 <details>
 <summary>Summary: <code>{ edits: [], resultId: "3" }</code></summary>
@@ -211,23 +209,26 @@
   "resultId": "3"
 }
 ```
-
 </details>
 
-**solc** (26.0 MB) — error
+**mmsaki v0.1.24** (4.4ms, 52.4 MB) — delta
 
-**qiuxiang** (72.2 MB) — unsupported
+<details>
+<summary>Summary: <code>{ edits: [], resultId: "3" }</code></summary>
 
-**juanfranblanco** — crash
-
-**nomicfoundation** (526.1 MB) — unsupported
+```json
+{
+  "edits": [],
+  "resultId": "3"
+}
+```
+</details>
 
 ---
 
 ## textDocument/definition
 
 **Request:**
-
 ```json
 {
   "id": 1,
@@ -247,7 +248,7 @@
 
 **Responses:**
 
-**mmsaki** (14.4ms, 54.5 MB) — `TickMath.sol:9`
+**mmsaki v0.1.25** (2.4ms, 50.9 MB) — `TickMath.sol:9`
 
 <details>
 <summary>Summary: <code>{ range: { end: { character: 16, line: 9 }, start: { character: 8, line: 9 } }, uri: "file:///Users/meek/developer/mm...</code></summary>
@@ -267,44 +268,35 @@
   "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/TickMath.sol"
 }
 ```
-
 </details>
 
-**solc** (26.0 MB) — empty
-
-**qiuxiang** (0.5ms, 70.3 MB) — `Pool.sol:102`
+**mmsaki v0.1.24** (15.9ms, 55.4 MB) — `TickMath.sol:9`
 
 <details>
-<summary>Summary: <code>{ range: { end: { character: 0, line: 103 }, start: { character: 10, line: 102 } }, uri: "file:///Users/meek/develope...</code></summary>
+<summary>Summary: <code>{ range: { end: { character: 16, line: 9 }, start: { character: 8, line: 9 } }, uri: "file:///Users/meek/developer/mm...</code></summary>
 
 ```json
 {
   "range": {
     "end": {
-      "character": 0,
-      "line": 103
+      "character": 16,
+      "line": 9
     },
     "start": {
-      "character": 10,
-      "line": 102
+      "character": 8,
+      "line": 9
     }
   },
-  "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
+  "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/TickMath.sol"
 }
 ```
-
 </details>
-
-**juanfranblanco** — crash
-
-**nomicfoundation** (526.0 MB) — empty
 
 ---
 
 ## textDocument/declaration
 
 **Request:**
-
 ```json
 {
   "id": 1,
@@ -324,7 +316,7 @@
 
 **Responses:**
 
-**mmsaki** (8.4ms, 52.7 MB) — `TickMath.sol:9`
+**mmsaki v0.1.25** (0.3ms, 49.1 MB) — `TickMath.sol:9`
 
 <details>
 <summary>Summary: <code>{ range: { end: { character: 16, line: 9 }, start: { character: 8, line: 9 } }, uri: "file:///Users/meek/developer/mm...</code></summary>
@@ -344,23 +336,35 @@
   "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/TickMath.sol"
 }
 ```
-
 </details>
 
-**solc** (26.0 MB) — unsupported
+**mmsaki v0.1.24** (9.2ms, 52.7 MB) — `TickMath.sol:9`
 
-**qiuxiang** (71.6 MB) — unsupported
+<details>
+<summary>Summary: <code>{ range: { end: { character: 16, line: 9 }, start: { character: 8, line: 9 } }, uri: "file:///Users/meek/developer/mm...</code></summary>
 
-**juanfranblanco** — crash
-
-**nomicfoundation** (523.7 MB) — unsupported
+```json
+{
+  "range": {
+    "end": {
+      "character": 16,
+      "line": 9
+    },
+    "start": {
+      "character": 8,
+      "line": 9
+    }
+  },
+  "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/TickMath.sol"
+}
+```
+</details>
 
 ---
 
 ## textDocument/hover
 
 **Request:**
-
 ```json
 {
   "id": 1,
@@ -380,7 +384,7 @@
 
 **Responses:**
 
-**mmsaki** (14.1ms, 53.5 MB) — function modifyLiquidity(struct Pool.State storage...
+**mmsaki v0.1.25** (2.3ms, 49.9 MB) — function modifyLiquidity(struct Pool.State storage...
 
 <details>
 <summary>Summary: <code>{ contents: { kind: "markdown", value: "```solidity
@@ -394,23 +398,29 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
   }
 }
 ```
-
 </details>
 
-**solc** (26.0 MB) — crash
+**mmsaki v0.1.24** (24.1ms, 53.4 MB) — function modifyLiquidity(struct Pool.State storage...
 
-**qiuxiang** (72.3 MB) — empty
+<details>
+<summary>Summary: <code>{ contents: { kind: "markdown", value: "```solidity
+function modifyLiquidity(struct Pool.State storage self, struct P...</code></summary>
 
-**juanfranblanco** — crash
-
-**nomicfoundation** (526.1 MB) — empty
+```json
+{
+  "contents": {
+    "kind": "markdown",
+    "value": "```solidity\nfunction modifyLiquidity(struct Pool.State storage self, struct Pool.ModifyLiquidityParams memory params) internal returns (BalanceDelta delta, BalanceDelta feeDelta)\n```\n\n---\nEffect changes to a position in a pool\n\n**@dev**\n*PoolManager checks that the pool is initialized before calling*\n\n**Parameters:**\n- `params` — the position details and the change to the position's liquidity to effect\n\n**Returns:**\n- `delta` — the deltas of the token balances of the pool, from the liquidity change\n- `feeDelta` — the fees generated by the liquidity range"
+  }
+}
+```
+</details>
 
 ---
 
 ## textDocument/references
 
 **Request:**
-
 ```json
 {
   "id": 1,
@@ -433,7 +443,84 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 
 **Responses:**
 
-**mmsaki** (11.4ms, 52.2 MB) — 24 references
+**mmsaki v0.1.25** (3.6ms, 50.0 MB) — 24 references
+
+<details>
+<summary>Summary: <code>Array(24) [{ range: { end: { character: 32, line: 213 }, start: { character: 24, line: 213 } }, uri: "file:///Users/m...</code></summary>
+
+```json
+[
+  {
+    "range": {
+      "end": {
+        "character": 32,
+        "line": 213
+      },
+      "start": {
+        "character": 24,
+        "line": 213
+      }
+    },
+    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
+  },
+  {
+    "range": {
+      "end": {
+        "character": 16,
+        "line": 9
+      },
+      "start": {
+        "character": 8,
+        "line": 9
+      }
+    },
+    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/TickMath.sol"
+  },
+  {
+    "range": {
+      "end": {
+        "character": 40,
+        "line": 351
+      },
+      "start": {
+        "character": 32,
+        "line": 351
+      }
+    },
+    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
+  },
+  {
+    "range": {
+      "end": {
+        "character": 23,
+        "line": 102
+      },
+      "start": {
+        "character": 15,
+        "line": 102
+      }
+    },
+    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
+  },
+  {
+    "range": {
+      "end": {
+        "character": 41,
+        "line": 350
+      },
+      "start": {
+        "character": 33,
+        "line": 350
+      }
+    },
+    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
+  },
+  "... 19 more (24 total)"
+]
+```
+</details>
+
+**mmsaki v0.1.24** (83.9ms, 54.7 MB) — 24 references
 
 <details>
 <summary>Summary: <code>Array(24) [{ range: { end: { character: 16, line: 8 }, start: { character: 8, line: 8 } }, uri: "file:///Users/meek/d...</code></summary>
@@ -456,15 +543,15 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
   {
     "range": {
       "end": {
-        "character": 16,
-        "line": 9
+        "character": 33,
+        "line": 571
       },
       "start": {
-        "character": 8,
-        "line": 9
+        "character": 25,
+        "line": 571
       }
     },
-    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/TickMath.sol"
+    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
   },
   {
     "range": {
@@ -482,12 +569,12 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
   {
     "range": {
       "end": {
-        "character": 40,
-        "line": 354
+        "character": 44,
+        "line": 358
       },
       "start": {
-        "character": 32,
-        "line": 354
+        "character": 36,
+        "line": 358
       }
     },
     "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
@@ -495,36 +582,26 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
   {
     "range": {
       "end": {
-        "character": 40,
-        "line": 351
+        "character": 16,
+        "line": 9
       },
       "start": {
-        "character": 32,
-        "line": 351
+        "character": 8,
+        "line": 9
       }
     },
-    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
+    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/TickMath.sol"
   },
   "... 19 more (24 total)"
 ]
 ```
-
 </details>
-
-**solc** (25.8 MB) — unsupported
-
-**qiuxiang** (71.2 MB) — empty
-
-**juanfranblanco** — crash
-
-**nomicfoundation** (525.2 MB) — empty
 
 ---
 
 ## textDocument/completion
 
 **Request:**
-
 ```json
 {
   "id": 1,
@@ -548,7 +625,7 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 
 **Responses:**
 
-**mmsaki** (0.2ms, 54.2 MB) — 28 items (slot0, feeGrowthGlobal0X128, feeGrowthGlobal1X128)
+**mmsaki v0.1.25** (0.2ms, 50.1 MB) — 28 items (slot0, feeGrowthGlobal0X128, feeGrowthGlobal1X128)
 
 <details>
 <summary>Summary: <code>{ isIncomplete: false, items: Array(28) [{ detail: "Slot0", kind: 5, label: "slot0" }, { detail: "uint256", kind: 5, ...</code></summary>
@@ -586,105 +663,46 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
   ]
 }
 ```
-
 </details>
 
-**solc** (25.9 MB) — unsupported
-
-**qiuxiang** (0.3ms, 71.1 MB) — 7 items (slot0, feeGrowthGlobal0X128, feeGrowthGlobal1X128)
+**mmsaki v0.1.24** (0.2ms, 54.5 MB) — 28 items (slot0, feeGrowthGlobal0X128, feeGrowthGlobal1X128)
 
 <details>
-<summary>Summary: <code>Array(7) [{ detail: "(member) Slot0 slot0", kind: 6, label: "slot0" }, { detail: "(member) uint256 feeGrowthGlobal0X1...</code></summary>
-
-```json
-[
-  {
-    "detail": "(member) Slot0 slot0",
-    "kind": 6,
-    "label": "slot0"
-  },
-  {
-    "detail": "(member) uint256 feeGrowthGlobal0X128",
-    "kind": 6,
-    "label": "feeGrowthGlobal0X128"
-  },
-  {
-    "detail": "(member) uint256 feeGrowthGlobal1X128",
-    "kind": 6,
-    "label": "feeGrowthGlobal1X128"
-  },
-  {
-    "detail": "(member) uint128 liquidity",
-    "kind": 6,
-    "label": "liquidity"
-  },
-  {
-    "detail": "(member) mapping(int24 => TickInfo) ticks",
-    "kind": 6,
-    "label": "ticks"
-  },
-  "... 2 more (7 total)"
-]
-```
-
-</details>
-
-**juanfranblanco** — crash
-
-**nomicfoundation** (17.5ms, 527.0 MB) — 7 items (slot0, feeGrowthGlobal0X128, feeGrowthGlobal1X128)
-
-<details>
-<summary>Summary: <code>{ isIncomplete: false, items: Array(7) [{ documentation: { kind: "markdown", value: "*(variable)* Slot0 slot0" }, kin...</code></summary>
+<summary>Summary: <code>{ isIncomplete: false, items: Array(28) [{ detail: "Slot0", kind: 5, label: "slot0" }, { detail: "uint256", kind: 5, ...</code></summary>
 
 ```json
 {
   "isIncomplete": false,
   "items": [
     {
-      "documentation": {
-        "kind": "markdown",
-        "value": "*(variable)* Slot0 slot0"
-      },
-      "kind": 6,
+      "detail": "Slot0",
+      "kind": 5,
       "label": "slot0"
     },
     {
-      "documentation": {
-        "kind": "markdown",
-        "value": "*(variable)* uint256 feeGrowthGlobal0X128"
-      },
-      "kind": 6,
+      "detail": "uint256",
+      "kind": 5,
       "label": "feeGrowthGlobal0X128"
     },
     {
-      "documentation": {
-        "kind": "markdown",
-        "value": "*(variable)* uint256 feeGrowthGlobal1X128"
-      },
-      "kind": 6,
+      "detail": "uint256",
+      "kind": 5,
       "label": "feeGrowthGlobal1X128"
     },
     {
-      "documentation": {
-        "kind": "markdown",
-        "value": "*(variable)* uint128 liquidity"
-      },
-      "kind": 6,
+      "detail": "uint128",
+      "kind": 5,
       "label": "liquidity"
     },
     {
-      "documentation": {
-        "kind": "markdown",
-        "value": "*(variable)* mapping(int24 => TickInfo) ticks"
-      },
-      "kind": 6,
+      "detail": "mapping(int24 => struct Pool.TickInfo)",
+      "kind": 5,
       "label": "ticks"
     },
-    "... 2 more (7 total)"
+    "... 23 more (28 total)"
   ]
 }
 ```
-
 </details>
 
 ---
@@ -692,7 +710,6 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 ## textDocument/signatureHelp
 
 **Request:**
-
 ```json
 {
   "id": 1,
@@ -712,7 +729,7 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 
 **Responses:**
 
-**mmsaki** (12.7ms, 52.5 MB) — function getTickAtSqrtPrice(uint160 sqrtPriceX96) ...
+**mmsaki v0.1.25** (2.4ms, 49.2 MB) — function getTickAtSqrtPrice(uint160 sqrtPriceX96) ...
 
 <details>
 <summary>Summary: <code>{ activeParameter: 0, activeSignature: 0, signatures: Array(1) [{ activeParameter: 0, label: "function getTickAtSqrtP...</code></summary>
@@ -737,23 +754,40 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
   ]
 }
 ```
-
 </details>
 
-**solc** (25.9 MB) — unsupported
+**mmsaki v0.1.24** (11.8ms, 54.0 MB) — function getTickAtSqrtPrice(uint160 sqrtPriceX96) ...
 
-**qiuxiang** (70.4 MB) — empty
+<details>
+<summary>Summary: <code>{ activeParameter: 0, activeSignature: 0, signatures: Array(1) [{ activeParameter: 0, label: "function getTickAtSqrtP...</code></summary>
 
-**juanfranblanco** — crash
-
-**nomicfoundation** (524.1 MB) — empty
+```json
+{
+  "activeParameter": 0,
+  "activeSignature": 0,
+  "signatures": [
+    {
+      "activeParameter": 0,
+      "label": "function getTickAtSqrtPrice(uint160 sqrtPriceX96) internal pure returns (int24 tick)",
+      "parameters": [
+        {
+          "label": [
+            28,
+            48
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+</details>
 
 ---
 
 ## textDocument/rename
 
 **Request:**
-
 ```json
 {
   "id": 1,
@@ -774,7 +808,7 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 
 **Responses:**
 
-**mmsaki** (18.8ms, 54.0 MB) — 13 edits in 1 files
+**mmsaki v0.1.25** (3.1ms, 50.7 MB) — 13 edits in 1 files
 
 <details>
 <summary>Summary: <code>{ changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol: Array(13) [...</code></summary>
@@ -787,12 +821,51 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
         "newText": "__lsp_bench_rename__",
         "range": {
           "end": {
+            "character": 26,
+            "line": 205
+          },
+          "start": {
+            "character": 12,
+            "line": 205
+          }
+        }
+      },
+      {
+        "newText": "__lsp_bench_rename__",
+        "range": {
+          "end": {
             "character": 30,
             "line": 158
           },
           "start": {
             "character": 16,
             "line": 158
+          }
+        }
+      },
+      {
+        "newText": "__lsp_bench_rename__",
+        "range": {
+          "end": {
+            "character": 118,
+            "line": 221
+          },
+          "start": {
+            "character": 104,
+            "line": 221
+          }
+        }
+      },
+      {
+        "newText": "__lsp_bench_rename__",
+        "range": {
+          "end": {
+            "character": 118,
+            "line": 213
+          },
+          "start": {
+            "character": 104,
+            "line": 213
           }
         }
       },
@@ -809,16 +882,45 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
           }
         }
       },
+      "... 8 more (13 total)"
+    ]
+  }
+}
+```
+</details>
+
+**mmsaki v0.1.24** (43.4ms, 54.5 MB) — 13 edits in 1 files
+
+<details>
+<summary>Summary: <code>{ changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol: Array(13) [...</code></summary>
+
+```json
+{
+  "changes": {
+    "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol": [
       {
         "newText": "__lsp_bench_rename__",
         "range": {
           "end": {
-            "character": 86,
-            "line": 225
+            "character": 118,
+            "line": 213
           },
           "start": {
-            "character": 72,
-            "line": 225
+            "character": 104,
+            "line": 213
+          }
+        }
+      },
+      {
+        "newText": "__lsp_bench_rename__",
+        "range": {
+          "end": {
+            "character": 113,
+            "line": 161
+          },
+          "start": {
+            "character": 99,
+            "line": 161
           }
         }
       },
@@ -832,6 +934,19 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
           "start": {
             "character": 48,
             "line": 160
+          }
+        }
+      },
+      {
+        "newText": "__lsp_bench_rename__",
+        "range": {
+          "end": {
+            "character": 34,
+            "line": 164
+          },
+          "start": {
+            "character": 20,
+            "line": 164
           }
         }
       },
@@ -853,37 +968,6 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
   }
 }
 ```
-
-</details>
-
-**solc** (26.0 MB) — error
-
-**qiuxiang** (0.3ms, 71.7 MB) — 0 edits in 0 files
-
-<details>
-<summary>Summary: <code>{ changes: {} }</code></summary>
-
-```json
-{
-  "changes": {}
-}
-```
-
-</details>
-
-**juanfranblanco** — crash
-
-**nomicfoundation** (1.1ms, 525.3 MB) — 0 edits in 0 files
-
-<details>
-<summary>Summary: <code>{ changes: {} }</code></summary>
-
-```json
-{
-  "changes": {}
-}
-```
-
 </details>
 
 ---
@@ -891,7 +975,6 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 ## textDocument/prepareRename
 
 **Request:**
-
 ```json
 {
   "id": 1,
@@ -911,7 +994,7 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 
 **Responses:**
 
-**mmsaki** (0.5ms, 55.3 MB) — ready (line 102)
+**mmsaki v0.1.25** (0.1ms, 49.1 MB) — ready (line 102)
 
 <details>
 <summary>Summary: <code>{ end: { character: 23, line: 102 }, start: { character: 15, line: 102 } }</code></summary>
@@ -928,23 +1011,32 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
   }
 }
 ```
-
 </details>
 
-**solc** (26.0 MB) — unsupported
+**mmsaki v0.1.24** (0.3ms, 53.4 MB) — ready (line 102)
 
-**qiuxiang** (70.2 MB) — unsupported
+<details>
+<summary>Summary: <code>{ end: { character: 23, line: 102 }, start: { character: 15, line: 102 } }</code></summary>
 
-**juanfranblanco** — crash
-
-**nomicfoundation** (526.9 MB) — unsupported
+```json
+{
+  "end": {
+    "character": 23,
+    "line": 102
+  },
+  "start": {
+    "character": 15,
+    "line": 102
+  }
+}
+```
+</details>
 
 ---
 
 ## textDocument/documentSymbol
 
 **Request:**
-
 ```json
 {
   "id": 1,
@@ -960,7 +1052,7 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 
 **Responses:**
 
-**mmsaki** (2.6ms, 54.3 MB) — 16 symbols
+**mmsaki v0.1.25** (8.5ms, 51.0 MB) — 16 symbols
 
 <details>
 <summary>Summary: <code>Array(16) [{ kind: 15, name: "pragma solidity ^0.8.0", range: { end: { character: 23, line: 1 }, start: { character: ...</code></summary>
@@ -1090,177 +1182,138 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
   "... 11 more (16 total)"
 ]
 ```
-
 </details>
 
-**solc** (26.0 MB) — unsupported
-
-**qiuxiang** (70.3 MB) — unsupported
-
-**juanfranblanco** — crash
-
-**nomicfoundation** (29.7ms, 524.8 MB) — 1 symbols
+**mmsaki v0.1.24** (3.6ms, 54.4 MB) — 16 symbols
 
 <details>
-<summary>Summary: <code>Array(1) [{ children: Array(30) [{ children: [], kind: 24, name: "TicksMisordered", range: { end: { character: 0, lin...</code></summary>
+<summary>Summary: <code>Array(16) [{ kind: 15, name: "pragma solidity ^0.8.0", range: { end: { character: 23, line: 1 }, start: { character: ...</code></summary>
 
 ```json
 [
   {
-    "children": [
-      {
-        "children": [],
-        "kind": 24,
-        "name": "TicksMisordered",
-        "range": {
-          "end": {
-            "character": 0,
-            "line": 33
-          },
-          "start": {
-            "character": 0,
-            "line": 28
-          }
-        },
-        "selectionRange": {
-          "end": {
-            "character": 0,
-            "line": 33
-          },
-          "start": {
-            "character": 0,
-            "line": 28
-          }
-        }
-      },
-      {
-        "children": [],
-        "kind": 24,
-        "name": "TickLowerOutOfBounds",
-        "range": {
-          "end": {
-            "character": 0,
-            "line": 37
-          },
-          "start": {
-            "character": 0,
-            "line": 33
-          }
-        },
-        "selectionRange": {
-          "end": {
-            "character": 0,
-            "line": 37
-          },
-          "start": {
-            "character": 0,
-            "line": 33
-          }
-        }
-      },
-      {
-        "children": [],
-        "kind": 24,
-        "name": "TickUpperOutOfBounds",
-        "range": {
-          "end": {
-            "character": 0,
-            "line": 41
-          },
-          "start": {
-            "character": 0,
-            "line": 37
-          }
-        },
-        "selectionRange": {
-          "end": {
-            "character": 0,
-            "line": 41
-          },
-          "start": {
-            "character": 0,
-            "line": 37
-          }
-        }
-      },
-      {
-        "children": [],
-        "kind": 24,
-        "name": "TickLiquidityOverflow",
-        "range": {
-          "end": {
-            "character": 0,
-            "line": 44
-          },
-          "start": {
-            "character": 0,
-            "line": 41
-          }
-        },
-        "selectionRange": {
-          "end": {
-            "character": 0,
-            "line": 44
-          },
-          "start": {
-            "character": 0,
-            "line": 41
-          }
-        }
-      },
-      {
-        "children": [],
-        "kind": 24,
-        "name": "PoolAlreadyInitialized",
-        "range": {
-          "end": {
-            "character": 0,
-            "line": 47
-          },
-          "start": {
-            "character": 0,
-            "line": 44
-          }
-        },
-        "selectionRange": {
-          "end": {
-            "character": 0,
-            "line": 47
-          },
-          "start": {
-            "character": 0,
-            "line": 44
-          }
-        }
-      },
-      "... 25 more (30 total)"
-    ],
-    "kind": 5,
-    "name": "Pool",
+    "kind": 15,
+    "name": "pragma solidity ^0.8.0",
     "range": {
       "end": {
-        "character": 0,
-        "line": 613
+        "character": 23,
+        "line": 1
       },
       "start": {
         "character": 0,
-        "line": 17
+        "line": 1
       }
     },
     "selectionRange": {
       "end": {
-        "character": 0,
-        "line": 613
+        "character": 23,
+        "line": 1
       },
       "start": {
         "character": 0,
-        "line": 17
+        "line": 1
       }
     }
-  }
+  },
+  {
+    "kind": 2,
+    "name": "import \"./SafeCast.sol\"",
+    "range": {
+      "end": {
+        "character": 40,
+        "line": 3
+      },
+      "start": {
+        "character": 0,
+        "line": 3
+      }
+    },
+    "selectionRange": {
+      "end": {
+        "character": 40,
+        "line": 3
+      },
+      "start": {
+        "character": 0,
+        "line": 3
+      }
+    }
+  },
+  {
+    "kind": 2,
+    "name": "import \"./TickBitmap.sol\"",
+    "range": {
+      "end": {
+        "character": 44,
+        "line": 4
+      },
+      "start": {
+        "character": 0,
+        "line": 4
+      }
+    },
+    "selectionRange": {
+      "end": {
+        "character": 44,
+        "line": 4
+      },
+      "start": {
+        "character": 0,
+        "line": 4
+      }
+    }
+  },
+  {
+    "kind": 2,
+    "name": "import \"./Position.sol\"",
+    "range": {
+      "end": {
+        "character": 40,
+        "line": 5
+      },
+      "start": {
+        "character": 0,
+        "line": 5
+      }
+    },
+    "selectionRange": {
+      "end": {
+        "character": 40,
+        "line": 5
+      },
+      "start": {
+        "character": 0,
+        "line": 5
+      }
+    }
+  },
+  {
+    "kind": 2,
+    "name": "import \"./UnsafeMath.sol\"",
+    "range": {
+      "end": {
+        "character": 44,
+        "line": 6
+      },
+      "start": {
+        "character": 0,
+        "line": 6
+      }
+    },
+    "selectionRange": {
+      "end": {
+        "character": 44,
+        "line": 6
+      },
+      "start": {
+        "character": 0,
+        "line": 6
+      }
+    }
+  },
+  "... 11 more (16 total)"
 ]
 ```
-
 </details>
 
 ---
@@ -1268,7 +1321,6 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 ## textDocument/documentLink
 
 **Request:**
-
 ```json
 {
   "id": 1,
@@ -1284,7 +1336,7 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 
 **Responses:**
 
-**mmsaki** (1.0ms, 53.2 MB) — 14 links
+**mmsaki v0.1.25** (0.7ms, 49.3 MB) — 14 links
 
 <details>
 <summary>Summary: <code>Array(14) [{ range: { end: { character: 38, line: 3 }, start: { character: 24, line: 3 } }, target: "file:///Users/me...</code></summary>
@@ -1364,23 +1416,95 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
   "... 9 more (14 total)"
 ]
 ```
-
 </details>
 
-**solc** (25.8 MB) — unsupported
+**mmsaki v0.1.24** (0.9ms, 53.6 MB) — 14 links
 
-**qiuxiang** (72.0 MB) — unsupported
+<details>
+<summary>Summary: <code>Array(14) [{ range: { end: { character: 38, line: 3 }, start: { character: 24, line: 3 } }, target: "file:///Users/me...</code></summary>
 
-**juanfranblanco** — crash
-
-**nomicfoundation** (525.5 MB) — unsupported
+```json
+[
+  {
+    "range": {
+      "end": {
+        "character": 38,
+        "line": 3
+      },
+      "start": {
+        "character": 24,
+        "line": 3
+      }
+    },
+    "target": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/SafeCast.sol",
+    "tooltip": "src/libraries/SafeCast.sol"
+  },
+  {
+    "range": {
+      "end": {
+        "character": 42,
+        "line": 4
+      },
+      "start": {
+        "character": 26,
+        "line": 4
+      }
+    },
+    "target": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/TickBitmap.sol",
+    "tooltip": "src/libraries/TickBitmap.sol"
+  },
+  {
+    "range": {
+      "end": {
+        "character": 38,
+        "line": 5
+      },
+      "start": {
+        "character": 24,
+        "line": 5
+      }
+    },
+    "target": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Position.sol",
+    "tooltip": "src/libraries/Position.sol"
+  },
+  {
+    "range": {
+      "end": {
+        "character": 42,
+        "line": 6
+      },
+      "start": {
+        "character": 26,
+        "line": 6
+      }
+    },
+    "target": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/UnsafeMath.sol",
+    "tooltip": "src/libraries/UnsafeMath.sol"
+  },
+  {
+    "range": {
+      "end": {
+        "character": 48,
+        "line": 7
+      },
+      "start": {
+        "character": 29,
+        "line": 7
+      }
+    },
+    "target": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/FixedPoint128.sol",
+    "tooltip": "src/libraries/FixedPoint128.sol"
+  },
+  "... 9 more (14 total)"
+]
+```
+</details>
 
 ---
 
 ## textDocument/formatting
 
 **Request:**
-
 ```json
 {
   "id": 1,
@@ -1400,7 +1524,7 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 
 **Responses:**
 
-**mmsaki** (19.6ms, 54.1 MB) — 1 edits
+**mmsaki v0.1.25** (25.5ms, 49.5 MB) — 1 edits
 
 <details>
 <summary>Summary: <code>Array(1) [{ newText: "// SPDX-License-Identifier: BUSL-1.1
@@ -1425,20 +1549,9 @@ import {SafeCas...", range: { end...</code></summary>
   }
 ]
 ```
-
 </details>
 
-**solc** (275.4ms, 25.9 MB) — {"error":"Unknown method textDocument/fo...
-
-`[error]` `{ error: "Unknown method textDocument/formatting" }`
-
-**qiuxiang** (2.8ms, 70.3 MB) — {"error":"Request textDocument/formattin...
-
-`[error]` `{ error: "Request textDocument/formatting failed with message: resolveConfig.sync is no..." }`
-
-**juanfranblanco** — crash
-
-**nomicfoundation** (422.8ms, 523.8 MB) — 1 edits
+**mmsaki v0.1.24** (20.3ms, 53.9 MB) — 1 edits
 
 <details>
 <summary>Summary: <code>Array(1) [{ newText: "// SPDX-License-Identifier: BUSL-1.1
@@ -1449,7 +1562,7 @@ import {SafeCas...", range: { end...</code></summary>
 ```json
 [
   {
-    "newText": "// SPDX-License-Identifier: BUSL-1.1\npragma solidity ^0.8.0;\n\nimport {SafeCast} from \"./SafeCast.sol\";\nimport {TickBitmap} from \"./TickBitmap.sol\";\nimport {Position} from \"./Position.sol\";\nimport {UnsafeMath} from \"./UnsafeMath.sol\";\nimport {FixedPoint128} from \"./FixedPoint128.sol\";\nimport {TickMath} from \"./TickMath.sol\";\nimport {SqrtPriceMath} from \"./SqrtPriceMath.sol\";\nimport {SwapMath} from \"./SwapMath.sol\";\nimport {BalanceDelta, toBalanceDelta, BalanceDeltaLibrary} from \"../types/BalanceDelta.sol\";\nimport {Slot0} from \"../types/Slot0.sol\";\nimport {ProtocolFeeLibrary} from \"./ProtocolFeeLibrary.sol\";\nimport {LiquidityMath} from \"./LiquidityMath.sol\";\nimport {LPFeeLibrary} from \"./LPFeeLibrary.sol\";\nimport {CustomRevert} from \"./CustomRevert.sol\";\n\n/// @notice a library with all actions that can be performed on a pool\nlibrary Pool {\n    using SafeCast for *;\n    using TickBitmap for mapping(int16 => uint256);\n    using Position for mapping(bytes32 => Position.State);\n    using Position for Position.State;\n    using Pool for State;\n    using ProtocolFeeLibrary for *;\n    using LPFeeLibrary for uint24;\n    using CustomRevert for bytes4;\n\n    /// @notice Thrown when tickLower is not below tickUpper\n    /// @param tickLower The invalid tickLower\n    /// @param tickUpper The invalid tickUpper\n    error TicksMisordered(int24 tickLower, int24 tickUpper);\n\n    /// @notice Thrown when tickLower is less than min tick\n    /// @param tickLower The invalid tickLower\n    error TickLowerOutOfBounds(int24 tickLower);\n\n    /// @notice Thrown when tickUpper exceeds max tick\n    /// @param tickUpper The invalid tickUpper\n    error TickUpperOutOfBounds(int24 tickUpper);\n\n    /// @notice For the tick spacing, the tick has too much liquidity\n    error TickLiquidityOverflow(int24 tick);\n\n    /// @notice Thrown when trying to initialize an already initialized pool\n    error PoolAlreadyInitialized();\n\n    /// @notice Thrown when trying to interact with a non-initialized pool\n    error PoolNotInitialized();\n\n    /// @notice Thrown when sqrtPriceLimitX96 on a swap has already exceeded its limit\n    /// @param sqrtPriceCurrentX96 The invalid, already surpassed sqrtPriceLimitX96\n    /// @param sqrtPriceLimitX96 The surpassed price limit\n    error PriceLimitAlreadyExceeded(uint160 sqrtPriceCurrentX96, uint160 sqrtPriceLimitX96);\n\n    /// @notice Thrown when sqrtPriceLimitX96 lies outside of valid tick/price range\n    /// @param sqrtPriceLimitX96 The invalid, out-of-bounds sqrtPriceLimitX96\n    error PriceLimitOutOfBounds(uint160 sqrtPriceLimitX96);\n\n    /// @notice Thrown by donate if there is currently 0 liquidity, since the fees will not go to any liquidity providers\n    error NoLiquidityToReceiveFees();\n\n    /// @notice Thrown when trying to swap with max lp fee and specifying an output amount\n    error InvalidFeeForExactOut();\n\n    // info stored for each initialized individual tick\n    struct TickInfo {\n        // the total position liquidity that references this tick\n        uint128 liquidityGross;\n        // amount of net liquidity added (subtracted) when tick is crossed from left to right (right to left),\n        int128 liquidityNet;\n        // fee growth per unit of liquidity on the _other_ side of this tick (relative to the current tick)\n        // only has relative meaning, not absolute — the value depends on when the tick is initialized\n        uint256 feeGrowthOutside0X128;\n        uint256 feeGrowthOutside1X128;\n    }\n\n    /// @notice The state of a pool\n    /// @dev Note that feeGrowthGlobal can be artificially inflated\n    /// For pools with a single liquidity position, actors can donate to themselves to freely inflate feeGrowthGlobal\n    /// atomically donating and collecting fees in the same unlockCallback may make the inflated value more extreme\n    struct State {\n        Slot0 slot0;\n        uint256 feeGrowthGlobal0X128;\n        uint256 feeGrowthGlobal1X128;\n        uint128 liquidity;\n        mapping(int24 tick => TickInfo) ticks;\n        mapping(int16 wordPos => uint256) tickBitmap;\n        mapping(bytes32 positionKey => Position.State) positions;\n    }\n\n    /// @dev Common checks for valid tick inputs.\n    function checkTicks(int24 tickLower, int24 tickUpper) private pure {\n        if (tickLower >= tickUpper) TicksMisordered.selector.revertWith(tickLower, tickUpper);\n        if (tickLower < TickMath.MIN_TICK) TickLowerOutOfBounds.selector.revertWith(tickLower);\n        if (tickUpper > TickMath.MAX_TICK) TickUpperOutOfBounds.selector.revertWith(tickUpper);\n    }\n\n    function initialize(State storage self, uint160 sqrtPriceX96, uint24 lpFee) internal returns (int24 tick) {\n        if (self.slot0.sqrtPriceX96() != 0) PoolAlreadyInitialized.selector.revertWith();\n\n        tick = TickMath.getTickAtSqrtPrice(sqrtPriceX96);\n\n        // the initial protocolFee is 0 so doesn't need to be set\n        self.slot0 = Slot0.wrap(bytes32(0)).setSqrtPriceX96(sqrtPriceX96).setTick(tick).setLpFee(lpFee);\n    }\n\n    function setProtocolFee(State storage self, uint24 protocolFee) internal {\n        self.checkPoolInitialized();\n        self.slot0 = self.slot0.setProtocolFee(protocolFee);\n    }\n\n    /// @notice Only dynamic fee pools may update the lp fee.\n    function setLPFee(State storage self, uint24 lpFee) internal {\n        self.checkPoolInitialized();\n        self.slot0 = self.slot0.setLpFee(lpFee);\n    }\n\n    struct ModifyLiquidityParams {\n        // the address that owns the position\n        address owner;\n        // the lower and upper tick of the position\n        int24 tickLower;\n        int24 tickUpper;\n        // any change in liquidity\n        int128 liquidityDelta;\n        // the spacing between ticks\n        int24 tickSpacing;\n        // used to distinguish positions of the same owner, at the same tick range\n        bytes32 salt;\n    }\n\n    struct ModifyLiquidityState {\n        bool flippedLower;\n        uint128 liquidityGrossAfterLower;\n        bool flippedUpper;\n        uint128 liquidityGrossAfterUpper;\n    }\n\n    /// @notice Effect changes to a position in a pool\n    /// @dev PoolManager checks that the pool is initialized before calling\n    /// @param params the position details and the change to the position's liquidity to effect\n    /// @return delta the deltas of the token balances of the pool, from the liquidity change\n    /// @return feeDelta the fees generated by the liquidity range\n    function modifyLiquidity(\n        State storage self,\n        ModifyLiquidityParams memory params\n    ) internal returns (BalanceDelta delta, BalanceDelta feeDelta) {\n        int128 liquidityDelta = params.liquidityDelta;\n        int24 tickLower = params.tickLower;\n        int24 tickUpper = params.tickUpper;\n        checkTicks(tickLower, tickUpper);\n\n        {\n            ModifyLiquidityState memory state;\n\n            // if we need to update the ticks, do it\n            if (liquidityDelta != 0) {\n                (state.flippedLower, state.liquidityGrossAfterLower) = updateTick(\n                    self,\n                    tickLower,\n                    liquidityDelta,\n                    false\n                );\n                (state.flippedUpper, state.liquidityGrossAfterUpper) = updateTick(\n                    self,\n                    tickUpper,\n                    liquidityDelta,\n                    true\n                );\n\n                // `>` and `>=` are logically equivalent here but `>=` is cheaper\n                if (liquidityDelta >= 0) {\n                    uint128 maxLiquidityPerTick = tickSpacingToMaxLiquidityPerTick(params.tickSpacing);\n                    if (state.liquidityGrossAfterLower > maxLiquidityPerTick) {\n                        TickLiquidityOverflow.selector.revertWith(tickLower);\n                    }\n                    if (state.liquidityGrossAfterUpper > maxLiquidityPerTick) {\n                        TickLiquidityOverflow.selector.revertWith(tickUpper);\n                    }\n                }\n\n                if (state.flippedLower) {\n                    self.tickBitmap.flipTick(tickLower, params.tickSpacing);\n                }\n                if (state.flippedUpper) {\n                    self.tickBitmap.flipTick(tickUpper, params.tickSpacing);\n                }\n            }\n\n            {\n                (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128) = getFeeGrowthInside(\n                    self,\n                    tickLower,\n                    tickUpper\n                );\n\n                Position.State storage position = self.positions.get(params.owner, tickLower, tickUpper, params.salt);\n                (uint256 feesOwed0, uint256 feesOwed1) = position.update(\n                    liquidityDelta,\n                    feeGrowthInside0X128,\n                    feeGrowthInside1X128\n                );\n\n                // Fees earned from LPing are calculated, and returned\n                feeDelta = toBalanceDelta(feesOwed0.toInt128(), feesOwed1.toInt128());\n            }\n\n            // clear any tick data that is no longer needed\n            if (liquidityDelta < 0) {\n                if (state.flippedLower) {\n                    clearTick(self, tickLower);\n                }\n                if (state.flippedUpper) {\n                    clearTick(self, tickUpper);\n                }\n            }\n        }\n\n        if (liquidityDelta != 0) {\n            Slot0 _slot0 = self.slot0;\n            (int24 tick, uint160 sqrtPriceX96) = (_slot0.tick(), _slot0.sqrtPriceX96());\n            if (tick < tickLower) {\n                // current tick is below the passed range; liquidity can only become in range by crossing from left to\n                // right, when we'll need _more_ currency0 (it's becoming more valuable) so user must provide it\n                delta = toBalanceDelta(\n                    SqrtPriceMath\n                        .getAmount0Delta(\n                            TickMath.getSqrtPriceAtTick(tickLower),\n                            TickMath.getSqrtPriceAtTick(tickUpper),\n                            liquidityDelta\n                        )\n                        .toInt128(),\n                    0\n                );\n            } else if (tick < tickUpper) {\n                delta = toBalanceDelta(\n                    SqrtPriceMath\n                        .getAmount0Delta(sqrtPriceX96, TickMath.getSqrtPriceAtTick(tickUpper), liquidityDelta)\n                        .toInt128(),\n                    SqrtPriceMath\n                        .getAmount1Delta(TickMath.getSqrtPriceAtTick(tickLower), sqrtPriceX96, liquidityDelta)\n                        .toInt128()\n                );\n\n                self.liquidity = LiquidityMath.addDelta(self.liquidity, liquidityDelta);\n            } else {\n                // current tick is above the passed range; liquidity can only become in range by crossing from right to\n                // left, when we'll need _more_ currency1 (it's becoming more valuable) so user must provide it\n                delta = toBalanceDelta(\n                    0,\n                    SqrtPriceMath\n                        .getAmount1Delta(\n                            TickMath.getSqrtPriceAtTick(tickLower),\n                            TickMath.getSqrtPriceAtTick(tickUpper),\n                            liquidityDelta\n                        )\n                        .toInt128()\n                );\n            }\n        }\n    }\n\n    // Tracks the state of a pool throughout a swap, and returns these values at the end of the swap\n    struct SwapResult {\n        // the current sqrt(price)\n        uint160 sqrtPriceX96;\n        // the tick associated with the current price\n        int24 tick;\n        // the current liquidity in range\n        uint128 liquidity;\n    }\n\n    struct StepComputations {\n        // the price at the beginning of the step\n        uint160 sqrtPriceStartX96;\n        // the next tick to swap to from the current tick in the swap direction\n        int24 tickNext;\n        // whether tickNext is initialized or not\n        bool initialized;\n        // sqrt(price) for the next tick (1/0)\n        uint160 sqrtPriceNextX96;\n        // how much is being swapped in in this step\n        uint256 amountIn;\n        // how much is being swapped out\n        uint256 amountOut;\n        // how much fee is being paid in\n        uint256 feeAmount;\n        // the global fee growth of the input token. updated in storage at the end of swap\n        uint256 feeGrowthGlobalX128;\n    }\n\n    struct SwapParams {\n        int256 amountSpecified;\n        int24 tickSpacing;\n        bool zeroForOne;\n        uint160 sqrtPriceLimitX96;\n        uint24 lpFeeOverride;\n    }\n\n    /// @notice Executes a swap against the state, and returns the amount deltas of the pool\n    /// @dev PoolManager checks that the pool is initialized before calling\n    function swap(\n        State storage self,\n        SwapParams memory params\n    ) internal returns (BalanceDelta swapDelta, uint256 amountToProtocol, uint24 swapFee, SwapResult memory result) {\n        Slot0 slot0Start = self.slot0;\n        bool zeroForOne = params.zeroForOne;\n\n        uint256 protocolFee = zeroForOne\n            ? slot0Start.protocolFee().getZeroForOneFee()\n            : slot0Start.protocolFee().getOneForZeroFee();\n\n        // the amount remaining to be swapped in/out of the input/output asset. initially set to the amountSpecified\n        int256 amountSpecifiedRemaining = params.amountSpecified;\n        // the amount swapped out/in of the output/input asset. initially set to 0\n        int256 amountCalculated = 0;\n        // initialize to the current sqrt(price)\n        result.sqrtPriceX96 = slot0Start.sqrtPriceX96();\n        // initialize to the current tick\n        result.tick = slot0Start.tick();\n        // initialize to the current liquidity\n        result.liquidity = self.liquidity;\n\n        // if the beforeSwap hook returned a valid fee override, use that as the LP fee, otherwise load from storage\n        // lpFee, swapFee, and protocolFee are all in pips\n        {\n            uint24 lpFee = params.lpFeeOverride.isOverride()\n                ? params.lpFeeOverride.removeOverrideFlagAndValidate()\n                : slot0Start.lpFee();\n\n            swapFee = protocolFee == 0 ? lpFee : uint16(protocolFee).calculateSwapFee(lpFee);\n        }\n\n        // a swap fee totaling MAX_SWAP_FEE (100%) makes exact output swaps impossible since the input is entirely consumed by the fee\n        if (swapFee >= SwapMath.MAX_SWAP_FEE) {\n            // if exactOutput\n            if (params.amountSpecified > 0) {\n                InvalidFeeForExactOut.selector.revertWith();\n            }\n        }\n\n        // swapFee is the pool's fee in pips (LP fee + protocol fee)\n        // when the amount swapped is 0, there is no protocolFee applied and the fee amount paid to the protocol is set to 0\n        if (params.amountSpecified == 0) return (BalanceDeltaLibrary.ZERO_DELTA, 0, swapFee, result);\n\n        if (zeroForOne) {\n            if (params.sqrtPriceLimitX96 >= slot0Start.sqrtPriceX96()) {\n                PriceLimitAlreadyExceeded.selector.revertWith(slot0Start.sqrtPriceX96(), params.sqrtPriceLimitX96);\n            }\n            // Swaps can never occur at MIN_TICK, only at MIN_TICK + 1, except at initialization of a pool\n            // Under certain circumstances outlined below, the tick will preemptively reach MIN_TICK without swapping there\n            if (params.sqrtPriceLimitX96 <= TickMath.MIN_SQRT_PRICE) {\n                PriceLimitOutOfBounds.selector.revertWith(params.sqrtPriceLimitX96);\n            }\n        } else {\n            if (params.sqrtPriceLimitX96 <= slot0Start.sqrtPriceX96()) {\n                PriceLimitAlreadyExceeded.selector.revertWith(slot0Start.sqrtPriceX96(), params.sqrtPriceLimitX96);\n            }\n            if (params.sqrtPriceLimitX96 >= TickMath.MAX_SQRT_PRICE) {\n                PriceLimitOutOfBounds.selector.revertWith(params.sqrtPriceLimitX96);\n            }\n        }\n\n        StepComputations memory step;\n        step.feeGrowthGlobalX128 = zeroForOne ? self.feeGrowthGlobal0X128 : self.feeGrowthGlobal1X128;\n\n        // continue swapping as long as we haven't used the entire input/output and haven't reached the price limit\n        while (!(amountSpecifiedRemaining == 0 || result.sqrtPriceX96 == params.sqrtPriceLimitX96)) {\n            step.sqrtPriceStartX96 = result.sqrtPriceX96;\n\n            (step.tickNext, step.initialized) = self.tickBitmap.nextInitializedTickWithinOneWord(\n                result.tick,\n                params.tickSpacing,\n                zeroForOne\n            );\n\n            // ensure that we do not overshoot the min/max tick, as the tick bitmap is not aware of these bounds\n            if (step.tickNext <= TickMath.MIN_TICK) {\n                step.tickNext = TickMath.MIN_TICK;\n            }\n            if (step.tickNext >= TickMath.MAX_TICK) {\n                step.tickNext = TickMath.MAX_TICK;\n            }\n\n            // get the price for the next tick\n            step.sqrtPriceNextX96 = TickMath.getSqrtPriceAtTick(step.tickNext);\n\n            // compute values to swap to the target tick, price limit, or point where input/output amount is exhausted\n            (result.sqrtPriceX96, step.amountIn, step.amountOut, step.feeAmount) = SwapMath.computeSwapStep(\n                result.sqrtPriceX96,\n                SwapMath.getSqrtPriceTarget(zeroForOne, step.sqrtPriceNextX96, params.sqrtPriceLimitX96),\n                result.liquidity,\n                amountSpecifiedRemaining,\n                swapFee\n            );\n\n            // if exactOutput\n            if (params.amountSpecified > 0) {\n                unchecked {\n                    amountSpecifiedRemaining -= step.amountOut.toInt256();\n                }\n                amountCalculated -= (step.amountIn + step.feeAmount).toInt256();\n            } else {\n                // safe because we test that amountSpecified > amountIn + feeAmount in SwapMath\n                unchecked {\n                    amountSpecifiedRemaining += (step.amountIn + step.feeAmount).toInt256();\n                }\n                amountCalculated += step.amountOut.toInt256();\n            }\n\n            // if the protocol fee is on, calculate how much is owed, decrement feeAmount, and increment protocolFee\n            if (protocolFee > 0) {\n                unchecked {\n                    // step.amountIn does not include the swap fee, as it's already been taken from it,\n                    // so add it back to get the total amountIn and use that to calculate the amount of fees owed to the protocol\n                    // cannot overflow due to limits on the size of protocolFee and params.amountSpecified\n                    // this rounds down to favor LPs over the protocol\n                    uint256 delta = (swapFee == protocolFee)\n                        ? step.feeAmount // lp fee is 0, so the entire fee is owed to the protocol instead\n                        : ((step.amountIn + step.feeAmount) * protocolFee) / ProtocolFeeLibrary.PIPS_DENOMINATOR;\n                    // subtract it from the total fee and add it to the protocol fee\n                    step.feeAmount -= delta;\n                    amountToProtocol += delta;\n                }\n            }\n\n            // update global fee tracker\n            if (result.liquidity > 0) {\n                unchecked {\n                    // FullMath.mulDiv isn't needed as the numerator can't overflow uint256 since tokens have a max supply of type(uint128).max\n                    step.feeGrowthGlobalX128 += UnsafeMath.simpleMulDiv(\n                        step.feeAmount,\n                        FixedPoint128.Q128,\n                        result.liquidity\n                    );\n                }\n            }\n\n            // Shift tick if we reached the next price, and preemptively decrement for zeroForOne swaps to tickNext - 1.\n            // If the swap doesn't continue (if amountRemaining == 0 or sqrtPriceLimit is met), slot0.tick will be 1 less\n            // than getTickAtSqrtPrice(slot0.sqrtPrice). This doesn't affect swaps, but donation calls should verify both\n            // price and tick to reward the correct LPs.\n            if (result.sqrtPriceX96 == step.sqrtPriceNextX96) {\n                // if the tick is initialized, run the tick transition\n                if (step.initialized) {\n                    (uint256 feeGrowthGlobal0X128, uint256 feeGrowthGlobal1X128) = zeroForOne\n                        ? (step.feeGrowthGlobalX128, self.feeGrowthGlobal1X128)\n                        : (self.feeGrowthGlobal0X128, step.feeGrowthGlobalX128);\n                    int128 liquidityNet = Pool.crossTick(\n                        self,\n                        step.tickNext,\n                        feeGrowthGlobal0X128,\n                        feeGrowthGlobal1X128\n                    );\n                    // if we're moving leftward, we interpret liquidityNet as the opposite sign\n                    // safe because liquidityNet cannot be type(int128).min\n                    unchecked {\n                        if (zeroForOne) liquidityNet = -liquidityNet;\n                    }\n\n                    result.liquidity = LiquidityMath.addDelta(result.liquidity, liquidityNet);\n                }\n\n                unchecked {\n                    result.tick = zeroForOne ? step.tickNext - 1 : step.tickNext;\n                }\n            } else if (result.sqrtPriceX96 != step.sqrtPriceStartX96) {\n                // recompute unless we're on a lower tick boundary (i.e. already transitioned ticks), and haven't moved\n                result.tick = TickMath.getTickAtSqrtPrice(result.sqrtPriceX96);\n            }\n        }\n\n        self.slot0 = slot0Start.setTick(result.tick).setSqrtPriceX96(result.sqrtPriceX96);\n\n        // update liquidity if it changed\n        if (self.liquidity != result.liquidity) self.liquidity = result.liquidity;\n\n        // update fee growth global\n        if (!zeroForOne) {\n            self.feeGrowthGlobal1X128 = step.feeGrowthGlobalX128;\n        } else {\n            self.feeGrowthGlobal0X128 = step.feeGrowthGlobalX128;\n        }\n\n        unchecked {\n            // \"if currency1 is specified\"\n            if (zeroForOne != (params.amountSpecified < 0)) {\n                swapDelta = toBalanceDelta(\n                    amountCalculated.toInt128(),\n                    (params.amountSpecified - amountSpecifiedRemaining).toInt128()\n                );\n            } else {\n                swapDelta = toBalanceDelta(\n                    (params.amountSpecified - amountSpecifiedRemaining).toInt128(),\n                    amountCalculated.toInt128()\n                );\n            }\n        }\n    }\n\n    /// @notice Donates the given amount of currency0 and currency1 to the pool\n    function donate(State storage state, uint256 amount0, uint256 amount1) internal returns (BalanceDelta delta) {\n        uint128 liquidity = state.liquidity;\n        if (liquidity == 0) NoLiquidityToReceiveFees.selector.revertWith();\n        unchecked {\n            // negation safe as amount0 and amount1 are always positive\n            delta = toBalanceDelta(-(amount0.toInt128()), -(amount1.toInt128()));\n            // FullMath.mulDiv is unnecessary because the numerator is bounded by type(int128).max * Q128, which is less than type(uint256).max\n            if (amount0 > 0) {\n                state.feeGrowthGlobal0X128 += UnsafeMath.simpleMulDiv(amount0, FixedPoint128.Q128, liquidity);\n            }\n            if (amount1 > 0) {\n                state.feeGrowthGlobal1X128 += UnsafeMath.simpleMulDiv(amount1, FixedPoint128.Q128, liquidity);\n            }\n        }\n    }\n\n    /// @notice Retrieves fee growth data\n    /// @param self The Pool state struct\n    /// @param tickLower The lower tick boundary of the position\n    /// @param tickUpper The upper tick boundary of the position\n    /// @return feeGrowthInside0X128 The all-time fee growth in token0, per unit of liquidity, inside the position's tick boundaries\n    /// @return feeGrowthInside1X128 The all-time fee growth in token1, per unit of liquidity, inside the position's tick boundaries\n    function getFeeGrowthInside(\n        State storage self,\n        int24 tickLower,\n        int24 tickUpper\n    ) internal view returns (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128) {\n        TickInfo storage lower = self.ticks[tickLower];\n        TickInfo storage upper = self.ticks[tickUpper];\n        int24 tickCurrent = self.slot0.tick();\n\n        unchecked {\n            if (tickCurrent < tickLower) {\n                feeGrowthInside0X128 = lower.feeGrowthOutside0X128 - upper.feeGrowthOutside0X128;\n                feeGrowthInside1X128 = lower.feeGrowthOutside1X128 - upper.feeGrowthOutside1X128;\n            } else if (tickCurrent >= tickUpper) {\n                feeGrowthInside0X128 = upper.feeGrowthOutside0X128 - lower.feeGrowthOutside0X128;\n                feeGrowthInside1X128 = upper.feeGrowthOutside1X128 - lower.feeGrowthOutside1X128;\n            } else {\n                feeGrowthInside0X128 =\n                    self.feeGrowthGlobal0X128 -\n                    lower.feeGrowthOutside0X128 -\n                    upper.feeGrowthOutside0X128;\n                feeGrowthInside1X128 =\n                    self.feeGrowthGlobal1X128 -\n                    lower.feeGrowthOutside1X128 -\n                    upper.feeGrowthOutside1X128;\n            }\n        }\n    }\n\n    /// @notice Updates a tick and returns true if the tick was flipped from initialized to uninitialized, or vice versa\n    /// @param self The mapping containing all tick information for initialized ticks\n    /// @param tick The tick that will be updated\n    /// @param liquidityDelta A new amount of liquidity to be added (subtracted) when tick is crossed from left to right (right to left)\n    /// @param upper true for updating a position's upper tick, or false for updating a position's lower tick\n    /// @return flipped Whether the tick was flipped from initialized to uninitialized, or vice versa\n    /// @return liquidityGrossAfter The total amount of liquidity for all positions that references the tick after the update\n    function updateTick(\n        State storage self,\n        int24 tick,\n        int128 liquidityDelta,\n        bool upper\n    ) internal returns (bool flipped, uint128 liquidityGrossAfter) {\n        TickInfo storage info = self.ticks[tick];\n\n        uint128 liquidityGrossBefore = info.liquidityGross;\n        int128 liquidityNetBefore = info.liquidityNet;\n\n        liquidityGrossAfter = LiquidityMath.addDelta(liquidityGrossBefore, liquidityDelta);\n\n        flipped = (liquidityGrossAfter == 0) != (liquidityGrossBefore == 0);\n\n        if (liquidityGrossBefore == 0) {\n            // by convention, we assume that all growth before a tick was initialized happened _below_ the tick\n            if (tick <= self.slot0.tick()) {\n                info.feeGrowthOutside0X128 = self.feeGrowthGlobal0X128;\n                info.feeGrowthOutside1X128 = self.feeGrowthGlobal1X128;\n            }\n        }\n\n        // when the lower (upper) tick is crossed left to right, liquidity must be added (removed)\n        // when the lower (upper) tick is crossed right to left, liquidity must be removed (added)\n        int128 liquidityNet = upper ? liquidityNetBefore - liquidityDelta : liquidityNetBefore + liquidityDelta;\n        assembly (\"memory-safe\") {\n            // liquidityGrossAfter and liquidityNet are packed in the first slot of `info`\n            // So we can store them with a single sstore by packing them ourselves first\n            sstore(\n                info.slot,\n                // bitwise OR to pack liquidityGrossAfter and liquidityNet\n                or(\n                    // Put liquidityGrossAfter in the lower bits, clearing out the upper bits\n                    and(liquidityGrossAfter, 0xffffffffffffffffffffffffffffffff),\n                    // Shift liquidityNet to put it in the upper bits (no need for signextend since we're shifting left)\n                    shl(128, liquidityNet)\n                )\n            )\n        }\n    }\n\n    /// @notice Derives max liquidity per tick from given tick spacing\n    /// @dev Executed when adding liquidity\n    /// @param tickSpacing The amount of required tick separation, realized in multiples of `tickSpacing`\n    ///     e.g., a tickSpacing of 3 requires ticks to be initialized every 3rd tick i.e., ..., -6, -3, 0, 3, 6, ...\n    /// @return result The max liquidity per tick\n    function tickSpacingToMaxLiquidityPerTick(int24 tickSpacing) internal pure returns (uint128 result) {\n        // Equivalent to:\n        // int24 minTick = (TickMath.MIN_TICK / tickSpacing);\n        // if (TickMath.MIN_TICK  % tickSpacing != 0) minTick--;\n        // int24 maxTick = (TickMath.MAX_TICK / tickSpacing);\n        // uint24 numTicks = maxTick - minTick + 1;\n        // return type(uint128).max / numTicks;\n        int24 MAX_TICK = TickMath.MAX_TICK;\n        int24 MIN_TICK = TickMath.MIN_TICK;\n        // tick spacing will never be 0 since TickMath.MIN_TICK_SPACING is 1\n        assembly (\"memory-safe\") {\n            tickSpacing := signextend(2, tickSpacing)\n            let minTick := sub(sdiv(MIN_TICK, tickSpacing), slt(smod(MIN_TICK, tickSpacing), 0))\n            let maxTick := sdiv(MAX_TICK, tickSpacing)\n            let numTicks := add(sub(maxTick, minTick), 1)\n            result := div(sub(shl(128, 1), 1), numTicks)\n        }\n    }\n\n    /// @notice Reverts if the given pool has not been initialized\n    function checkPoolInitialized(State storage self) internal view {\n        if (self.slot0.sqrtPriceX96() == 0) PoolNotInitialized.selector.revertWith();\n    }\n\n    /// @notice Clears tick data\n    /// @param self The mapping containing all initialized tick information for initialized ticks\n    /// @param tick The tick that will be cleared\n    function clearTick(State storage self, int24 tick) internal {\n        delete self.ticks[tick];\n    }\n\n    /// @notice Transitions to next tick as needed by price movement\n    /// @param self The Pool state struct\n    /// @param tick The destination tick of the transition\n    /// @param feeGrowthGlobal0X128 The all-time global fee growth, per unit of liquidity, in token0\n    /// @param feeGrowthGlobal1X128 The all-time global fee growth, per unit of liquidity, in token1\n    /// @return liquidityNet The amount of liquidity added (subtracted) when tick is crossed from left to right (right to left)\n    function crossTick(\n        State storage self,\n        int24 tick,\n        uint256 feeGrowthGlobal0X128,\n        uint256 feeGrowthGlobal1X128\n    ) internal returns (int128 liquidityNet) {\n        unchecked {\n            TickInfo storage info = self.ticks[tick];\n            info.feeGrowthOutside0X128 = feeGrowthGlobal0X128 - info.feeGrowthOutside0X128;\n            info.feeGrowthOutside1X128 = feeGrowthGlobal1X128 - info.feeGrowthOutside1X128;\n            liquidityNet = info.liquidityNet;\n        }\n    }\n}\n",
+    "newText": "// SPDX-License-Identifier: BUSL-1.1\npragma solidity ^0.8.0;\n\nimport {SafeCast} from \"./SafeCast.sol\";\nimport {TickBitmap} from \"./TickBitmap.sol\";\nimport {Position} from \"./Position.sol\";\nimport {UnsafeMath} from \"./UnsafeMath.sol\";\nimport {FixedPoint128} from \"./FixedPoint128.sol\";\nimport {TickMath} from \"./TickMath.sol\";\nimport {SqrtPriceMath} from \"./SqrtPriceMath.sol\";\nimport {SwapMath} from \"./SwapMath.sol\";\nimport {BalanceDelta, toBalanceDelta, BalanceDeltaLibrary} from \"../types/BalanceDelta.sol\";\nimport {Slot0} from \"../types/Slot0.sol\";\nimport {ProtocolFeeLibrary} from \"./ProtocolFeeLibrary.sol\";\nimport {LiquidityMath} from \"./LiquidityMath.sol\";\nimport {LPFeeLibrary} from \"./LPFeeLibrary.sol\";\nimport {CustomRevert} from \"./CustomRevert.sol\";\n\n/// @notice a library with all actions that can be performed on a pool\nlibrary Pool {\n    using SafeCast for *;\n    using TickBitmap for mapping(int16 => uint256);\n    using Position for mapping(bytes32 => Position.State);\n    using Position for Position.State;\n    using Pool for State;\n    using ProtocolFeeLibrary for *;\n    using LPFeeLibrary for uint24;\n    using CustomRevert for bytes4;\n\n    /// @notice Thrown when tickLower is not below tickUpper\n    /// @param tickLower The invalid tickLower\n    /// @param tickUpper The invalid tickUpper\n    error TicksMisordered(int24 tickLower, int24 tickUpper);\n\n    /// @notice Thrown when tickLower is less than min tick\n    /// @param tickLower The invalid tickLower\n    error TickLowerOutOfBounds(int24 tickLower);\n\n    /// @notice Thrown when tickUpper exceeds max tick\n    /// @param tickUpper The invalid tickUpper\n    error TickUpperOutOfBounds(int24 tickUpper);\n\n    /// @notice For the tick spacing, the tick has too much liquidity\n    error TickLiquidityOverflow(int24 tick);\n\n    /// @notice Thrown when trying to initialize an already initialized pool\n    error PoolAlreadyInitialized();\n\n    /// @notice Thrown when trying to interact with a non-initialized pool\n    error PoolNotInitialized();\n\n    /// @notice Thrown when sqrtPriceLimitX96 on a swap has already exceeded its limit\n    /// @param sqrtPriceCurrentX96 The invalid, already surpassed sqrtPriceLimitX96\n    /// @param sqrtPriceLimitX96 The surpassed price limit\n    error PriceLimitAlreadyExceeded(uint160 sqrtPriceCurrentX96, uint160 sqrtPriceLimitX96);\n\n    /// @notice Thrown when sqrtPriceLimitX96 lies outside of valid tick/price range\n    /// @param sqrtPriceLimitX96 The invalid, out-of-bounds sqrtPriceLimitX96\n    error PriceLimitOutOfBounds(uint160 sqrtPriceLimitX96);\n\n    /// @notice Thrown by donate if there is currently 0 liquidity, since the fees will not go to any liquidity providers\n    error NoLiquidityToReceiveFees();\n\n    /// @notice Thrown when trying to swap with max lp fee and specifying an output amount\n    error InvalidFeeForExactOut();\n\n    // info stored for each initialized individual tick\n    struct TickInfo {\n        // the total position liquidity that references this tick\n        uint128 liquidityGross;\n        // amount of net liquidity added (subtracted) when tick is crossed from left to right (right to left),\n        int128 liquidityNet;\n        // fee growth per unit of liquidity on the _other_ side of this tick (relative to the current tick)\n        // only has relative meaning, not absolute — the value depends on when the tick is initialized\n        uint256 feeGrowthOutside0X128;\n        uint256 feeGrowthOutside1X128;\n    }\n\n    /// @notice The state of a pool\n    /// @dev Note that feeGrowthGlobal can be artificially inflated\n    /// For pools with a single liquidity position, actors can donate to themselves to freely inflate feeGrowthGlobal\n    /// atomically donating and collecting fees in the same unlockCallback may make the inflated value more extreme\n    struct State {\n        Slot0 slot0;\n        uint256 feeGrowthGlobal0X128;\n        uint256 feeGrowthGlobal1X128;\n        uint128 liquidity;\n        mapping(int24 tick => TickInfo) ticks;\n        mapping(int16 wordPos => uint256) tickBitmap;\n        mapping(bytes32 positionKey => Position.State) positions;\n    }\n\n    /// @dev Common checks for valid tick inputs.\n    function checkTicks(int24 tickLower, int24 tickUpper) private pure {\n        if (tickLower >= tickUpper) TicksMisordered.selector.revertWith(tickLower, tickUpper);\n        if (tickLower < TickMath.MIN_TICK) TickLowerOutOfBounds.selector.revertWith(tickLower);\n        if (tickUpper > TickMath.MAX_TICK) TickUpperOutOfBounds.selector.revertWith(tickUpper);\n    }\n\n    function initialize(State storage self, uint160 sqrtPriceX96, uint24 lpFee) internal returns (int24 tick) {\n        if (self.slot0.sqrtPriceX96() != 0) PoolAlreadyInitialized.selector.revertWith();\n\n        tick = TickMath.getTickAtSqrtPrice(sqrtPriceX96);\n\n        // the initial protocolFee is 0 so doesn't need to be set\n        self.slot0 = Slot0.wrap(bytes32(0)).setSqrtPriceX96(sqrtPriceX96).setTick(tick).setLpFee(lpFee);\n    }\n\n    function setProtocolFee(State storage self, uint24 protocolFee) internal {\n        self.checkPoolInitialized();\n        self.slot0 = self.slot0.setProtocolFee(protocolFee);\n    }\n\n    /// @notice Only dynamic fee pools may update the lp fee.\n    function setLPFee(State storage self, uint24 lpFee) internal {\n        self.checkPoolInitialized();\n        self.slot0 = self.slot0.setLpFee(lpFee);\n    }\n\n    struct ModifyLiquidityParams {\n        // the address that owns the position\n        address owner;\n        // the lower and upper tick of the position\n        int24 tickLower;\n        int24 tickUpper;\n        // any change in liquidity\n        int128 liquidityDelta;\n        // the spacing between ticks\n        int24 tickSpacing;\n        // used to distinguish positions of the same owner, at the same tick range\n        bytes32 salt;\n    }\n\n    struct ModifyLiquidityState {\n        bool flippedLower;\n        uint128 liquidityGrossAfterLower;\n        bool flippedUpper;\n        uint128 liquidityGrossAfterUpper;\n    }\n\n    /// @notice Effect changes to a position in a pool\n    /// @dev PoolManager checks that the pool is initialized before calling\n    /// @param params the position details and the change to the position's liquidity to effect\n    /// @return delta the deltas of the token balances of the pool, from the liquidity change\n    /// @return feeDelta the fees generated by the liquidity range\n    function modifyLiquidity(State storage self, ModifyLiquidityParams memory params)\n        internal\n        returns (BalanceDelta delta, BalanceDelta feeDelta)\n    {\n        int128 liquidityDelta = params.liquidityDelta;\n        int24 tickLower = params.tickLower;\n        int24 tickUpper = params.tickUpper;\n        checkTicks(tickLower, tickUpper);\n\n        {\n            ModifyLiquidityState memory state;\n\n            // if we need to update the ticks, do it\n            if (liquidityDelta != 0) {\n                (state.flippedLower, state.liquidityGrossAfterLower) =\n                    updateTick(self, tickLower, liquidityDelta, false);\n                (state.flippedUpper, state.liquidityGrossAfterUpper) = updateTick(self, tickUpper, liquidityDelta, true);\n\n                // `>` and `>=` are logically equivalent here but `>=` is cheaper\n                if (liquidityDelta >= 0) {\n                    uint128 maxLiquidityPerTick = tickSpacingToMaxLiquidityPerTick(params.tickSpacing);\n                    if (state.liquidityGrossAfterLower > maxLiquidityPerTick) {\n                        TickLiquidityOverflow.selector.revertWith(tickLower);\n                    }\n                    if (state.liquidityGrossAfterUpper > maxLiquidityPerTick) {\n                        TickLiquidityOverflow.selector.revertWith(tickUpper);\n                    }\n                }\n\n                if (state.flippedLower) {\n                    self.tickBitmap.flipTick(tickLower, params.tickSpacing);\n                }\n                if (state.flippedUpper) {\n                    self.tickBitmap.flipTick(tickUpper, params.tickSpacing);\n                }\n            }\n\n            {\n                (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128) =\n                    getFeeGrowthInside(self, tickLower, tickUpper);\n\n                Position.State storage position = self.positions.get(params.owner, tickLower, tickUpper, params.salt);\n                (uint256 feesOwed0, uint256 feesOwed1) =\n                    position.update(liquidityDelta, feeGrowthInside0X128, feeGrowthInside1X128);\n\n                // Fees earned from LPing are calculated, and returned\n                feeDelta = toBalanceDelta(feesOwed0.toInt128(), feesOwed1.toInt128());\n            }\n\n            // clear any tick data that is no longer needed\n            if (liquidityDelta < 0) {\n                if (state.flippedLower) {\n                    clearTick(self, tickLower);\n                }\n                if (state.flippedUpper) {\n                    clearTick(self, tickUpper);\n                }\n            }\n        }\n\n        if (liquidityDelta != 0) {\n            Slot0 _slot0 = self.slot0;\n            (int24 tick, uint160 sqrtPriceX96) = (_slot0.tick(), _slot0.sqrtPriceX96());\n            if (tick < tickLower) {\n                // current tick is below the passed range; liquidity can only become in range by crossing from left to\n                // right, when we'll need _more_ currency0 (it's becoming more valuable) so user must provide it\n                delta = toBalanceDelta(\n                    SqrtPriceMath.getAmount0Delta(\n                            TickMath.getSqrtPriceAtTick(tickLower),\n                            TickMath.getSqrtPriceAtTick(tickUpper),\n                            liquidityDelta\n                        ).toInt128(),\n                    0\n                );\n            } else if (tick < tickUpper) {\n                delta = toBalanceDelta(\n                    SqrtPriceMath.getAmount0Delta(sqrtPriceX96, TickMath.getSqrtPriceAtTick(tickUpper), liquidityDelta)\n                        .toInt128(),\n                    SqrtPriceMath.getAmount1Delta(TickMath.getSqrtPriceAtTick(tickLower), sqrtPriceX96, liquidityDelta)\n                        .toInt128()\n                );\n\n                self.liquidity = LiquidityMath.addDelta(self.liquidity, liquidityDelta);\n            } else {\n                // current tick is above the passed range; liquidity can only become in range by crossing from right to\n                // left, when we'll need _more_ currency1 (it's becoming more valuable) so user must provide it\n                delta = toBalanceDelta(\n                    0,\n                    SqrtPriceMath.getAmount1Delta(\n                            TickMath.getSqrtPriceAtTick(tickLower),\n                            TickMath.getSqrtPriceAtTick(tickUpper),\n                            liquidityDelta\n                        ).toInt128()\n                );\n            }\n        }\n    }\n\n    // Tracks the state of a pool throughout a swap, and returns these values at the end of the swap\n    struct SwapResult {\n        // the current sqrt(price)\n        uint160 sqrtPriceX96;\n        // the tick associated with the current price\n        int24 tick;\n        // the current liquidity in range\n        uint128 liquidity;\n    }\n\n    struct StepComputations {\n        // the price at the beginning of the step\n        uint160 sqrtPriceStartX96;\n        // the next tick to swap to from the current tick in the swap direction\n        int24 tickNext;\n        // whether tickNext is initialized or not\n        bool initialized;\n        // sqrt(price) for the next tick (1/0)\n        uint160 sqrtPriceNextX96;\n        // how much is being swapped in in this step\n        uint256 amountIn;\n        // how much is being swapped out\n        uint256 amountOut;\n        // how much fee is being paid in\n        uint256 feeAmount;\n        // the global fee growth of the input token. updated in storage at the end of swap\n        uint256 feeGrowthGlobalX128;\n    }\n\n    struct SwapParams {\n        int256 amountSpecified;\n        int24 tickSpacing;\n        bool zeroForOne;\n        uint160 sqrtPriceLimitX96;\n        uint24 lpFeeOverride;\n    }\n\n    /// @notice Executes a swap against the state, and returns the amount deltas of the pool\n    /// @dev PoolManager checks that the pool is initialized before calling\n    function swap(State storage self, SwapParams memory params)\n        internal\n        returns (BalanceDelta swapDelta, uint256 amountToProtocol, uint24 swapFee, SwapResult memory result)\n    {\n        Slot0 slot0Start = self.slot0;\n        bool zeroForOne = params.zeroForOne;\n\n        uint256 protocolFee =\n            zeroForOne ? slot0Start.protocolFee().getZeroForOneFee() : slot0Start.protocolFee().getOneForZeroFee();\n\n        // the amount remaining to be swapped in/out of the input/output asset. initially set to the amountSpecified\n        int256 amountSpecifiedRemaining = params.amountSpecified;\n        // the amount swapped out/in of the output/input asset. initially set to 0\n        int256 amountCalculated = 0;\n        // initialize to the current sqrt(price)\n        result.sqrtPriceX96 = slot0Start.sqrtPriceX96();\n        // initialize to the current tick\n        result.tick = slot0Start.tick();\n        // initialize to the current liquidity\n        result.liquidity = self.liquidity;\n\n        // if the beforeSwap hook returned a valid fee override, use that as the LP fee, otherwise load from storage\n        // lpFee, swapFee, and protocolFee are all in pips\n        {\n            uint24 lpFee = params.lpFeeOverride.isOverride()\n                ? params.lpFeeOverride.removeOverrideFlagAndValidate()\n                : slot0Start.lpFee();\n\n            swapFee = protocolFee == 0 ? lpFee : uint16(protocolFee).calculateSwapFee(lpFee);\n        }\n\n        // a swap fee totaling MAX_SWAP_FEE (100%) makes exact output swaps impossible since the input is entirely consumed by the fee\n        if (swapFee >= SwapMath.MAX_SWAP_FEE) {\n            // if exactOutput\n            if (params.amountSpecified > 0) {\n                InvalidFeeForExactOut.selector.revertWith();\n            }\n        }\n\n        // swapFee is the pool's fee in pips (LP fee + protocol fee)\n        // when the amount swapped is 0, there is no protocolFee applied and the fee amount paid to the protocol is set to 0\n        if (params.amountSpecified == 0) return (BalanceDeltaLibrary.ZERO_DELTA, 0, swapFee, result);\n\n        if (zeroForOne) {\n            if (params.sqrtPriceLimitX96 >= slot0Start.sqrtPriceX96()) {\n                PriceLimitAlreadyExceeded.selector.revertWith(slot0Start.sqrtPriceX96(), params.sqrtPriceLimitX96);\n            }\n            // Swaps can never occur at MIN_TICK, only at MIN_TICK + 1, except at initialization of a pool\n            // Under certain circumstances outlined below, the tick will preemptively reach MIN_TICK without swapping there\n            if (params.sqrtPriceLimitX96 <= TickMath.MIN_SQRT_PRICE) {\n                PriceLimitOutOfBounds.selector.revertWith(params.sqrtPriceLimitX96);\n            }\n        } else {\n            if (params.sqrtPriceLimitX96 <= slot0Start.sqrtPriceX96()) {\n                PriceLimitAlreadyExceeded.selector.revertWith(slot0Start.sqrtPriceX96(), params.sqrtPriceLimitX96);\n            }\n            if (params.sqrtPriceLimitX96 >= TickMath.MAX_SQRT_PRICE) {\n                PriceLimitOutOfBounds.selector.revertWith(params.sqrtPriceLimitX96);\n            }\n        }\n\n        StepComputations memory step;\n        step.feeGrowthGlobalX128 = zeroForOne ? self.feeGrowthGlobal0X128 : self.feeGrowthGlobal1X128;\n\n        // continue swapping as long as we haven't used the entire input/output and haven't reached the price limit\n        while (!(amountSpecifiedRemaining == 0 || result.sqrtPriceX96 == params.sqrtPriceLimitX96)) {\n            step.sqrtPriceStartX96 = result.sqrtPriceX96;\n\n            (step.tickNext, step.initialized) =\n                self.tickBitmap.nextInitializedTickWithinOneWord(result.tick, params.tickSpacing, zeroForOne);\n\n            // ensure that we do not overshoot the min/max tick, as the tick bitmap is not aware of these bounds\n            if (step.tickNext <= TickMath.MIN_TICK) {\n                step.tickNext = TickMath.MIN_TICK;\n            }\n            if (step.tickNext >= TickMath.MAX_TICK) {\n                step.tickNext = TickMath.MAX_TICK;\n            }\n\n            // get the price for the next tick\n            step.sqrtPriceNextX96 = TickMath.getSqrtPriceAtTick(step.tickNext);\n\n            // compute values to swap to the target tick, price limit, or point where input/output amount is exhausted\n            (result.sqrtPriceX96, step.amountIn, step.amountOut, step.feeAmount) = SwapMath.computeSwapStep(\n                result.sqrtPriceX96,\n                SwapMath.getSqrtPriceTarget(zeroForOne, step.sqrtPriceNextX96, params.sqrtPriceLimitX96),\n                result.liquidity,\n                amountSpecifiedRemaining,\n                swapFee\n            );\n\n            // if exactOutput\n            if (params.amountSpecified > 0) {\n                unchecked {\n                    amountSpecifiedRemaining -= step.amountOut.toInt256();\n                }\n                amountCalculated -= (step.amountIn + step.feeAmount).toInt256();\n            } else {\n                // safe because we test that amountSpecified > amountIn + feeAmount in SwapMath\n                unchecked {\n                    amountSpecifiedRemaining += (step.amountIn + step.feeAmount).toInt256();\n                }\n                amountCalculated += step.amountOut.toInt256();\n            }\n\n            // if the protocol fee is on, calculate how much is owed, decrement feeAmount, and increment protocolFee\n            if (protocolFee > 0) {\n                unchecked {\n                    // step.amountIn does not include the swap fee, as it's already been taken from it,\n                    // so add it back to get the total amountIn and use that to calculate the amount of fees owed to the protocol\n                    // cannot overflow due to limits on the size of protocolFee and params.amountSpecified\n                    // this rounds down to favor LPs over the protocol\n                    uint256 delta = (swapFee == protocolFee)\n                        ? step.feeAmount  // lp fee is 0, so the entire fee is owed to the protocol instead\n                        : (step.amountIn + step.feeAmount) * protocolFee / ProtocolFeeLibrary.PIPS_DENOMINATOR;\n                    // subtract it from the total fee and add it to the protocol fee\n                    step.feeAmount -= delta;\n                    amountToProtocol += delta;\n                }\n            }\n\n            // update global fee tracker\n            if (result.liquidity > 0) {\n                unchecked {\n                    // FullMath.mulDiv isn't needed as the numerator can't overflow uint256 since tokens have a max supply of type(uint128).max\n                    step.feeGrowthGlobalX128 += UnsafeMath.simpleMulDiv(\n                        step.feeAmount, FixedPoint128.Q128, result.liquidity\n                    );\n                }\n            }\n\n            // Shift tick if we reached the next price, and preemptively decrement for zeroForOne swaps to tickNext - 1.\n            // If the swap doesn't continue (if amountRemaining == 0 or sqrtPriceLimit is met), slot0.tick will be 1 less\n            // than getTickAtSqrtPrice(slot0.sqrtPrice). This doesn't affect swaps, but donation calls should verify both\n            // price and tick to reward the correct LPs.\n            if (result.sqrtPriceX96 == step.sqrtPriceNextX96) {\n                // if the tick is initialized, run the tick transition\n                if (step.initialized) {\n                    (uint256 feeGrowthGlobal0X128, uint256 feeGrowthGlobal1X128) = zeroForOne\n                        ? (step.feeGrowthGlobalX128, self.feeGrowthGlobal1X128)\n                        : (self.feeGrowthGlobal0X128, step.feeGrowthGlobalX128);\n                    int128 liquidityNet =\n                        Pool.crossTick(self, step.tickNext, feeGrowthGlobal0X128, feeGrowthGlobal1X128);\n                    // if we're moving leftward, we interpret liquidityNet as the opposite sign\n                    // safe because liquidityNet cannot be type(int128).min\n                    unchecked {\n                        if (zeroForOne) liquidityNet = -liquidityNet;\n                    }\n\n                    result.liquidity = LiquidityMath.addDelta(result.liquidity, liquidityNet);\n                }\n\n                unchecked {\n                    result.tick = zeroForOne ? step.tickNext - 1 : step.tickNext;\n                }\n            } else if (result.sqrtPriceX96 != step.sqrtPriceStartX96) {\n                // recompute unless we're on a lower tick boundary (i.e. already transitioned ticks), and haven't moved\n                result.tick = TickMath.getTickAtSqrtPrice(result.sqrtPriceX96);\n            }\n        }\n\n        self.slot0 = slot0Start.setTick(result.tick).setSqrtPriceX96(result.sqrtPriceX96);\n\n        // update liquidity if it changed\n        if (self.liquidity != result.liquidity) self.liquidity = result.liquidity;\n\n        // update fee growth global\n        if (!zeroForOne) {\n            self.feeGrowthGlobal1X128 = step.feeGrowthGlobalX128;\n        } else {\n            self.feeGrowthGlobal0X128 = step.feeGrowthGlobalX128;\n        }\n\n        unchecked {\n            // \"if currency1 is specified\"\n            if (zeroForOne != (params.amountSpecified < 0)) {\n                swapDelta = toBalanceDelta(\n                    amountCalculated.toInt128(), (params.amountSpecified - amountSpecifiedRemaining).toInt128()\n                );\n            } else {\n                swapDelta = toBalanceDelta(\n                    (params.amountSpecified - amountSpecifiedRemaining).toInt128(), amountCalculated.toInt128()\n                );\n            }\n        }\n    }\n\n    /// @notice Donates the given amount of currency0 and currency1 to the pool\n    function donate(State storage state, uint256 amount0, uint256 amount1) internal returns (BalanceDelta delta) {\n        uint128 liquidity = state.liquidity;\n        if (liquidity == 0) NoLiquidityToReceiveFees.selector.revertWith();\n        unchecked {\n            // negation safe as amount0 and amount1 are always positive\n            delta = toBalanceDelta(-(amount0.toInt128()), -(amount1.toInt128()));\n            // FullMath.mulDiv is unnecessary because the numerator is bounded by type(int128).max * Q128, which is less than type(uint256).max\n            if (amount0 > 0) {\n                state.feeGrowthGlobal0X128 += UnsafeMath.simpleMulDiv(amount0, FixedPoint128.Q128, liquidity);\n            }\n            if (amount1 > 0) {\n                state.feeGrowthGlobal1X128 += UnsafeMath.simpleMulDiv(amount1, FixedPoint128.Q128, liquidity);\n            }\n        }\n    }\n\n    /// @notice Retrieves fee growth data\n    /// @param self The Pool state struct\n    /// @param tickLower The lower tick boundary of the position\n    /// @param tickUpper The upper tick boundary of the position\n    /// @return feeGrowthInside0X128 The all-time fee growth in token0, per unit of liquidity, inside the position's tick boundaries\n    /// @return feeGrowthInside1X128 The all-time fee growth in token1, per unit of liquidity, inside the position's tick boundaries\n    function getFeeGrowthInside(State storage self, int24 tickLower, int24 tickUpper)\n        internal\n        view\n        returns (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128)\n    {\n        TickInfo storage lower = self.ticks[tickLower];\n        TickInfo storage upper = self.ticks[tickUpper];\n        int24 tickCurrent = self.slot0.tick();\n\n        unchecked {\n            if (tickCurrent < tickLower) {\n                feeGrowthInside0X128 = lower.feeGrowthOutside0X128 - upper.feeGrowthOutside0X128;\n                feeGrowthInside1X128 = lower.feeGrowthOutside1X128 - upper.feeGrowthOutside1X128;\n            } else if (tickCurrent >= tickUpper) {\n                feeGrowthInside0X128 = upper.feeGrowthOutside0X128 - lower.feeGrowthOutside0X128;\n                feeGrowthInside1X128 = upper.feeGrowthOutside1X128 - lower.feeGrowthOutside1X128;\n            } else {\n                feeGrowthInside0X128 =\n                    self.feeGrowthGlobal0X128 - lower.feeGrowthOutside0X128 - upper.feeGrowthOutside0X128;\n                feeGrowthInside1X128 =\n                    self.feeGrowthGlobal1X128 - lower.feeGrowthOutside1X128 - upper.feeGrowthOutside1X128;\n            }\n        }\n    }\n\n    /// @notice Updates a tick and returns true if the tick was flipped from initialized to uninitialized, or vice versa\n    /// @param self The mapping containing all tick information for initialized ticks\n    /// @param tick The tick that will be updated\n    /// @param liquidityDelta A new amount of liquidity to be added (subtracted) when tick is crossed from left to right (right to left)\n    /// @param upper true for updating a position's upper tick, or false for updating a position's lower tick\n    /// @return flipped Whether the tick was flipped from initialized to uninitialized, or vice versa\n    /// @return liquidityGrossAfter The total amount of liquidity for all positions that references the tick after the update\n    function updateTick(State storage self, int24 tick, int128 liquidityDelta, bool upper)\n        internal\n        returns (bool flipped, uint128 liquidityGrossAfter)\n    {\n        TickInfo storage info = self.ticks[tick];\n\n        uint128 liquidityGrossBefore = info.liquidityGross;\n        int128 liquidityNetBefore = info.liquidityNet;\n\n        liquidityGrossAfter = LiquidityMath.addDelta(liquidityGrossBefore, liquidityDelta);\n\n        flipped = (liquidityGrossAfter == 0) != (liquidityGrossBefore == 0);\n\n        if (liquidityGrossBefore == 0) {\n            // by convention, we assume that all growth before a tick was initialized happened _below_ the tick\n            if (tick <= self.slot0.tick()) {\n                info.feeGrowthOutside0X128 = self.feeGrowthGlobal0X128;\n                info.feeGrowthOutside1X128 = self.feeGrowthGlobal1X128;\n            }\n        }\n\n        // when the lower (upper) tick is crossed left to right, liquidity must be added (removed)\n        // when the lower (upper) tick is crossed right to left, liquidity must be removed (added)\n        int128 liquidityNet = upper ? liquidityNetBefore - liquidityDelta : liquidityNetBefore + liquidityDelta;\n        assembly (\"memory-safe\") {\n            // liquidityGrossAfter and liquidityNet are packed in the first slot of `info`\n            // So we can store them with a single sstore by packing them ourselves first\n            sstore(\n                info.slot,\n                // bitwise OR to pack liquidityGrossAfter and liquidityNet\n                or(\n                    // Put liquidityGrossAfter in the lower bits, clearing out the upper bits\n                    and(liquidityGrossAfter, 0xffffffffffffffffffffffffffffffff),\n                    // Shift liquidityNet to put it in the upper bits (no need for signextend since we're shifting left)\n                    shl(128, liquidityNet)\n                )\n            )\n        }\n    }\n\n    /// @notice Derives max liquidity per tick from given tick spacing\n    /// @dev Executed when adding liquidity\n    /// @param tickSpacing The amount of required tick separation, realized in multiples of `tickSpacing`\n    ///     e.g., a tickSpacing of 3 requires ticks to be initialized every 3rd tick i.e., ..., -6, -3, 0, 3, 6, ...\n    /// @return result The max liquidity per tick\n    function tickSpacingToMaxLiquidityPerTick(int24 tickSpacing) internal pure returns (uint128 result) {\n        // Equivalent to:\n        // int24 minTick = (TickMath.MIN_TICK / tickSpacing);\n        // if (TickMath.MIN_TICK  % tickSpacing != 0) minTick--;\n        // int24 maxTick = (TickMath.MAX_TICK / tickSpacing);\n        // uint24 numTicks = maxTick - minTick + 1;\n        // return type(uint128).max / numTicks;\n        int24 MAX_TICK = TickMath.MAX_TICK;\n        int24 MIN_TICK = TickMath.MIN_TICK;\n        // tick spacing will never be 0 since TickMath.MIN_TICK_SPACING is 1\n        assembly (\"memory-safe\") {\n            tickSpacing := signextend(2, tickSpacing)\n            let minTick := sub(sdiv(MIN_TICK, tickSpacing), slt(smod(MIN_TICK, tickSpacing), 0))\n            let maxTick := sdiv(MAX_TICK, tickSpacing)\n            let numTicks := add(sub(maxTick, minTick), 1)\n            result := div(sub(shl(128, 1), 1), numTicks)\n        }\n    }\n\n    /// @notice Reverts if the given pool has not been initialized\n    function checkPoolInitialized(State storage self) internal view {\n        if (self.slot0.sqrtPriceX96() == 0) PoolNotInitialized.selector.revertWith();\n    }\n\n    /// @notice Clears tick data\n    /// @param self The mapping containing all initialized tick information for initialized ticks\n    /// @param tick The tick that will be cleared\n    function clearTick(State storage self, int24 tick) internal {\n        delete self.ticks[tick];\n    }\n\n    /// @notice Transitions to next tick as needed by price movement\n    /// @param self The Pool state struct\n    /// @param tick The destination tick of the transition\n    /// @param feeGrowthGlobal0X128 The all-time global fee growth, per unit of liquidity, in token0\n    /// @param feeGrowthGlobal1X128 The all-time global fee growth, per unit of liquidity, in token1\n    /// @return liquidityNet The amount of liquidity added (subtracted) when tick is crossed from left to right (right to left)\n    function crossTick(State storage self, int24 tick, uint256 feeGrowthGlobal0X128, uint256 feeGrowthGlobal1X128)\n        internal\n        returns (int128 liquidityNet)\n    {\n        unchecked {\n            TickInfo storage info = self.ticks[tick];\n            info.feeGrowthOutside0X128 = feeGrowthGlobal0X128 - info.feeGrowthOutside0X128;\n            info.feeGrowthOutside1X128 = feeGrowthGlobal1X128 - info.feeGrowthOutside1X128;\n            liquidityNet = info.liquidityNet;\n        }\n    }\n}\n",
     "range": {
       "end": {
         "character": 0,
@@ -1463,7 +1576,6 @@ import {SafeCas...", range: { end...</code></summary>
   }
 ]
 ```
-
 </details>
 
 ---
@@ -1471,7 +1583,6 @@ import {SafeCas...", range: { end...</code></summary>
 ## textDocument/inlayHint
 
 **Request:**
-
 ```json
 {
   "id": 1,
@@ -1497,7 +1608,7 @@ import {SafeCas...", range: { end...</code></summary>
 
 **Responses:**
 
-**mmsaki** (2.9ms, 54.3 MB) — 114 hints (value1:, value2:, value:)
+**mmsaki v0.1.25** (5.1ms, 50.2 MB) — 114 hints (value1:, value2:, value:)
 
 <details>
 <summary>Summary: <code>Array(114) [{ kind: 2, label: "value1:", paddingRight: true, position: { character: 72, line: 94 } }, { kind: 2, labe...</code></summary>
@@ -1552,23 +1663,70 @@ import {SafeCas...", range: { end...</code></summary>
   "... 109 more (114 total)"
 ]
 ```
-
 </details>
 
-**solc** (25.8 MB) — unsupported
+**mmsaki v0.1.24** (4.8ms, 54.8 MB) — 114 hints (value1:, value2:, value:)
 
-**qiuxiang** (71.9 MB) — unsupported
+<details>
+<summary>Summary: <code>Array(114) [{ kind: 2, label: "value1:", paddingRight: true, position: { character: 72, line: 94 } }, { kind: 2, labe...</code></summary>
 
-**juanfranblanco** — crash
-
-**nomicfoundation** (527.7 MB) — unsupported
+```json
+[
+  {
+    "kind": 2,
+    "label": "value1:",
+    "paddingRight": true,
+    "position": {
+      "character": 72,
+      "line": 94
+    }
+  },
+  {
+    "kind": 2,
+    "label": "value2:",
+    "paddingRight": true,
+    "position": {
+      "character": 83,
+      "line": 94
+    }
+  },
+  {
+    "kind": 2,
+    "label": "value:",
+    "paddingRight": true,
+    "position": {
+      "character": 84,
+      "line": 95
+    }
+  },
+  {
+    "kind": 2,
+    "label": "value:",
+    "paddingRight": true,
+    "position": {
+      "character": 84,
+      "line": 96
+    }
+  },
+  {
+    "kind": 2,
+    "label": "sqrtPriceX96:",
+    "paddingRight": true,
+    "position": {
+      "character": 43,
+      "line": 102
+    }
+  },
+  "... 109 more (114 total)"
+]
+```
+</details>
 
 ---
 
 ## textDocument/semanticTokens/full
 
 **Request:**
-
 ```json
 {
   "id": 1,
@@ -1584,7 +1742,7 @@ import {SafeCas...", range: { end...</code></summary>
 
 **Responses:**
 
-**mmsaki** (4.7ms, 53.4 MB) — 697 tokens
+**mmsaki v0.1.25** (18.4ms, 49.8 MB) — 697 tokens
 
 <details>
 <summary>Summary: <code>{ data: Array(3485) [0, 0, 36, ... 3482 more], resultId: "2" }</code></summary>
@@ -1602,33 +1760,26 @@ import {SafeCas...", range: { end...</code></summary>
   "resultId": "2"
 }
 ```
-
 </details>
 
-**solc** (26.1 MB) — error
-
-**qiuxiang** (71.1 MB) — unsupported
-
-**juanfranblanco** — crash
-
-**nomicfoundation** (30.5ms, 524.4 MB) — 82 tokens
+**mmsaki v0.1.24** (3.6ms, 53.2 MB) — 697 tokens
 
 <details>
-<summary>Summary: <code>{ data: Array(410) [19, 8, 4, ... 407 more] }</code></summary>
+<summary>Summary: <code>{ data: Array(3485) [0, 0, 36, ... 3482 more], resultId: "2" }</code></summary>
 
 ```json
 {
   "data": [
-    19,
-    8,
-    4,
-    2,
     0,
-    "... 405 more (410 total)"
-  ]
+    0,
+    36,
+    14,
+    0,
+    "... 3480 more (3485 total)"
+  ],
+  "resultId": "2"
 }
 ```
-
 </details>
 
 ---
@@ -1636,7 +1787,6 @@ import {SafeCas...", range: { end...</code></summary>
 ## textDocument/semanticTokens/range
 
 **Request:**
-
 ```json
 {
   "id": 1,
@@ -1662,7 +1812,7 @@ import {SafeCas...", range: { end...</code></summary>
 
 **Responses:**
 
-**mmsaki** (2.5ms, 53.6 MB) — 274 tokens
+**mmsaki v0.1.25** (4.0ms, 50.4 MB) — 274 tokens
 
 <details>
 <summary>Summary: <code>{ data: Array(1370) [0, 0, 36, ... 1367 more] }</code></summary>
@@ -1679,23 +1829,32 @@ import {SafeCas...", range: { end...</code></summary>
   ]
 }
 ```
-
 </details>
 
-**solc** (26.1 MB) — unsupported
+**mmsaki v0.1.24** (2.5ms, 54.6 MB) — 274 tokens
 
-**qiuxiang** (70.6 MB) — unsupported
+<details>
+<summary>Summary: <code>{ data: Array(1370) [0, 0, 36, ... 1367 more] }</code></summary>
 
-**juanfranblanco** — crash
-
-**nomicfoundation** (527.8 MB) — unsupported
+```json
+{
+  "data": [
+    0,
+    0,
+    36,
+    14,
+    0,
+    "... 1365 more (1370 total)"
+  ]
+}
+```
+</details>
 
 ---
 
 ## workspace/symbol
 
 **Request:**
-
 ```json
 {
   "id": 1,
@@ -1709,7 +1868,7 @@ import {SafeCas...", range: { end...</code></summary>
 
 **Responses:**
 
-**mmsaki** (2.2ms, 53.2 MB) — 68 symbols
+**mmsaki v0.1.25** (2.2ms, 49.1 MB) — 68 symbols
 
 <details>
 <summary>Summary: <code>Array(68) [{ kind: 3, location: { range: { end: { character: 1, line: 612 }, start: { character: 0, line: 19 } }, uri...</code></summary>
@@ -1808,15 +1967,107 @@ import {SafeCas...", range: { end...</code></summary>
   "... 63 more (68 total)"
 ]
 ```
-
 </details>
 
-**solc** (26.1 MB) — unsupported
+**mmsaki v0.1.24** (13.8ms, 54.2 MB) — 68 symbols
 
-**qiuxiang** (71.5 MB) — unsupported
+<details>
+<summary>Summary: <code>Array(68) [{ kind: 3, location: { range: { end: { character: 1, line: 612 }, start: { character: 0, line: 19 } }, uri...</code></summary>
 
-**juanfranblanco** — crash
-
-**nomicfoundation** (524.4 MB) — unsupported
+```json
+[
+  {
+    "kind": 3,
+    "location": {
+      "range": {
+        "end": {
+          "character": 1,
+          "line": 612
+        },
+        "start": {
+          "character": 0,
+          "line": 19
+        }
+      },
+      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
+    },
+    "name": "Pool"
+  },
+  {
+    "containerName": "Pool",
+    "kind": 24,
+    "location": {
+      "range": {
+        "end": {
+          "character": 60,
+          "line": 32
+        },
+        "start": {
+          "character": 4,
+          "line": 32
+        }
+      },
+      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
+    },
+    "name": "TicksMisordered"
+  },
+  {
+    "containerName": "Pool",
+    "kind": 24,
+    "location": {
+      "range": {
+        "end": {
+          "character": 48,
+          "line": 36
+        },
+        "start": {
+          "character": 4,
+          "line": 36
+        }
+      },
+      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
+    },
+    "name": "TickLowerOutOfBounds"
+  },
+  {
+    "containerName": "Pool",
+    "kind": 24,
+    "location": {
+      "range": {
+        "end": {
+          "character": 48,
+          "line": 40
+        },
+        "start": {
+          "character": 4,
+          "line": 40
+        }
+      },
+      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
+    },
+    "name": "TickUpperOutOfBounds"
+  },
+  {
+    "containerName": "Pool",
+    "kind": 24,
+    "location": {
+      "range": {
+        "end": {
+          "character": 44,
+          "line": 43
+        },
+        "start": {
+          "character": 4,
+          "line": 43
+        }
+      },
+      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
+    },
+    "name": "TickLiquidityOverflow"
+  },
+  "... 63 more (68 total)"
+]
+```
+</details>
 
 ---
