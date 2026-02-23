@@ -4,6 +4,7 @@ use tower_lsp::lsp_types::{Location, Position, Range, Url};
 use tree_sitter::{Node, Parser};
 
 use crate::types::{NodeId, SourceLoc};
+use crate::utils::push_if_node_or_array;
 
 #[derive(Debug, Clone)]
 pub struct NodeInfo {
@@ -79,20 +80,6 @@ pub const CHILD_KEYS: &[&str] = &[
     "variables",
 ];
 
-fn push_if_node_or_array<'a>(tree: &'a Value, key: &str, stack: &mut Vec<&'a Value>) {
-    if let Some(value) = tree.get(key) {
-        match value {
-            Value::Array(arr) => {
-                stack.extend(arr);
-            }
-            Value::Object(_) => {
-                stack.push(value);
-            }
-            _ => {}
-        }
-    }
-}
-
 /// Maps `"offset:length:fileId"` src strings from Yul externalReferences
 /// to the Solidity declaration node id they refer to.
 pub type ExternalRefs = HashMap<String, NodeId>;
@@ -100,12 +87,10 @@ pub type ExternalRefs = HashMap<String, NodeId>;
 /// Pre-computed AST index. Built once when an AST enters the cache,
 /// then reused on every goto/references/rename/hover request.
 ///
-/// The raw `ast` field retains only `contracts` and `source_id_to_path`
-/// after construction — the `sources` key is stripped to save memory
-/// (all indexes are pre-built from it during `new()`).
+/// All data from the raw solc JSON is consumed during `new()` into
+/// pre-built indexes. The raw JSON is not retained.
 #[derive(Debug, Clone)]
 pub struct CachedBuild {
-    pub ast: Value,
     pub nodes: HashMap<String, HashMap<NodeId, NodeInfo>>,
     pub path_to_abs: HashMap<String, String>,
     pub external_refs: ExternalRefs,
@@ -142,7 +127,7 @@ impl CachedBuild {
     /// - `sources[path] = { id, ast }`
     /// - `contracts[path][name] = { abi, evm, ... }`
     /// - `source_id_to_path = { "0": "path", ... }`
-    pub fn new(mut ast: Value, build_version: i32) -> Self {
+    pub fn new(ast: Value, build_version: i32) -> Self {
         let (nodes, path_to_abs, external_refs) = if let Some(sources) = ast.get("sources") {
             cache_ids(sources)
         } else {
@@ -163,82 +148,17 @@ impl CachedBuild {
 
         let doc_index = crate::hover::build_doc_index(&ast);
 
-        // Attempt typed AST deserialization from the sources section.
-        // This is best-effort — if it fails (e.g. unknown nodeType in a
-        // newer solc version), we gracefully fall back to raw Value access.
-        let typed_ast = ast.get("sources").and_then(|sources| {
-            let sources_obj = sources.as_object()?;
-            let mut result = HashMap::new();
-            for (path, source_data) in sources_obj {
-                if let Some(ast_node) = source_data.get("ast") {
-                    match serde_json::from_value::<crate::solc_ast::SourceUnit>(ast_node.clone()) {
-                        Ok(source_unit) => {
-                            result.insert(path.clone(), source_unit);
-                        }
-                        Err(_e) => {
-                            // Deserialization failed for this file — skip typed AST entirely.
-                            // This ensures all-or-nothing: either all files parse or we fall back.
-                            return None;
-                        }
-                    }
-                }
+        // Extract declaration nodes directly from the raw sources JSON.
+        // Instead of deserializing the entire typed AST (SourceUnit, all
+        // expressions, statements, Yul blocks), this walks the raw Value
+        // tree and only deserializes nodes whose nodeType matches one of the
+        // 9 declaration types. Heavy fields (body, modifiers, value, etc.)
+        // are stripped before deserialization.
+        let (decl_index, node_id_to_source_path) = if let Some(sources) = ast.get("sources") {
+            match crate::solc_ast::extract_decl_nodes(sources) {
+                Some(extracted) => (extracted.decl_index, extracted.node_id_to_source_path),
+                None => (HashMap::new(), HashMap::new()),
             }
-            Some(result)
-        });
-
-        // Build typed declaration index from the typed AST via visitor.
-        // Also build node_id → source_path reverse index for O(1) path lookups.
-        let (decl_index, node_id_to_source_path) = if let Some(ref sources) = typed_ast {
-            use crate::solc_ast::visitor::Node as AstNode;
-            use crate::solc_ast::{ContractDefinitionNode, SourceUnitNode};
-
-            let mut visitor = crate::solc_ast::DeclIndexVisitor::new();
-            let mut id_to_path = HashMap::new();
-
-            for (path, source_unit) in sources {
-                // Record the source unit itself
-                id_to_path.insert(source_unit.id, path.clone());
-
-                // Record all top-level nodes
-                for node in &source_unit.nodes {
-                    let node_id = match node {
-                        SourceUnitNode::PragmaDirective(n) => n.id,
-                        SourceUnitNode::ImportDirective(n) => n.id,
-                        SourceUnitNode::ContractDefinition(n) => {
-                            // Also record all contract children
-                            for child in &n.nodes {
-                                let child_id = match child {
-                                    ContractDefinitionNode::FunctionDefinition(c) => c.id,
-                                    ContractDefinitionNode::VariableDeclaration(c) => c.id,
-                                    ContractDefinitionNode::EventDefinition(c) => c.id,
-                                    ContractDefinitionNode::ErrorDefinition(c) => c.id,
-                                    ContractDefinitionNode::StructDefinition(c) => c.id,
-                                    ContractDefinitionNode::EnumDefinition(c) => c.id,
-                                    ContractDefinitionNode::ModifierDefinition(c) => c.id,
-                                    ContractDefinitionNode::UserDefinedValueTypeDefinition(c) => {
-                                        c.id
-                                    }
-                                    ContractDefinitionNode::UsingForDirective(c) => c.id,
-                                };
-                                id_to_path.insert(child_id, path.clone());
-                            }
-                            n.id
-                        }
-                        SourceUnitNode::FunctionDefinition(n) => n.id,
-                        SourceUnitNode::StructDefinition(n) => n.id,
-                        SourceUnitNode::EnumDefinition(n) => n.id,
-                        SourceUnitNode::ErrorDefinition(n) => n.id,
-                        SourceUnitNode::UsingForDirective(n) => n.id,
-                        SourceUnitNode::VariableDeclaration(n) => n.id,
-                        SourceUnitNode::UserDefinedValueTypeDefinition(n) => n.id,
-                    };
-                    id_to_path.insert(node_id, path.clone());
-                }
-
-                source_unit.accept(&mut visitor);
-            }
-
-            (visitor.decls, id_to_path)
         } else {
             (HashMap::new(), HashMap::new())
         };
@@ -250,10 +170,6 @@ impl CachedBuild {
         } else {
             HashMap::new()
         };
-
-        // typed_ast is consumed — it was only needed to build decl_index
-        // and node_id_to_source_path above. Not stored in the struct.
-        drop(typed_ast);
 
         // Build completion cache before stripping sources.
         let completion_cache = {
@@ -270,15 +186,10 @@ impl CachedBuild {
             std::sync::Arc::new(cc)
         };
 
-        // Strip the "sources" key from ast — all indexes have been built.
-        // This frees the raw AST JSON for all source files (the bulk of memory).
-        // Only "contracts" (ABI/devdoc/userdoc) and "source_id_to_path" remain.
-        if let Some(obj) = ast.as_object_mut() {
-            obj.remove("sources");
-        }
+        // The raw AST JSON is fully consumed — all data has been extracted
+        // into the pre-built indexes above. `ast` is dropped here.
 
         Self {
-            ast,
             nodes,
             path_to_abs,
             external_refs,
@@ -294,13 +205,14 @@ impl CachedBuild {
     }
 }
 
-type Type = (
+/// Return type of [`cache_ids`]: `(nodes, path_to_abs, external_refs)`.
+type CachedIds = (
     HashMap<String, HashMap<NodeId, NodeInfo>>,
     HashMap<String, String>,
     ExternalRefs,
 );
 
-pub fn cache_ids(sources: &Value) -> Type {
+pub fn cache_ids(sources: &Value) -> CachedIds {
     let mut nodes: HashMap<String, HashMap<NodeId, NodeInfo>> = HashMap::new();
     let mut path_to_abs: HashMap<String, String> = HashMap::new();
     let mut external_refs: ExternalRefs = HashMap::new();
@@ -610,58 +522,8 @@ pub fn goto_bytes(
     Some((file_path, loc.offset, loc.length))
 }
 
-pub fn goto_declaration(
-    ast_data: &Value,
-    file_uri: &Url,
-    position: Position,
-    source_bytes: &[u8],
-) -> Option<Location> {
-    let sources = ast_data.get("sources")?;
-    let id_to_path = ast_data.get("source_id_to_path")?.as_object()?;
-
-    let id_to_path_map: HashMap<String, String> = id_to_path
-        .iter()
-        .map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
-        .collect();
-
-    let (nodes, path_to_abs, external_refs) = cache_ids(sources);
-    let byte_position = pos_to_bytes(source_bytes, position);
-
-    if let Some((file_path, location_bytes, length)) = goto_bytes(
-        &nodes,
-        &path_to_abs,
-        &id_to_path_map,
-        &external_refs,
-        file_uri.as_ref(),
-        byte_position,
-    ) {
-        let target_file_path = std::path::Path::new(&file_path);
-        let absolute_path = if target_file_path.is_absolute() {
-            target_file_path.to_path_buf()
-        } else {
-            std::env::current_dir().ok()?.join(target_file_path)
-        };
-
-        if let Ok(target_source_bytes) = std::fs::read(&absolute_path)
-            && let Some(start_pos) = bytes_to_pos(&target_source_bytes, location_bytes)
-            && let Some(end_pos) = bytes_to_pos(&target_source_bytes, location_bytes + length)
-            && let Ok(target_uri) = Url::from_file_path(&absolute_path)
-        {
-            return Some(Location {
-                uri: target_uri,
-                range: Range {
-                    start: start_pos,
-                    end: end_pos,
-                },
-            });
-        }
-    };
-
-    None
-}
-
-/// Like `goto_declaration` but uses pre-built `CachedBuild` indices instead of
-/// re-calling `cache_ids`. Avoids redundant O(N) AST traversal.
+/// Go-to-declaration using pre-built `CachedBuild` indices.
+/// Avoids redundant O(N) AST traversal by reusing cached node maps.
 pub fn goto_declaration_cached(
     build: &CachedBuild,
     file_uri: &Url,
@@ -706,7 +568,7 @@ pub fn goto_declaration_cached(
 /// Name-based AST goto — resolves by searching cached AST nodes for identifiers
 /// matching `name` in the current file, then following `referencedDeclaration`.
 ///
-/// Unlike `goto_declaration` which matches by byte offset (breaks on dirty files),
+/// Unlike `goto_declaration_cached` which matches by byte offset (breaks on dirty files),
 /// this reads the identifier text from the **built source** (on disk) at each node's
 /// `src` range and compares it to the cursor name. Works on dirty files because the
 /// AST node relationships (referencedDeclaration) are still valid — only the byte

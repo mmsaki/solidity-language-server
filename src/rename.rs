@@ -172,7 +172,8 @@ pub fn get_identifier_range(source_bytes: &[u8], position: Position) -> Option<R
     Some(Range { start, end })
 }
 
-type Type = HashMap<Url, HashMap<(u32, u32, u32, u32), TextEdit>>;
+/// Deduplication map: URI → (start_line, start_col, end_line, end_col) → TextEdit.
+type RenameEdits = HashMap<Url, HashMap<(u32, u32, u32, u32), TextEdit>>;
 
 pub fn rename_symbol(
     build: &CachedBuild,
@@ -225,7 +226,7 @@ pub fn rename_symbol(
     if locations.is_empty() {
         return None;
     }
-    let mut changes: Type = HashMap::new();
+    let mut changes: RenameEdits = HashMap::new();
     for location in locations {
         // Read the file content, preferring in-memory text buffers (which
         // reflect unsaved editor changes) over reading from disk.

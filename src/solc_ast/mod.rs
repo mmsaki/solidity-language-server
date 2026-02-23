@@ -1,17 +1,16 @@
 //! Typed Solidity AST deserialized from solc's JSON output.
 //!
 //! This module provides Rust structs that mirror the AST node types emitted
-//! by the Solidity compiler (`solc --standard-json`), along with a visitor
-//! trait (`AstVisitor`) for traversal.
+//! by the Solidity compiler (`solc --standard-json`), plus a lightweight
+//! declaration extraction function ([`extract_decl_nodes`]) that avoids
+//! deserializing the full AST.
 //!
 //! # Design
 //!
 //! - All structs derive `serde::Deserialize` to parse directly from solc JSON.
 //! - Fields use `Option<T>` liberally for cross-version compatibility.
-//! - The `AstVisitor` trait follows the official C++ `ASTConstVisitor` pattern
-//!   from [`libsolidity/ast/ASTVisitor.h`](https://github.com/argotorg/solidity/blob/main/libsolidity/ast/ASTVisitor.h).
-//! - Each struct implements `Node::accept()` following the patterns in
-//!   [`AST_accept.h`](https://github.com/argotorg/solidity/blob/main/libsolidity/ast/AST_accept.h).
+//! - An `AstVisitor` trait (gated behind `#[cfg(test)]`) follows the official
+//!   C++ `ASTConstVisitor` pattern for test traversal.
 
 pub mod contracts;
 pub mod enums;
@@ -22,6 +21,7 @@ pub mod source_units;
 pub mod statements;
 pub mod types;
 pub mod variables;
+#[cfg(test)]
 pub mod visitor;
 pub mod yul;
 
@@ -35,6 +35,7 @@ pub use source_units::*;
 pub use statements::*;
 pub use types::*;
 pub use variables::*;
+#[cfg(test)]
 pub use visitor::*;
 pub use yul::*;
 
@@ -49,7 +50,7 @@ use std::collections::HashMap;
 /// about: functions, variables, contracts, events, errors, structs, enums,
 /// modifiers, and user-defined value types.
 ///
-/// Built by [`DeclIndexVisitor`] and stored in `CachedBuild` for O(1)
+/// Built by [`extract_decl_nodes`] and stored in `CachedBuild` for O(1)
 /// typed node lookup by ID.
 #[derive(Clone, Debug)]
 pub enum DeclNode {
@@ -494,76 +495,259 @@ pub fn type_name_to_str(tn: &TypeName) -> &str {
     }
 }
 
-/// Visitor that collects all declaration nodes into a flat index.
-#[derive(Default)]
-pub struct DeclIndexVisitor {
-    pub decls: HashMap<NodeID, DeclNode>,
+// ── Declaration-only extraction from raw Value ────────────────────────────
+
+/// The 9 declaration `nodeType` strings we care about.
+const DECL_NODE_TYPES: &[&str] = &[
+    "FunctionDefinition",
+    "VariableDeclaration",
+    "ContractDefinition",
+    "EventDefinition",
+    "ErrorDefinition",
+    "StructDefinition",
+    "EnumDefinition",
+    "ModifierDefinition",
+    "UserDefinedValueTypeDefinition",
+];
+
+/// Fields to strip from declaration nodes before deserializing.
+/// These contain large AST subtrees (function bodies, expressions, etc.)
+/// that are never read through `DeclNode`.
+const STRIP_FIELDS: &[&str] = &[
+    "body",
+    "modifiers",
+    "value",
+    "overrides",
+    "baseFunctions",
+    "baseModifiers",
+    "nameLocation",
+    "implemented",
+    "isVirtual",
+    "abstract",
+    "contractDependencies",
+    "usedErrors",
+    "usedEvents",
+    "fullyImplemented",
+    "linearizedBaseContracts",
+    "canonicalName",
+    "constant",
+    "indexed",
+];
+
+/// Fields to strip from children inside `ContractDefinition.nodes`.
+/// Same as `STRIP_FIELDS` — each contract child also has bodies, values, etc.
+const STRIP_CHILD_FIELDS: &[&str] = &[
+    "body",
+    "modifiers",
+    "value",
+    "overrides",
+    "baseFunctions",
+    "baseModifiers",
+    "nameLocation",
+    "implemented",
+    "isVirtual",
+    "constant",
+    "indexed",
+    "canonicalName",
+];
+
+/// Result of extracting declaration nodes from the raw sources Value.
+pub struct ExtractedDecls {
+    /// Declaration index: node ID → typed `DeclNode`.
+    pub decl_index: HashMap<NodeID, DeclNode>,
+    /// Reverse index: node ID → source file path.
+    pub node_id_to_source_path: HashMap<NodeID, String>,
 }
 
-impl DeclIndexVisitor {
-    pub fn new() -> Self {
-        Self::default()
+/// Extract declaration nodes directly from the raw `sources` section of solc output.
+///
+/// Instead of deserializing the entire typed AST (SourceUnit, all expressions,
+/// statements, Yul blocks), this walks the raw JSON Value tree and only
+/// deserializes nodes whose `nodeType` matches one of the 9 declaration types.
+///
+/// Heavy fields (`body`, `modifiers`, `value`, etc.) are stripped from the
+/// Value **before** deserialization, so function bodies are never parsed.
+///
+/// For `ContractDefinition`, the `nodes` array is preserved (needed for
+/// `resolve_inheritdoc_typed`) but each child node within it also has its
+/// heavy fields stripped.
+///
+/// This eliminates:
+/// - The full `SourceUnit` deserialization per source file
+/// - The `ast_node.clone()` per source file (~80 MB for large projects)
+/// - All transient expression/statement/yul parsing (~40 MB)
+pub fn extract_decl_nodes(sources: &serde_json::Value) -> Option<ExtractedDecls> {
+    let sources_obj = sources.as_object()?;
+    let mut decl_index = HashMap::new();
+    let mut id_to_path = HashMap::new();
+
+    for (path, source_data) in sources_obj {
+        let ast_node = source_data.get("ast")?;
+
+        // Record the source unit id
+        if let Some(su_id) = ast_node.get("id").and_then(|v| v.as_i64()) {
+            id_to_path.insert(su_id, path.clone());
+        }
+
+        // Walk the top-level `nodes` array of the SourceUnit
+        if let Some(nodes) = ast_node.get("nodes").and_then(|v| v.as_array()) {
+            for node in nodes {
+                walk_and_extract(node, path, &mut decl_index, &mut id_to_path);
+            }
+        }
+    }
+
+    Some(ExtractedDecls {
+        decl_index,
+        node_id_to_source_path: id_to_path,
+    })
+}
+
+/// Recursively walk a JSON node, extracting declaration nodes.
+fn walk_and_extract(
+    node: &serde_json::Value,
+    source_path: &str,
+    decl_index: &mut HashMap<NodeID, DeclNode>,
+    id_to_path: &mut HashMap<NodeID, String>,
+) {
+    let obj = match node.as_object() {
+        Some(o) => o,
+        None => return,
+    };
+
+    let node_type = match obj.get("nodeType").and_then(|v| v.as_str()) {
+        Some(nt) => nt,
+        None => return,
+    };
+
+    let node_id = obj.get("id").and_then(|v| v.as_i64());
+
+    // Record id → path for all nodes that have an id
+    if let Some(id) = node_id {
+        id_to_path.insert(id, source_path.to_string());
+    }
+
+    // Check if this is a declaration node type
+    if DECL_NODE_TYPES.contains(&node_type)
+        && let Some(id) = node_id
+    {
+        // Clone just this node (not the entire source file Value)
+        let mut node_value = node.clone();
+
+        if node_type == "ContractDefinition" {
+            strip_contract_node(&mut node_value);
+        } else {
+            strip_decl_fields(&mut node_value);
+        }
+
+        // Deserialize the stripped node into the typed struct
+        if let Some(decl) = deserialize_decl_node(node_type, node_value) {
+            decl_index.insert(id, decl);
+        }
+    }
+
+    // Recurse into children — ContractDefinition has `nodes`, SourceUnit has `nodes`.
+    // We also need to recurse into `parameters`, `returnParameters`, and `members`
+    // to find nested VariableDeclaration nodes (function params, return params,
+    // error/event params, struct members).
+    if let Some(children) = obj.get("nodes").and_then(|v| v.as_array()) {
+        for child in children {
+            walk_and_extract(child, source_path, decl_index, id_to_path);
+        }
+    }
+
+    // Walk into ParameterList.parameters arrays to capture individual
+    // VariableDeclaration nodes for params/returns
+    for param_key in &["parameters", "returnParameters"] {
+        if let Some(param_list) = obj.get(*param_key).and_then(|v| v.as_object()) {
+            // ParameterList has id and a `parameters` array
+            if let Some(pl_id) = param_list.get("id").and_then(|v| v.as_i64()) {
+                id_to_path.insert(pl_id, source_path.to_string());
+            }
+            if let Some(params) = param_list.get("parameters").and_then(|v| v.as_array()) {
+                for param in params {
+                    walk_and_extract(param, source_path, decl_index, id_to_path);
+                }
+            }
+        }
+    }
+
+    // Walk into struct `members` to capture member VariableDeclarations
+    if let Some(members) = obj.get("members").and_then(|v| v.as_array()) {
+        for member in members {
+            walk_and_extract(member, source_path, decl_index, id_to_path);
+        }
     }
 }
 
-impl AstVisitor for DeclIndexVisitor {
-    fn visit_function_definition(&mut self, node: &FunctionDefinition) -> bool {
-        self.decls
-            .insert(node.id, DeclNode::FunctionDefinition(node.decl_clone()));
-        self.visit_node(node.id, &node.src)
+/// Strip heavy fields from a declaration node Value before deserialization.
+fn strip_decl_fields(node: &mut serde_json::Value) {
+    if let Some(obj) = node.as_object_mut() {
+        for field in STRIP_FIELDS {
+            obj.remove(*field);
+        }
     }
+}
 
-    fn visit_variable_declaration(&mut self, node: &VariableDeclaration) -> bool {
-        self.decls
-            .insert(node.id, DeclNode::VariableDeclaration(node.decl_clone()));
-        self.visit_node(node.id, &node.src)
+/// Strip heavy fields from a ContractDefinition, including from its child nodes.
+///
+/// Preserves the `nodes` array itself (needed for `resolve_inheritdoc_typed`)
+/// but strips heavy fields from each child within it.
+fn strip_contract_node(node: &mut serde_json::Value) {
+    if let Some(obj) = node.as_object_mut() {
+        // Strip contract-level heavy fields (but NOT `nodes` — we need it)
+        for field in STRIP_FIELDS {
+            obj.remove(*field);
+        }
+
+        // Strip heavy fields from each child in `nodes`
+        if let Some(nodes_val) = obj.get_mut("nodes")
+            && let Some(nodes_arr) = nodes_val.as_array_mut()
+        {
+            for child in nodes_arr.iter_mut() {
+                if let Some(child_obj) = child.as_object_mut() {
+                    for field in STRIP_CHILD_FIELDS {
+                        child_obj.remove(*field);
+                    }
+                }
+            }
+        }
     }
+}
 
-    fn visit_contract_definition(&mut self, node: &ContractDefinition) -> bool {
-        self.decls
-            .insert(node.id, DeclNode::ContractDefinition(node.decl_clone()));
-        self.visit_node(node.id, &node.src)
-    }
-
-    fn visit_event_definition(&mut self, node: &EventDefinition) -> bool {
-        self.decls
-            .insert(node.id, DeclNode::EventDefinition(node.decl_clone()));
-        self.visit_node(node.id, &node.src)
-    }
-
-    fn visit_error_definition(&mut self, node: &ErrorDefinition) -> bool {
-        self.decls
-            .insert(node.id, DeclNode::ErrorDefinition(node.decl_clone()));
-        self.visit_node(node.id, &node.src)
-    }
-
-    fn visit_struct_definition(&mut self, node: &StructDefinition) -> bool {
-        self.decls
-            .insert(node.id, DeclNode::StructDefinition(node.decl_clone()));
-        self.visit_node(node.id, &node.src)
-    }
-
-    fn visit_enum_definition(&mut self, node: &EnumDefinition) -> bool {
-        self.decls
-            .insert(node.id, DeclNode::EnumDefinition(node.decl_clone()));
-        self.visit_node(node.id, &node.src)
-    }
-
-    fn visit_modifier_definition(&mut self, node: &ModifierDefinition) -> bool {
-        self.decls
-            .insert(node.id, DeclNode::ModifierDefinition(node.decl_clone()));
-        self.visit_node(node.id, &node.src)
-    }
-
-    fn visit_user_defined_value_type_definition(
-        &mut self,
-        node: &UserDefinedValueTypeDefinition,
-    ) -> bool {
-        self.decls.insert(
-            node.id,
-            DeclNode::UserDefinedValueTypeDefinition(node.decl_clone()),
-        );
-        self.visit_node(node.id, &node.src)
+/// Deserialize a stripped JSON Value into a `DeclNode` based on `nodeType`.
+fn deserialize_decl_node(node_type: &str, value: serde_json::Value) -> Option<DeclNode> {
+    match node_type {
+        "FunctionDefinition" => serde_json::from_value::<FunctionDefinition>(value)
+            .ok()
+            .map(DeclNode::FunctionDefinition),
+        "VariableDeclaration" => serde_json::from_value::<VariableDeclaration>(value)
+            .ok()
+            .map(DeclNode::VariableDeclaration),
+        "ContractDefinition" => serde_json::from_value::<ContractDefinition>(value)
+            .ok()
+            .map(DeclNode::ContractDefinition),
+        "EventDefinition" => serde_json::from_value::<EventDefinition>(value)
+            .ok()
+            .map(DeclNode::EventDefinition),
+        "ErrorDefinition" => serde_json::from_value::<ErrorDefinition>(value)
+            .ok()
+            .map(DeclNode::ErrorDefinition),
+        "StructDefinition" => serde_json::from_value::<StructDefinition>(value)
+            .ok()
+            .map(DeclNode::StructDefinition),
+        "EnumDefinition" => serde_json::from_value::<EnumDefinition>(value)
+            .ok()
+            .map(DeclNode::EnumDefinition),
+        "ModifierDefinition" => serde_json::from_value::<ModifierDefinition>(value)
+            .ok()
+            .map(DeclNode::ModifierDefinition),
+        "UserDefinedValueTypeDefinition" => {
+            serde_json::from_value::<UserDefinedValueTypeDefinition>(value)
+                .ok()
+                .map(DeclNode::UserDefinedValueTypeDefinition)
+        }
+        _ => None,
     }
 }
 

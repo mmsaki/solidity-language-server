@@ -23,22 +23,6 @@ pub struct EventDefinition {
     pub event_selector: Option<String>,
 }
 
-impl EventDefinition {
-    /// Clone only the fields used by `DeclNode` consumers.
-    pub fn decl_clone(&self) -> Self {
-        Self {
-            id: self.id,
-            src: self.src.clone(),
-            name: self.name.clone(),
-            name_location: None,
-            documentation: self.documentation.clone(),
-            parameters: self.parameters.clone(),
-            anonymous: None,
-            event_selector: self.event_selector.clone(),
-        }
-    }
-}
-
 /// An error definition (`error InsufficientBalance(uint256, uint256)`).
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -54,19 +38,4 @@ pub struct ErrorDefinition {
     /// 4-byte error selector (hex string, no `0x`).
     #[serde(default)]
     pub error_selector: Option<String>,
-}
-
-impl ErrorDefinition {
-    /// Clone only the fields used by `DeclNode` consumers.
-    pub fn decl_clone(&self) -> Self {
-        Self {
-            id: self.id,
-            src: self.src.clone(),
-            name: self.name.clone(),
-            name_location: None,
-            documentation: self.documentation.clone(),
-            parameters: self.parameters.clone(),
-            error_selector: self.error_selector.clone(),
-        }
-    }
 }

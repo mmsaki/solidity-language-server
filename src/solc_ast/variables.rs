@@ -54,32 +54,3 @@ pub struct VariableDeclaration {
     #[serde(default)]
     pub documentation: Option<Documentation>,
 }
-
-impl VariableDeclaration {
-    /// Clone only the fields used by `DeclNode` consumers.
-    ///
-    /// Skips `value` (initializer expression — can be a large AST subtree),
-    /// `name_location`, `constant`, `indexed`, `overrides`, and `base_functions`.
-    pub fn decl_clone(&self) -> Self {
-        Self {
-            id: self.id,
-            src: self.src.clone(),
-            name: self.name.clone(),
-            name_location: None,
-            type_name: self.type_name.clone(),
-            constant: None,
-            mutability: self.mutability.clone(),
-            state_variable: self.state_variable,
-            storage_location: self.storage_location.clone(),
-            visibility: self.visibility.clone(),
-            value: None,
-            indexed: None,
-            scope: self.scope,
-            type_descriptions: self.type_descriptions.clone(),
-            overrides: None,
-            function_selector: self.function_selector.clone(),
-            base_functions: None,
-            documentation: self.documentation.clone(),
-        }
-    }
-}

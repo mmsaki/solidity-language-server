@@ -7,6 +7,7 @@ use tower_lsp::lsp_types::{
 use crate::goto::CHILD_KEYS;
 use crate::hover::build_function_signature;
 use crate::types::{FileId, NodeId, SourceLoc};
+use crate::utils::push_if_node_or_array;
 
 /// A declaration found within a specific scope.
 #[derive(Debug, Clone)]
@@ -93,16 +94,6 @@ pub struct CompletionCache {
     /// Values are `"contract"`, `"interface"`, or `"library"`.
     /// Used to determine which `type(X).` members to offer.
     pub contract_kinds: HashMap<NodeId, String>,
-}
-
-fn push_if_node_or_array<'a>(tree: &'a Value, key: &str, stack: &mut Vec<&'a Value>) {
-    if let Some(value) = tree.get(key) {
-        match value {
-            Value::Array(arr) => stack.extend(arr),
-            Value::Object(_) => stack.push(value),
-            _ => {}
-        }
-    }
 }
 
 /// Map AST nodeType to LSP CompletionItemKind.

@@ -16,6 +16,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::RwLock;
 use tower_lsp::{Client, LanguageServer, lsp_types::*};
 
+/// Per-document semantic token cache: `result_id` + token list.
+type SemanticTokenCache = HashMap<String, (String, Vec<SemanticToken>)>;
+
 pub struct ForgeLsp {
     client: Client,
     compiler: Arc<dyn Runner>,
@@ -36,8 +39,7 @@ pub struct ForgeLsp {
     /// Whether to use solc directly for AST generation (with forge fallback).
     use_solc: bool,
     /// Cache of semantic tokens per document for delta support.
-    /// Key: URI string, Value: (result_id, tokens).
-    semantic_token_cache: Arc<RwLock<HashMap<String, (String, Vec<SemanticToken>)>>>,
+    semantic_token_cache: Arc<RwLock<SemanticTokenCache>>,
     /// Monotonic counter for generating unique result_ids.
     semantic_token_id: Arc<AtomicU64>,
     /// Workspace root URI from `initialize`. Used for project-wide file discovery.

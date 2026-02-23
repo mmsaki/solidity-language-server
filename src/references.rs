@@ -58,7 +58,7 @@ pub fn byte_to_id(
     byte_position: usize,
 ) -> Option<NodeId> {
     let file_nodes = nodes.get(abs_path)?;
-    let mut refs: HashMap<usize, NodeId> = HashMap::new();
+    let mut refs: HashMap<usize, (NodeId, bool)> = HashMap::new();
     for (id, node_info) in file_nodes {
         let Some(src_loc) = SourceLoc::parse(&node_info.src) else {
             continue;
@@ -66,10 +66,25 @@ pub fn byte_to_id(
 
         if src_loc.offset <= byte_position && byte_position < src_loc.end() {
             let diff = src_loc.length;
-            refs.entry(diff).or_insert(*id);
+            let has_ref = node_info.referenced_declaration.is_some();
+            match refs.entry(diff) {
+                std::collections::hash_map::Entry::Vacant(e) => {
+                    e.insert((*id, has_ref));
+                }
+                std::collections::hash_map::Entry::Occupied(mut e) => {
+                    // When two nodes share the same span length, prefer the one
+                    // with referencedDeclaration set. This resolves ambiguity
+                    // between InheritanceSpecifier and its child baseName
+                    // IdentifierPath — both have identical src ranges but only
+                    // the IdentifierPath carries referencedDeclaration.
+                    if has_ref && !e.get().1 {
+                        e.insert((*id, has_ref));
+                    }
+                }
+            }
         }
     }
-    refs.keys().min().map(|min_diff| refs[min_diff])
+    refs.keys().min().map(|min_diff| refs[min_diff].0)
 }
 
 pub fn id_to_location(
@@ -269,12 +284,19 @@ pub fn resolve_target_location(
         }
     };
 
-    // Find the definition node and extract its file + byte offset
+    // Find the definition node and extract its file + byte offset.
+    // Prefer `nameLocation` over `src` — for declarations like
+    // `IPoolManager manager;`, `src` spans the entire declaration
+    // (starting at `IPoolManager`) while `nameLocation` points at
+    // `manager`. Using `src.offset` would cause `byte_to_id` in other
+    // builds to land on the type name node instead of the variable,
+    // contaminating cross-file references with the type's references.
     for (file_abs_path, file_nodes) in &build.nodes {
-        if let Some(node_info) = file_nodes.get(&target_node_id)
-            && let Some(src_loc) = SourceLoc::parse(&node_info.src)
-        {
-            return Some((file_abs_path.clone(), src_loc.offset));
+        if let Some(node_info) = file_nodes.get(&target_node_id) {
+            let loc_str = node_info.name_location.as_deref().unwrap_or(&node_info.src);
+            if let Some(src_loc) = SourceLoc::parse(loc_str) {
+                return Some((file_abs_path.clone(), src_loc.offset));
+            }
         }
     }
     None
