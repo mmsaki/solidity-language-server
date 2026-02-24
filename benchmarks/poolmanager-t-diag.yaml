@@ -1,0 +1,15 @@
+# PoolManager.t.sol — diagnostics-only benchmark
+#   lsp-bench -c benchmarks/poolmanager-t-diag.yaml
+
+project: v4-core
+file: test/PoolManager.t.sol
+line: 116
+col: 51
+output: benchmarks/poolmanager-t-diag
+report: README.md
+
+servers:
+  - mmsaki@latest
+
+benchmarks:
+  - textDocument/diagnostic

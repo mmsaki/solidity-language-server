@@ -713,37 +713,32 @@ pub async fn solc_build(
 
 // ── Project-wide indexing ──────────────────────────────────────────────────
 
-/// Directories to skip when discovering source files.
-const SKIP_DIRS: &[&str] = &[
-    "test",
-    "tests",
-    "lib",
-    "node_modules",
-    "out",
-    "artifacts",
-    "cache",
-    "script",
-    "scripts",
-];
+/// Directories that always contain build artifacts or third-party code.
+/// These are skipped regardless of foundry.toml configuration.
+const ALWAYS_SKIP_DIRS: &[&str] = &["node_modules", "out", "artifacts", "cache"];
 
-/// Discover all Solidity source files under `config.root/config.sources_dir`.
+/// Discover all Solidity source files under the project root.
 ///
-/// Filters:
-/// - Only `*.sol` files
-/// - Skips `*.t.sol` (test) and `*.s.sol` (script) files
-/// - Skips directories listed in `SKIP_DIRS`
+/// Walks the entire project directory, including `test/`, `script/`, and
+/// any other user-authored directories. Only skips:
+/// - Directories listed in `config.libs` (default: `["lib"]`)
+/// - Directories in `ALWAYS_SKIP_DIRS` (build artifacts, node_modules)
+/// - Hidden directories (starting with `.`)
+///
+/// Includes `.t.sol` (test) and `.s.sol` (script) files so that
+/// find-references and rename work across the full project.
 pub fn discover_source_files(config: &FoundryConfig) -> Vec<PathBuf> {
-    let sources_path = config.root.join(&config.sources_dir);
-    if !sources_path.is_dir() {
+    let root = &config.root;
+    if !root.is_dir() {
         return Vec::new();
     }
     let mut files = Vec::new();
-    discover_recursive(&sources_path, &mut files);
+    discover_recursive(root, &config.libs, &mut files);
     files.sort();
     files
 }
 
-fn discover_recursive(dir: &Path, files: &mut Vec<PathBuf>) {
+fn discover_recursive(dir: &Path, libs: &[String], files: &mut Vec<PathBuf>) {
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
         Err(_) => return,
@@ -751,16 +746,23 @@ fn discover_recursive(dir: &Path, files: &mut Vec<PathBuf>) {
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
-            if let Some(name) = path.file_name().and_then(|n| n.to_str())
-                && SKIP_DIRS.contains(&name)
-            {
-                continue;
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                // Skip hidden directories (e.g., .git, .github)
+                if name.starts_with('.') {
+                    continue;
+                }
+                // Skip build artifact directories
+                if ALWAYS_SKIP_DIRS.contains(&name) {
+                    continue;
+                }
+                // Skip user-configured library directories
+                if libs.iter().any(|lib| lib == name) {
+                    continue;
+                }
             }
-            discover_recursive(&path, files);
+            discover_recursive(&path, libs, files);
         } else if let Some(name) = path.file_name().and_then(|n| n.to_str())
             && name.ends_with(".sol")
-            && !name.ends_with(".t.sol")
-            && !name.ends_with(".s.sol")
         {
             files.push(path);
         }
@@ -835,9 +837,9 @@ pub async fn solc_project_index(
         c.log_message(
             tower_lsp::lsp_types::MessageType::INFO,
             format!(
-                "project index: discovered {} source files in {}/",
+                "project index: discovered {} source files in {}",
                 source_files.len(),
-                config.sources_dir
+                config.root.display()
             ),
         )
         .await;
