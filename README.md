@@ -96,7 +96,7 @@ return {
       fileOperations = {
         -- Auto-generate scaffold for new .sol files.
         scaffoldOnCreate = true,
-        -- Auto-update imports via workspace/willRenameFiles (opt-in).
+        -- Auto-update imports via workspace/willRenameFiles.
         updateImportsOnRename = true,
       },
     },

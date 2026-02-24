@@ -93,7 +93,7 @@ pub struct FileOperationsSettings {
     #[serde(default = "default_true")]
     pub scaffold_on_create: bool,
     /// Auto-update Solidity imports during `workspace/willRenameFiles`.
-    #[serde(default = "default_false")]
+    #[serde(default = "default_true")]
     pub update_imports_on_rename: bool,
 }
 
@@ -101,17 +101,13 @@ impl Default for FileOperationsSettings {
     fn default() -> Self {
         Self {
             scaffold_on_create: true,
-            update_imports_on_rename: false,
+            update_imports_on_rename: true,
         }
     }
 }
 
 fn default_true() -> bool {
     true
-}
-
-fn default_false() -> bool {
-    false
 }
 
 /// Try to parse `Settings` from a `serde_json::Value`.
@@ -921,7 +917,7 @@ src = "src"
         assert!(s.inlay_hints.gas_estimates);
         assert!(s.lint.enabled);
         assert!(s.file_operations.scaffold_on_create);
-        assert!(!s.file_operations.update_imports_on_rename);
+        assert!(s.file_operations.update_imports_on_rename);
         assert!(s.lint.severity.is_empty());
         assert!(s.lint.only.is_empty());
         assert!(s.lint.exclude.is_empty());
@@ -989,7 +985,7 @@ src = "src"
         // lint.enabled not specified → defaults to true
         assert!(s.lint.enabled);
         assert!(s.file_operations.scaffold_on_create);
-        assert!(!s.file_operations.update_imports_on_rename);
+        assert!(s.file_operations.update_imports_on_rename);
         assert!(s.lint.severity.is_empty());
         assert!(s.lint.only.is_empty());
         assert_eq!(s.lint.exclude, vec!["unused-import"]);
@@ -1005,7 +1001,7 @@ src = "src"
         assert!(s.inlay_hints.gas_estimates);
         assert!(s.lint.enabled);
         assert!(s.file_operations.scaffold_on_create);
-        assert!(!s.file_operations.update_imports_on_rename);
+        assert!(s.file_operations.update_imports_on_rename);
         assert!(s.lint.severity.is_empty());
         assert!(s.lint.only.is_empty());
         assert!(s.lint.exclude.is_empty());

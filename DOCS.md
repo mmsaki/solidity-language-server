@@ -65,8 +65,7 @@ return {
         -- Auto-generate scaffold for new .sol files.
         -- Set to false to disable scaffold generation.
         scaffoldOnCreate = true,
-        -- Auto-update imports via workspace/willRenameFiles (opt-in).
-        -- Default is false.
+        -- Auto-update imports via workspace/willRenameFiles.
         updateImportsOnRename = true,
       },
     },
@@ -151,8 +150,7 @@ return {
         -- Auto-generate scaffold for new .sol files.
         -- Set to false to disable scaffold generation.
         scaffoldOnCreate = true,
-        -- Auto-update imports via workspace/willRenameFiles (opt-in).
-        -- Default is false.
+        -- Auto-update imports via workspace/willRenameFiles.
         updateImportsOnRename = true,
       },
     },
