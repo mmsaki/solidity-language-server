@@ -566,6 +566,10 @@ impl ForgeLsp {
     }
 }
 
+fn update_imports_on_delete_enabled(settings: &crate::config::Settings) -> bool {
+    settings.file_operations.update_imports_on_delete
+}
+
 #[tower_lsp::async_trait]
 impl LanguageServer for ForgeLsp {
     async fn initialize(
@@ -585,8 +589,8 @@ impl LanguageServer for ForgeLsp {
                 .log_message(
                     MessageType::INFO,
                     format!(
-                        "settings: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.scaffoldOnCreate={}, fileOperations.updateImportsOnRename={}",
-                        s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.scaffold_on_create, s.file_operations.update_imports_on_rename,
+                        "settings: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.scaffoldOnCreate={}, fileOperations.updateImportsOnRename={}, fileOperations.updateImportsOnDelete={}",
+                        s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.scaffold_on_create, s.file_operations.update_imports_on_rename, s.file_operations.update_imports_on_delete,
                     ),
                 )
                 .await;
@@ -1355,8 +1359,8 @@ impl LanguageServer for ForgeLsp {
                 .log_message(
                     MessageType::INFO,
                     format!(
-                    "settings updated: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.scaffoldOnCreate={}, fileOperations.updateImportsOnRename={}",
-                    s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.scaffold_on_create, s.file_operations.update_imports_on_rename,
+                    "settings updated: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.scaffoldOnCreate={}, fileOperations.updateImportsOnRename={}, fileOperations.updateImportsOnDelete={}",
+                    s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.scaffold_on_create, s.file_operations.update_imports_on_rename, s.file_operations.update_imports_on_delete,
                 ),
             )
             .await;
@@ -2914,6 +2918,15 @@ impl LanguageServer for ForgeLsp {
                 format!("workspace/willDeleteFiles: {} file(s)", params.files.len()),
             )
             .await;
+        if !update_imports_on_delete_enabled(&*self.settings.read().await) {
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    "willDeleteFiles: updateImportsOnDelete disabled",
+                )
+                .await;
+            return Ok(None);
+        }
 
         let config = self.foundry_config.read().await.clone();
         let project_root = config.root.clone();
@@ -3500,5 +3513,23 @@ impl LanguageServer for ForgeLsp {
                 }
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::update_imports_on_delete_enabled;
+
+    #[test]
+    fn update_imports_on_delete_enabled_defaults_true() {
+        let s = crate::config::Settings::default();
+        assert!(update_imports_on_delete_enabled(&s));
+    }
+
+    #[test]
+    fn update_imports_on_delete_enabled_respects_false() {
+        let mut s = crate::config::Settings::default();
+        s.file_operations.update_imports_on_delete = false;
+        assert!(!update_imports_on_delete_enabled(&s));
     }
 }
