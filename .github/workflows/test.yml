@@ -22,4 +22,4 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
 
       - name: Run tests
-        run: cargo test
+        run: timeout 20m cargo test

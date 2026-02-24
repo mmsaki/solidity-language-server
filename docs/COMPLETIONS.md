@@ -692,10 +692,10 @@ Plus all Pool library functions (`initialize`, `swap`, `modifyLiquidity`, `donat
 
 ### Setup
 
-Benchmarks use [`lsp-bench`](https://github.com/mmsaki/solidity-lsp-benchmarks), a benchmark framework for LSP servers. Install it:
+Benchmarks use [`lsp-bench`](https://github.com/mmsaki/lsp-bench), a benchmark framework for LSP servers. Install it:
 
 ```sh
-cargo install --path /path/to/solidity-lsp-benchmarks
+cargo install --path /path/to/lsp-bench
 ```
 
 Benchmarks compare two server binaries side-by-side against the same project. The installed release (`solidity-language-server` in PATH) represents the baseline, and the local build (`./target/release/solidity-language-server`) represents the current branch.

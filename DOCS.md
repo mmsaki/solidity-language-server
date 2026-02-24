@@ -61,6 +61,15 @@ return {
         -- Suppress specific lint rule IDs from diagnostics.
         exclude = {},
       },
+      fileOperations = {
+        -- Auto-generate scaffold for new .sol files.
+        -- Set to false to disable scaffold generation.
+        scaffoldOnCreate = true,
+        -- Auto-update imports via workspace/willRenameFiles.
+        updateImportsOnRename = true,
+        -- Auto-remove imports via workspace/willDeleteFiles.
+        updateImportsOnDelete = true,
+      },
     },
   },
 }
@@ -139,6 +148,15 @@ return {
         -- Suppress specific lint rule IDs from diagnostics.
         exclude = {},
       },
+      fileOperations = {
+        -- Auto-generate scaffold for new .sol files.
+        -- Set to false to disable scaffold generation.
+        scaffoldOnCreate = true,
+        -- Auto-update imports via workspace/willRenameFiles.
+        updateImportsOnRename = true,
+        -- Auto-remove imports via workspace/willDeleteFiles.
+        updateImportsOnDelete = true,
+      },
     },
   },
 }
@@ -154,6 +172,9 @@ inlayHints.gasEstimates = true
 lint.enabled = true
 lint.severity = ["high", "med"]
 lint.exclude = ["pascal-case-struct"]
+fileOperations.scaffoldOnCreate = true
+fileOperations.updateImportsOnRename = true
+fileOperations.updateImportsOnDelete = true
 ```
 
 ### VSCode / Cursor
@@ -165,7 +186,10 @@ lint.exclude = ["pascal-case-struct"]
   "solidity-language-server.lint.enabled": true,
   "solidity-language-server.lint.severity": ["high", "med"],
   "solidity-language-server.lint.only": [],
-  "solidity-language-server.lint.exclude": ["pascal-case-struct"]
+  "solidity-language-server.lint.exclude": ["pascal-case-struct"],
+  "solidity-language-server.fileOperations.scaffoldOnCreate": true,
+  "solidity-language-server.fileOperations.updateImportsOnRename": true,
+  "solidity-language-server.fileOperations.updateImportsOnDelete": true
 }
 ```
 
@@ -187,6 +211,11 @@ lint.exclude = ["pascal-case-struct"]
           "enabled": true,
           "severity": ["high", "med"],
           "exclude": ["pascal-case-struct"]
+        },
+        "fileOperations": {
+          "scaffoldOnCreate": true,
+          "updateImportsOnRename": true,
+          "updateImportsOnDelete": true
         }
       }
     }

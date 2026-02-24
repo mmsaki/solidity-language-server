@@ -1,0 +1,22 @@
+# workspace/willCreateFiles benchmark — small project (create NewContract.sol)
+# Tests scaffold generation for a new .sol file.
+#   lsp-bench -c benchmarks/example-will-create.yaml
+#
+# Expected: WorkspaceEdit with scaffold (SPDX, pragma, contract NewContract {})
+
+project: example
+file: A.sol
+line: 4
+col: 8
+output: benchmarks/example-will-create
+report: README.md
+
+servers:
+  - mmsaki@latest
+
+benchmarks:
+  - workspace/willCreateFiles
+
+methods:
+  workspace/willCreateFiles:
+    newName: NewContract.sol

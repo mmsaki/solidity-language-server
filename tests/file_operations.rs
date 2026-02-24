@@ -861,3 +861,225 @@ fn test_expand_folder_renames_from_paths_uses_component_prefix() {
     assert!(expanded[0].0.ends_with("/tmp/project/src/A.sol"));
     assert!(expanded[0].1.ends_with("/tmp/project/contracts/A.sol"));
 }
+
+// =============================================================================
+// delete_imports tests
+// =============================================================================
+
+#[test]
+fn test_delete_file_removes_relative_import_statement() {
+    let proj = TempProject::new();
+
+    let a_path = proj.write_file(
+        "A.sol",
+        "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\ncontract A {}\n",
+    );
+    let b_path = proj.write_file(
+        "B.sol",
+        "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\nimport {A} from \"./A.sol\";\ncontract B is A {}\n",
+    );
+
+    let source_files = vec![a_path, b_path.clone()];
+    let deletes = vec![proj.path("A.sol")];
+    let provider = |fs_path: &str| -> Option<Vec<u8>> { std::fs::read(fs_path).ok() };
+
+    let result = file_operations::delete_imports(&source_files, &deletes, proj.root(), &provider);
+    let b_uri = proj.uri("B.sol");
+    assert!(result.edits.contains_key(&b_uri));
+    assert_eq!(result.edits[&b_uri].len(), 1);
+
+    let b_source = std::fs::read_to_string(proj.path("B.sol")).unwrap();
+    let patched = file_operations::apply_text_edits(&b_source, &result.edits[&b_uri]);
+    assert!(!patched.contains("import {A} from \"./A.sol\";"));
+    assert!(patched.contains("contract B is A {}"));
+}
+
+#[test]
+fn test_delete_file_removes_non_relative_import_statement() {
+    let proj = TempProject::new();
+
+    let a_path = proj.write_file(
+        "src/A.sol",
+        "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\ncontract A {}\n",
+    );
+    let t_path = proj.write_file(
+        "test/T.t.sol",
+        "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\nimport {A} from \"src/A.sol\";\ncontract T is A {}\n",
+    );
+
+    let source_files = vec![a_path, t_path];
+    let deletes = vec![proj.path("src/A.sol")];
+    let provider = |fs_path: &str| -> Option<Vec<u8>> { std::fs::read(fs_path).ok() };
+
+    let result = file_operations::delete_imports(&source_files, &deletes, proj.root(), &provider);
+    let t_uri = proj.uri("test/T.t.sol");
+    assert!(result.edits.contains_key(&t_uri));
+    assert_eq!(result.edits[&t_uri].len(), 1);
+}
+
+#[test]
+fn test_delete_file_removes_multiline_import_statement() {
+    let proj = TempProject::new();
+
+    let a_path = proj.write_file(
+        "src/A.sol",
+        "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\ncontract A {}\n",
+    );
+    let c_path = proj.write_file(
+        "src/C.sol",
+        "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\nimport {\n    A\n} from \"./A.sol\";\ncontract C is A {}\n",
+    );
+
+    let source_files = vec![a_path, c_path.clone()];
+    let deletes = vec![proj.path("src/A.sol")];
+    let provider = |fs_path: &str| -> Option<Vec<u8>> { std::fs::read(fs_path).ok() };
+
+    let result = file_operations::delete_imports(&source_files, &deletes, proj.root(), &provider);
+    let c_uri = proj.uri("src/C.sol");
+    assert!(result.edits.contains_key(&c_uri));
+
+    let c_source = std::fs::read_to_string(proj.path("src/C.sol")).unwrap();
+    let patched = file_operations::apply_text_edits(&c_source, &result.edits[&c_uri]);
+    assert!(!patched.contains("from \"./A.sol\";"));
+    assert!(patched.contains("contract C is A {}"));
+}
+
+#[test]
+fn test_delete_file_no_matching_imports_returns_empty() {
+    let proj = TempProject::new();
+
+    let a_path = proj.write_file(
+        "A.sol",
+        "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\ncontract A {}\n",
+    );
+    let b_path = proj.write_file(
+        "B.sol",
+        "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\ncontract B {}\n",
+    );
+
+    let source_files = vec![a_path, b_path];
+    let deletes = vec![proj.path("Missing.sol")];
+    let provider = |fs_path: &str| -> Option<Vec<u8>> { std::fs::read(fs_path).ok() };
+
+    let result = file_operations::delete_imports(&source_files, &deletes, proj.root(), &provider);
+    assert!(result.edits.is_empty());
+}
+
+#[test]
+fn test_expand_folder_deletes_from_paths_uses_component_prefix() {
+    let delete_uri = Url::from_file_path("/tmp/project/src").unwrap();
+    let params = vec![delete_uri];
+    let candidates = vec![
+        std::path::PathBuf::from("/tmp/project/src/A.sol"),
+        std::path::PathBuf::from("/tmp/project/src2/B.sol"),
+    ];
+
+    let expanded = file_operations::expand_folder_deletes_from_paths(&params, &candidates);
+    assert_eq!(expanded.len(), 1, "should not match sibling src2 path");
+    assert!(expanded[0].ends_with("/tmp/project/src/A.sol"));
+}
+
+// =============================================================================
+// Scaffold generation tests
+// =============================================================================
+
+#[test]
+fn test_scaffold_basic_contract() {
+    let uri = Url::from_file_path("/tmp/project/src/MyToken.sol").unwrap();
+    let scaffold = file_operations::generate_scaffold(&uri, None).unwrap();
+    assert!(scaffold.contains("pragma solidity ^0.8.0;"));
+    assert!(scaffold.contains("contract MyToken {"));
+    assert!(scaffold.contains("// SPDX-License-Identifier: MIT"));
+}
+
+#[test]
+fn test_scaffold_with_solc_version() {
+    let uri = Url::from_file_path("/tmp/project/src/Vault.sol").unwrap();
+    let scaffold = file_operations::generate_scaffold(&uri, Some("0.8.26")).unwrap();
+    assert!(scaffold.contains("pragma solidity ^0.8.26;"));
+    assert!(scaffold.contains("contract Vault {"));
+}
+
+#[test]
+fn test_scaffold_with_prefixed_version() {
+    let uri = Url::from_file_path("/tmp/project/src/Vault.sol").unwrap();
+    let scaffold = file_operations::generate_scaffold(&uri, Some(">=0.8.0 <0.9.0")).unwrap();
+    assert!(scaffold.contains("pragma solidity >=0.8.0 <0.9.0;"));
+}
+
+#[test]
+fn test_scaffold_interface() {
+    let uri = Url::from_file_path("/tmp/project/src/IPoolManager.sol").unwrap();
+    let scaffold = file_operations::generate_scaffold(&uri, None).unwrap();
+    assert!(scaffold.contains("interface IPoolManager {"));
+}
+
+#[test]
+fn test_scaffold_library() {
+    let uri = Url::from_file_path("/tmp/project/src/LibMath.sol").unwrap();
+    let scaffold = file_operations::generate_scaffold(&uri, None).unwrap();
+    assert!(scaffold.contains("library LibMath {"));
+}
+
+#[test]
+fn test_scaffold_test_file() {
+    // Foo.t.sol → contract FooTest is Test (adds Test suffix)
+    let uri = Url::from_file_path("/tmp/project/test/Foo.t.sol").unwrap();
+    let scaffold = file_operations::generate_scaffold(&uri, None).unwrap();
+    assert!(scaffold.contains("import {Test} from \"forge-std/Test.sol\""));
+    assert!(scaffold.contains("contract FooTest is Test {"));
+}
+
+#[test]
+fn test_scaffold_script_file() {
+    // Deploy.s.sol → contract DeployScript is Script (adds Script suffix)
+    let uri = Url::from_file_path("/tmp/project/script/Deploy.s.sol").unwrap();
+    let scaffold = file_operations::generate_scaffold(&uri, None).unwrap();
+    assert!(scaffold.contains("import {Script} from \"forge-std/Script.sol\""));
+    assert!(scaffold.contains("contract DeployScript is Script {"));
+}
+
+#[test]
+fn test_scaffold_test_file_forces_contract_kind() {
+    let uri = Url::from_file_path("/tmp/project/test/IFoo.t.sol").unwrap();
+    let scaffold = file_operations::generate_scaffold(&uri, None).unwrap();
+    assert!(scaffold.contains("contract IFooTest is Test {"));
+    assert!(!scaffold.contains("interface IFooTest is Test {"));
+}
+
+#[test]
+fn test_scaffold_script_file_forces_contract_kind() {
+    let uri = Url::from_file_path("/tmp/project/script/LibDeploy.s.sol").unwrap();
+    let scaffold = file_operations::generate_scaffold(&uri, None).unwrap();
+    assert!(scaffold.contains("contract LibDeployScript is Script {"));
+    assert!(!scaffold.contains("library LibDeployScript is Script {"));
+}
+
+#[test]
+fn test_scaffold_non_sol_returns_none() {
+    let uri = Url::from_file_path("/tmp/project/README.md").unwrap();
+    assert!(file_operations::generate_scaffold(&uri, None).is_none());
+}
+
+#[test]
+fn test_scaffold_sanitizes_identifier() {
+    // Filename with hyphens: "my-token.sol" → contract mytoken
+    let uri = Url::from_file_path("/tmp/project/src/my-token.sol").unwrap();
+    let scaffold = file_operations::generate_scaffold(&uri, None).unwrap();
+    assert!(scaffold.contains("contract mytoken {"));
+}
+
+#[test]
+fn test_scaffold_digit_prefix() {
+    // Filename starting with digit: "1inch.sol" → contract _1inch
+    let uri = Url::from_file_path("/tmp/project/src/1inch.sol").unwrap();
+    let scaffold = file_operations::generate_scaffold(&uri, None).unwrap();
+    assert!(scaffold.contains("contract _1inch {"));
+}
+
+#[test]
+fn test_scaffold_keyword_identifier_prefixed() {
+    let uri = Url::from_file_path("/tmp/project/src/contract.sol").unwrap();
+    let scaffold = file_operations::generate_scaffold(&uri, None).unwrap();
+    assert!(scaffold.contains("contract _contract {"));
+}

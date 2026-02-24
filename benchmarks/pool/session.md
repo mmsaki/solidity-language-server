@@ -6,7 +6,7 @@
 
 **Responses:**
 
-**mmsaki v0.1.25** (9.5ms) — ok
+**mmsaki v0.1.25** (10.6ms) — ok
 
 <details>
 <summary>Summary: <code>"ok"</code></summary>
@@ -16,7 +16,7 @@
 ```
 </details>
 
-**mmsaki v0.1.24** (12.5ms) — ok
+**mmsaki v0.1.24** (11.1ms) — ok
 
 <details>
 <summary>Summary: <code>"ok"</code></summary>
@@ -34,7 +34,7 @@
 
 **Responses:**
 
-**mmsaki v0.1.25** (593.6ms, 52.2 MB) — 4 diagnostics
+**mmsaki v0.1.25** (145.1ms, 26.9 MB) — 4 diagnostics
 
 <details>
 <summary>Summary: <code>{ diagnostics: Array(4) [{ code: "mixed-case-function", message: "function names should use mixedCase", range: { end:...</code></summary>
@@ -112,7 +112,7 @@
 ```
 </details>
 
-**mmsaki v0.1.24** (489.6ms, 54.3 MB) — 4 diagnostics
+**mmsaki v0.1.24** (455.0ms, 53.5 MB) — 4 diagnostics
 
 <details>
 <summary>Summary: <code>{ diagnostics: Array(4) [{ code: "mixed-case-function", message: "function names should use mixedCase", range: { end:...</code></summary>
@@ -198,7 +198,7 @@
 
 **Responses:**
 
-**mmsaki v0.1.25** (3.5ms, 49.0 MB) — delta
+**mmsaki v0.1.25** (3.6ms, 26.8 MB) — delta
 
 <details>
 <summary>Summary: <code>{ edits: [], resultId: "3" }</code></summary>
@@ -211,7 +211,7 @@
 ```
 </details>
 
-**mmsaki v0.1.24** (4.4ms, 52.4 MB) — delta
+**mmsaki v0.1.24** (3.6ms, 52.5 MB) — delta
 
 <details>
 <summary>Summary: <code>{ edits: [], resultId: "3" }</code></summary>
@@ -248,7 +248,7 @@
 
 **Responses:**
 
-**mmsaki v0.1.25** (2.4ms, 50.9 MB) — `TickMath.sol:9`
+**mmsaki v0.1.25** (2.2ms, 26.7 MB) — `TickMath.sol:9`
 
 <details>
 <summary>Summary: <code>{ range: { end: { character: 16, line: 9 }, start: { character: 8, line: 9 } }, uri: "file:///Users/meek/developer/mm...</code></summary>
@@ -270,7 +270,7 @@
 ```
 </details>
 
-**mmsaki v0.1.24** (15.9ms, 55.4 MB) — `TickMath.sol:9`
+**mmsaki v0.1.24** (10.3ms, 52.4 MB) — `TickMath.sol:9`
 
 <details>
 <summary>Summary: <code>{ range: { end: { character: 16, line: 9 }, start: { character: 8, line: 9 } }, uri: "file:///Users/meek/developer/mm...</code></summary>
@@ -316,7 +316,7 @@
 
 **Responses:**
 
-**mmsaki v0.1.25** (0.3ms, 49.1 MB) — `TickMath.sol:9`
+**mmsaki v0.1.25** (0.3ms, 27.9 MB) — `TickMath.sol:9`
 
 <details>
 <summary>Summary: <code>{ range: { end: { character: 16, line: 9 }, start: { character: 8, line: 9 } }, uri: "file:///Users/meek/developer/mm...</code></summary>
@@ -338,7 +338,7 @@
 ```
 </details>
 
-**mmsaki v0.1.24** (9.2ms, 52.7 MB) — `TickMath.sol:9`
+**mmsaki v0.1.24** (9.3ms, 52.4 MB) — `TickMath.sol:9`
 
 <details>
 <summary>Summary: <code>{ range: { end: { character: 16, line: 9 }, start: { character: 8, line: 9 } }, uri: "file:///Users/meek/developer/mm...</code></summary>
@@ -384,7 +384,7 @@
 
 **Responses:**
 
-**mmsaki v0.1.25** (2.3ms, 49.9 MB) — function modifyLiquidity(struct Pool.State storage...
+**mmsaki v0.1.25** (2.2ms, 27.3 MB) — function modifyLiquidity(struct Pool.State storage...
 
 <details>
 <summary>Summary: <code>{ contents: { kind: "markdown", value: "```solidity
@@ -400,7 +400,7 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 ```
 </details>
 
-**mmsaki v0.1.24** (24.1ms, 53.4 MB) — function modifyLiquidity(struct Pool.State storage...
+**mmsaki v0.1.24** (13.4ms, 52.5 MB) — function modifyLiquidity(struct Pool.State storage...
 
 <details>
 <summary>Summary: <code>{ contents: { kind: "markdown", value: "```solidity
@@ -443,22 +443,22 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 
 **Responses:**
 
-**mmsaki v0.1.25** (3.6ms, 50.0 MB) — 24 references
+**mmsaki v0.1.25** (1.6ms, 26.7 MB) — 21 references
 
 <details>
-<summary>Summary: <code>Array(24) [{ range: { end: { character: 32, line: 213 }, start: { character: 24, line: 213 } }, uri: "file:///Users/m...</code></summary>
+<summary>Summary: <code>Array(21) [{ range: { end: { character: 33, line: 571 }, start: { character: 25, line: 571 } }, uri: "file:///Users/m...</code></summary>
 
 ```json
 [
   {
     "range": {
       "end": {
-        "character": 32,
-        "line": 213
+        "character": 33,
+        "line": 571
       },
       "start": {
-        "character": 24,
-        "line": 213
+        "character": 25,
+        "line": 571
       }
     },
     "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
@@ -466,25 +466,76 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
   {
     "range": {
       "end": {
-        "character": 16,
-        "line": 9
+        "character": 38,
+        "line": 434
       },
       "start": {
-        "character": 8,
-        "line": 9
+        "character": 30,
+        "line": 434
       }
     },
-    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/TickMath.sol"
+    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
   },
   {
     "range": {
       "end": {
+        "character": 41,
+        "line": 353
+      },
+      "start": {
+        "character": 33,
+        "line": 353
+      }
+    },
+    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
+  },
+  {
+    "range": {
+      "end": {
+        "character": 41,
+        "line": 350
+      },
+      "start": {
+        "character": 33,
+        "line": 350
+      }
+    },
+    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
+  },
+  {
+    "range": {
+      "end": {
+        "character": 72,
+        "line": 219
+      },
+      "start": {
+        "character": 64,
+        "line": 219
+      }
+    },
+    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
+  },
+  "... 16 more (21 total)"
+]
+```
+</details>
+
+**mmsaki v0.1.24** (11.1ms, 52.4 MB) — 24 references
+
+<details>
+<summary>Summary: <code>Array(24) [{ range: { end: { character: 40, line: 354 }, start: { character: 32, line: 354 } }, uri: "file:///Users/m...</code></summary>
+
+```json
+[
+  {
+    "range": {
+      "end": {
         "character": 40,
-        "line": 351
+        "line": 354
       },
       "start": {
         "character": 32,
-        "line": 351
+        "line": 354
       }
     },
     "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
@@ -505,37 +556,12 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
   {
     "range": {
       "end": {
-        "character": 41,
-        "line": 350
+        "character": 32,
+        "line": 96
       },
       "start": {
-        "character": 33,
-        "line": 350
-      }
-    },
-    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
-  },
-  "... 19 more (24 total)"
-]
-```
-</details>
-
-**mmsaki v0.1.24** (83.9ms, 54.7 MB) — 24 references
-
-<details>
-<summary>Summary: <code>Array(24) [{ range: { end: { character: 16, line: 8 }, start: { character: 8, line: 8 } }, uri: "file:///Users/meek/d...</code></summary>
-
-```json
-[
-  {
-    "range": {
-      "end": {
-        "character": 16,
-        "line": 8
-      },
-      "start": {
-        "character": 8,
-        "line": 8
+        "character": 24,
+        "line": 96
       }
     },
     "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
@@ -543,38 +569,12 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
   {
     "range": {
       "end": {
-        "character": 33,
-        "line": 571
+        "character": 52,
+        "line": 334
       },
       "start": {
-        "character": 25,
-        "line": 571
-      }
-    },
-    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
-  },
-  {
-    "range": {
-      "end": {
-        "character": 41,
-        "line": 350
-      },
-      "start": {
-        "character": 33,
-        "line": 350
-      }
-    },
-    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
-  },
-  {
-    "range": {
-      "end": {
         "character": 44,
-        "line": 358
-      },
-      "start": {
-        "character": 36,
-        "line": 358
+        "line": 334
       }
     },
     "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
@@ -582,15 +582,15 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
   {
     "range": {
       "end": {
-        "character": 16,
-        "line": 9
+        "character": 38,
+        "line": 434
       },
       "start": {
-        "character": 8,
-        "line": 9
+        "character": 30,
+        "line": 434
       }
     },
-    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/TickMath.sol"
+    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
   },
   "... 19 more (24 total)"
 ]
@@ -625,7 +625,7 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 
 **Responses:**
 
-**mmsaki v0.1.25** (0.2ms, 50.1 MB) — 28 items (slot0, feeGrowthGlobal0X128, feeGrowthGlobal1X128)
+**mmsaki v0.1.25** (0.1ms, 26.7 MB) — 28 items (slot0, feeGrowthGlobal0X128, feeGrowthGlobal1X128)
 
 <details>
 <summary>Summary: <code>{ isIncomplete: false, items: Array(28) [{ detail: "Slot0", kind: 5, label: "slot0" }, { detail: "uint256", kind: 5, ...</code></summary>
@@ -665,7 +665,7 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 ```
 </details>
 
-**mmsaki v0.1.24** (0.2ms, 54.5 MB) — 28 items (slot0, feeGrowthGlobal0X128, feeGrowthGlobal1X128)
+**mmsaki v0.1.24** (0.1ms, 52.9 MB) — 28 items (slot0, feeGrowthGlobal0X128, feeGrowthGlobal1X128)
 
 <details>
 <summary>Summary: <code>{ isIncomplete: false, items: Array(28) [{ detail: "Slot0", kind: 5, label: "slot0" }, { detail: "uint256", kind: 5, ...</code></summary>
@@ -729,7 +729,7 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 
 **Responses:**
 
-**mmsaki v0.1.25** (2.4ms, 49.2 MB) — function getTickAtSqrtPrice(uint160 sqrtPriceX96) ...
+**mmsaki v0.1.25** (2.1ms, 26.6 MB) — function getTickAtSqrtPrice(uint160 sqrtPriceX96) ...
 
 <details>
 <summary>Summary: <code>{ activeParameter: 0, activeSignature: 0, signatures: Array(1) [{ activeParameter: 0, label: "function getTickAtSqrtP...</code></summary>
@@ -756,7 +756,7 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 ```
 </details>
 
-**mmsaki v0.1.24** (11.8ms, 54.0 MB) — function getTickAtSqrtPrice(uint160 sqrtPriceX96) ...
+**mmsaki v0.1.24** (11.8ms, 53.0 MB) — function getTickAtSqrtPrice(uint160 sqrtPriceX96) ...
 
 <details>
 <summary>Summary: <code>{ activeParameter: 0, activeSignature: 0, signatures: Array(1) [{ activeParameter: 0, label: "function getTickAtSqrtP...</code></summary>
@@ -808,88 +808,7 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 
 **Responses:**
 
-**mmsaki v0.1.25** (3.1ms, 50.7 MB) — 13 edits in 1 files
-
-<details>
-<summary>Summary: <code>{ changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol: Array(13) [...</code></summary>
-
-```json
-{
-  "changes": {
-    "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol": [
-      {
-        "newText": "__lsp_bench_rename__",
-        "range": {
-          "end": {
-            "character": 26,
-            "line": 205
-          },
-          "start": {
-            "character": 12,
-            "line": 205
-          }
-        }
-      },
-      {
-        "newText": "__lsp_bench_rename__",
-        "range": {
-          "end": {
-            "character": 30,
-            "line": 158
-          },
-          "start": {
-            "character": 16,
-            "line": 158
-          }
-        }
-      },
-      {
-        "newText": "__lsp_bench_rename__",
-        "range": {
-          "end": {
-            "character": 118,
-            "line": 221
-          },
-          "start": {
-            "character": 104,
-            "line": 221
-          }
-        }
-      },
-      {
-        "newText": "__lsp_bench_rename__",
-        "range": {
-          "end": {
-            "character": 118,
-            "line": 213
-          },
-          "start": {
-            "character": 104,
-            "line": 213
-          }
-        }
-      },
-      {
-        "newText": "__lsp_bench_rename__",
-        "range": {
-          "end": {
-            "character": 30,
-            "line": 195
-          },
-          "start": {
-            "character": 16,
-            "line": 195
-          }
-        }
-      },
-      "... 8 more (13 total)"
-    ]
-  }
-}
-```
-</details>
-
-**mmsaki v0.1.24** (43.4ms, 54.5 MB) — 13 edits in 1 files
+**mmsaki v0.1.25** (2.1ms, 27.4 MB) — 13 edits in 1 files
 
 <details>
 <summary>Summary: <code>{ changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol: Array(13) [...</code></summary>
@@ -903,24 +822,11 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
         "range": {
           "end": {
             "character": 118,
-            "line": 213
+            "line": 232
           },
           "start": {
             "character": 104,
-            "line": 213
-          }
-        }
-      },
-      {
-        "newText": "__lsp_bench_rename__",
-        "range": {
-          "end": {
-            "character": 113,
-            "line": 161
-          },
-          "start": {
-            "character": 99,
-            "line": 161
+            "line": 232
           }
         }
       },
@@ -941,6 +847,74 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
         "newText": "__lsp_bench_rename__",
         "range": {
           "end": {
+            "character": 118,
+            "line": 221
+          },
+          "start": {
+            "character": 104,
+            "line": 221
+          }
+        }
+      },
+      {
+        "newText": "__lsp_bench_rename__",
+        "range": {
+          "end": {
+            "character": 26,
+            "line": 205
+          },
+          "start": {
+            "character": 12,
+            "line": 205
+          }
+        }
+      },
+      {
+        "newText": "__lsp_bench_rename__",
+        "range": {
+          "end": {
+            "character": 34,
+            "line": 164
+          },
+          "start": {
+            "character": 20,
+            "line": 164
+          }
+        }
+      },
+      "... 8 more (13 total)"
+    ]
+  }
+}
+```
+</details>
+
+**mmsaki v0.1.24** (19.7ms, 53.4 MB) — 13 edits in 1 files
+
+<details>
+<summary>Summary: <code>{ changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol: Array(13) [...</code></summary>
+
+```json
+{
+  "changes": {
+    "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol": [
+      {
+        "newText": "__lsp_bench_rename__",
+        "range": {
+          "end": {
+            "character": 113,
+            "line": 161
+          },
+          "start": {
+            "character": 99,
+            "line": 161
+          }
+        }
+      },
+      {
+        "newText": "__lsp_bench_rename__",
+        "range": {
+          "end": {
             "character": 34,
             "line": 164
           },
@@ -954,12 +928,38 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
         "newText": "__lsp_bench_rename__",
         "range": {
           "end": {
-            "character": 118,
-            "line": 219
+            "character": 30,
+            "line": 195
           },
           "start": {
-            "character": 104,
-            "line": 219
+            "character": 16,
+            "line": 195
+          }
+        }
+      },
+      {
+        "newText": "__lsp_bench_rename__",
+        "range": {
+          "end": {
+            "character": 26,
+            "line": 205
+          },
+          "start": {
+            "character": 12,
+            "line": 205
+          }
+        }
+      },
+      {
+        "newText": "__lsp_bench_rename__",
+        "range": {
+          "end": {
+            "character": 62,
+            "line": 160
+          },
+          "start": {
+            "character": 48,
+            "line": 160
           }
         }
       },
@@ -994,7 +994,7 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 
 **Responses:**
 
-**mmsaki v0.1.25** (0.1ms, 49.1 MB) — ready (line 102)
+**mmsaki v0.1.25** (0.2ms, 27.3 MB) — ready (line 102)
 
 <details>
 <summary>Summary: <code>{ end: { character: 23, line: 102 }, start: { character: 15, line: 102 } }</code></summary>
@@ -1013,7 +1013,7 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 ```
 </details>
 
-**mmsaki v0.1.24** (0.3ms, 53.4 MB) — ready (line 102)
+**mmsaki v0.1.24** (0.2ms, 54.2 MB) — ready (line 102)
 
 <details>
 <summary>Summary: <code>{ end: { character: 23, line: 102 }, start: { character: 15, line: 102 } }</code></summary>
@@ -1052,7 +1052,7 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 
 **Responses:**
 
-**mmsaki v0.1.25** (8.5ms, 51.0 MB) — 16 symbols
+**mmsaki v0.1.25** (2.4ms, 26.6 MB) — 16 symbols
 
 <details>
 <summary>Summary: <code>Array(16) [{ kind: 15, name: "pragma solidity ^0.8.0", range: { end: { character: 23, line: 1 }, start: { character: ...</code></summary>
@@ -1184,7 +1184,7 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 ```
 </details>
 
-**mmsaki v0.1.24** (3.6ms, 54.4 MB) — 16 symbols
+**mmsaki v0.1.24** (2.4ms, 53.0 MB) — 16 symbols
 
 <details>
 <summary>Summary: <code>Array(16) [{ kind: 15, name: "pragma solidity ^0.8.0", range: { end: { character: 23, line: 1 }, start: { character: ...</code></summary>
@@ -1318,6 +1318,109 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 
 ---
 
+## textDocument/documentHighlight
+
+**Request:**
+```json
+{
+  "id": 1,
+  "jsonrpc": "2.0",
+  "method": "textDocument/documentHighlight",
+  "params": {
+    "position": {
+      "character": 15,
+      "line": 102
+    },
+    "textDocument": {
+      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
+    }
+  }
+}
+```
+
+**Responses:**
+
+**mmsaki v0.1.25** (2.7ms, 26.7 MB) — [{"kind":2,"range":{"end":{"character":1...
+
+<details>
+<summary>Summary: <code>Array(20) [{ kind: 2, range: { end: { character: 16, line: 8 }, start: { character: 8, line: 8 } } }, { kind: 2, rang...</code></summary>
+
+```json
+[
+  {
+    "kind": 2,
+    "range": {
+      "end": {
+        "character": 16,
+        "line": 8
+      },
+      "start": {
+        "character": 8,
+        "line": 8
+      }
+    }
+  },
+  {
+    "kind": 2,
+    "range": {
+      "end": {
+        "character": 32,
+        "line": 95
+      },
+      "start": {
+        "character": 24,
+        "line": 95
+      }
+    }
+  },
+  {
+    "kind": 2,
+    "range": {
+      "end": {
+        "character": 32,
+        "line": 96
+      },
+      "start": {
+        "character": 24,
+        "line": 96
+      }
+    }
+  },
+  {
+    "kind": 2,
+    "range": {
+      "end": {
+        "character": 23,
+        "line": 102
+      },
+      "start": {
+        "character": 15,
+        "line": 102
+      }
+    }
+  },
+  {
+    "kind": 2,
+    "range": {
+      "end": {
+        "character": 32,
+        "line": 213
+      },
+      "start": {
+        "character": 24,
+        "line": 213
+      }
+    }
+  },
+  "... 15 more (20 total)"
+]
+```
+</details>
+
+**mmsaki v0.1.24** (52.3 MB) — unsupported
+
+---
+
 ## textDocument/documentLink
 
 **Request:**
@@ -1336,7 +1439,7 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 
 **Responses:**
 
-**mmsaki v0.1.25** (0.7ms, 49.3 MB) — 14 links
+**mmsaki v0.1.25** (0.5ms, 26.7 MB) — 14 links
 
 <details>
 <summary>Summary: <code>Array(14) [{ range: { end: { character: 38, line: 3 }, start: { character: 24, line: 3 } }, target: "file:///Users/me...</code></summary>
@@ -1355,7 +1458,7 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
       }
     },
     "target": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/SafeCast.sol",
-    "tooltip": "src/libraries/SafeCast.sol"
+    "tooltip": "/Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/SafeCast.sol"
   },
   {
     "range": {
@@ -1369,7 +1472,7 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
       }
     },
     "target": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/TickBitmap.sol",
-    "tooltip": "src/libraries/TickBitmap.sol"
+    "tooltip": "/Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/TickBitmap.sol"
   },
   {
     "range": {
@@ -1383,7 +1486,7 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
       }
     },
     "target": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Position.sol",
-    "tooltip": "src/libraries/Position.sol"
+    "tooltip": "/Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Position.sol"
   },
   {
     "range": {
@@ -1397,7 +1500,7 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
       }
     },
     "target": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/UnsafeMath.sol",
-    "tooltip": "src/libraries/UnsafeMath.sol"
+    "tooltip": "/Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/UnsafeMath.sol"
   },
   {
     "range": {
@@ -1411,14 +1514,14 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
       }
     },
     "target": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/FixedPoint128.sol",
-    "tooltip": "src/libraries/FixedPoint128.sol"
+    "tooltip": "/Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/FixedPoint128.sol"
   },
   "... 9 more (14 total)"
 ]
 ```
 </details>
 
-**mmsaki v0.1.24** (0.9ms, 53.6 MB) — 14 links
+**mmsaki v0.1.24** (0.6ms, 53.4 MB) — 14 links
 
 <details>
 <summary>Summary: <code>Array(14) [{ range: { end: { character: 38, line: 3 }, start: { character: 24, line: 3 } }, target: "file:///Users/me...</code></summary>
@@ -1524,7 +1627,7 @@ function modifyLiquidity(struct Pool.State storage self, struct P...</code></sum
 
 **Responses:**
 
-**mmsaki v0.1.25** (25.5ms, 49.5 MB) — 1 edits
+**mmsaki v0.1.25** (16.3ms, 26.5 MB) — 1 edits
 
 <details>
 <summary>Summary: <code>Array(1) [{ newText: "// SPDX-License-Identifier: BUSL-1.1
@@ -1551,7 +1654,7 @@ import {SafeCas...", range: { end...</code></summary>
 ```
 </details>
 
-**mmsaki v0.1.24** (20.3ms, 53.9 MB) — 1 edits
+**mmsaki v0.1.24** (16.9ms, 52.6 MB) — 1 edits
 
 <details>
 <summary>Summary: <code>Array(1) [{ newText: "// SPDX-License-Identifier: BUSL-1.1
@@ -1577,6 +1680,229 @@ import {SafeCas...", range: { end...</code></summary>
 ]
 ```
 </details>
+
+---
+
+## textDocument/foldingRange
+
+**Request:**
+```json
+{
+  "id": 1,
+  "jsonrpc": "2.0",
+  "method": "textDocument/foldingRange",
+  "params": {
+    "textDocument": {
+      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
+    }
+  }
+}
+```
+
+**Responses:**
+
+**mmsaki v0.1.25** (2.6ms, 26.8 MB) — [{"endCharacter":1,"endLine":612,"startC...
+
+<details>
+<summary>Summary: <code>Array(91) [{ endCharacter: 1, endLine: 612, startCharacter: 13, startLine: 19 }, { endCharacter: 5, endLine: 76, star...</code></summary>
+
+```json
+[
+  {
+    "endCharacter": 1,
+    "endLine": 612,
+    "startCharacter": 13,
+    "startLine": 19
+  },
+  {
+    "endCharacter": 5,
+    "endLine": 76,
+    "startCharacter": 20,
+    "startLine": 67
+  },
+  {
+    "endCharacter": 5,
+    "endLine": 90,
+    "startCharacter": 17,
+    "startLine": 82
+  },
+  {
+    "endCharacter": 5,
+    "endLine": 97,
+    "startCharacter": 71,
+    "startLine": 93
+  },
+  {
+    "endCharacter": 5,
+    "endLine": 106,
+    "startCharacter": 110,
+    "startLine": 99
+  },
+  "... 86 more (91 total)"
+]
+```
+</details>
+
+**mmsaki v0.1.24** (52.5 MB) — unsupported
+
+---
+
+## textDocument/selectionRange
+
+**Request:**
+```json
+{
+  "id": 1,
+  "jsonrpc": "2.0",
+  "method": "textDocument/selectionRange",
+  "params": {
+    "positions": [
+      {
+        "character": 15,
+        "line": 102
+      }
+    ],
+    "textDocument": {
+      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
+    }
+  }
+}
+```
+
+**Responses:**
+
+**mmsaki v0.1.25** (2.1ms, 26.7 MB) — [{"parent":{"parent":{"parent":{"parent"...
+
+<details>
+<summary>Summary: <code>Array(1) [{ parent: { parent: { parent: { parent: { parent: { parent: { parent: { parent: { parent: { range: { end: {...</code></summary>
+
+```json
+[
+  {
+    "parent": {
+      "parent": {
+        "parent": {
+          "parent": {
+            "parent": {
+              "parent": {
+                "parent": {
+                  "parent": {
+                    "parent": {
+                      "range": {
+                        "end": {
+                          "character": 0,
+                          "line": 613
+                        },
+                        "start": {
+                          "character": 0,
+                          "line": 0
+                        }
+                      }
+                    },
+                    "range": {
+                      "end": {
+                        "character": 1,
+                        "line": 612
+                      },
+                      "start": {
+                        "character": 0,
+                        "line": 19
+                      }
+                    }
+                  },
+                  "range": {
+                    "end": {
+                      "character": 1,
+                      "line": 612
+                    },
+                    "start": {
+                      "character": 13,
+                      "line": 19
+                    }
+                  }
+                },
+                "range": {
+                  "end": {
+                    "character": 5,
+                    "line": 106
+                  },
+                  "start": {
+                    "character": 4,
+                    "line": 99
+                  }
+                }
+              },
+              "range": {
+                "end": {
+                  "character": 5,
+                  "line": 106
+                },
+                "start": {
+                  "character": 110,
+                  "line": 99
+                }
+              }
+            },
+            "range": {
+              "end": {
+                "character": 57,
+                "line": 102
+              },
+              "start": {
+                "character": 8,
+                "line": 102
+              }
+            }
+          },
+          "range": {
+            "end": {
+              "character": 56,
+              "line": 102
+            },
+            "start": {
+              "character": 8,
+              "line": 102
+            }
+          }
+        },
+        "range": {
+          "end": {
+            "character": 56,
+            "line": 102
+          },
+          "start": {
+            "character": 15,
+            "line": 102
+          }
+        }
+      },
+      "range": {
+        "end": {
+          "character": 42,
+          "line": 102
+        },
+        "start": {
+          "character": 15,
+          "line": 102
+        }
+      }
+    },
+    "range": {
+      "end": {
+        "character": 23,
+        "line": 102
+      },
+      "start": {
+        "character": 15,
+        "line": 102
+      }
+    }
+  }
+]
+```
+</details>
+
+**mmsaki v0.1.24** (52.9 MB) — unsupported
 
 ---
 
@@ -1608,7 +1934,7 @@ import {SafeCas...", range: { end...</code></summary>
 
 **Responses:**
 
-**mmsaki v0.1.25** (5.1ms, 50.2 MB) — 114 hints (value1:, value2:, value:)
+**mmsaki v0.1.25** (2.8ms, 27.4 MB) — 114 hints (value1:, value2:, value:)
 
 <details>
 <summary>Summary: <code>Array(114) [{ kind: 2, label: "value1:", paddingRight: true, position: { character: 72, line: 94 } }, { kind: 2, labe...</code></summary>
@@ -1665,7 +1991,7 @@ import {SafeCas...", range: { end...</code></summary>
 ```
 </details>
 
-**mmsaki v0.1.24** (4.8ms, 54.8 MB) — 114 hints (value1:, value2:, value:)
+**mmsaki v0.1.24** (2.9ms, 52.8 MB) — 114 hints (value1:, value2:, value:)
 
 <details>
 <summary>Summary: <code>Array(114) [{ kind: 2, label: "value1:", paddingRight: true, position: { character: 72, line: 94 } }, { kind: 2, labe...</code></summary>
@@ -1742,7 +2068,7 @@ import {SafeCas...", range: { end...</code></summary>
 
 **Responses:**
 
-**mmsaki v0.1.25** (18.4ms, 49.8 MB) — 697 tokens
+**mmsaki v0.1.25** (3.7ms, 26.7 MB) — 697 tokens
 
 <details>
 <summary>Summary: <code>{ data: Array(3485) [0, 0, 36, ... 3482 more], resultId: "2" }</code></summary>
@@ -1762,7 +2088,7 @@ import {SafeCas...", range: { end...</code></summary>
 ```
 </details>
 
-**mmsaki v0.1.24** (3.6ms, 53.2 MB) — 697 tokens
+**mmsaki v0.1.24** (3.8ms, 52.8 MB) — 697 tokens
 
 <details>
 <summary>Summary: <code>{ data: Array(3485) [0, 0, 36, ... 3482 more], resultId: "2" }</code></summary>
@@ -1812,7 +2138,7 @@ import {SafeCas...", range: { end...</code></summary>
 
 **Responses:**
 
-**mmsaki v0.1.25** (4.0ms, 50.4 MB) — 274 tokens
+**mmsaki v0.1.25** (2.4ms, 26.7 MB) — 274 tokens
 
 <details>
 <summary>Summary: <code>{ data: Array(1370) [0, 0, 36, ... 1367 more] }</code></summary>
@@ -1831,7 +2157,7 @@ import {SafeCas...", range: { end...</code></summary>
 ```
 </details>
 
-**mmsaki v0.1.24** (2.5ms, 54.6 MB) — 274 tokens
+**mmsaki v0.1.24** (2.4ms, 52.5 MB) — 274 tokens
 
 <details>
 <summary>Summary: <code>{ data: Array(1370) [0, 0, 36, ... 1367 more] }</code></summary>
@@ -1868,7 +2194,7 @@ import {SafeCas...", range: { end...</code></summary>
 
 **Responses:**
 
-**mmsaki v0.1.25** (2.2ms, 49.1 MB) — 68 symbols
+**mmsaki v0.1.25** (2.3ms, 26.5 MB) — 68 symbols
 
 <details>
 <summary>Summary: <code>Array(68) [{ kind: 3, location: { range: { end: { character: 1, line: 612 }, start: { character: 0, line: 19 } }, uri...</code></summary>
@@ -1969,7 +2295,7 @@ import {SafeCas...", range: { end...</code></summary>
 ```
 </details>
 
-**mmsaki v0.1.24** (13.8ms, 54.2 MB) — 68 symbols
+**mmsaki v0.1.24** (2.1ms, 53.3 MB) — 68 symbols
 
 <details>
 <summary>Summary: <code>Array(68) [{ kind: 3, location: { range: { end: { character: 1, line: 612 }, start: { character: 0, line: 19 } }, uri...</code></summary>
@@ -2069,5 +2395,223 @@ import {SafeCas...", range: { end...</code></summary>
 ]
 ```
 </details>
+
+---
+
+## workspace/willRenameFiles
+
+**Request:**
+```json
+{
+  "id": 1,
+  "jsonrpc": "2.0",
+  "method": "workspace/willRenameFiles",
+  "params": {
+    "files": [
+      {
+        "newUri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pools.sol",
+        "oldUri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/libraries/Pool.sol"
+      }
+    ]
+  }
+}
+```
+
+**Responses:**
+
+**mmsaki v0.1.25** (1.4ms, 373.8 MB) — 12 edits in 12 files
+
+<details>
+<summary>Summary: <code>{ changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/PoolManager.sol: Array(1) [{ ne...</code></summary>
+
+```json
+{
+  "changes": {
+    "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/PoolManager.sol": [
+      {
+        "newText": "\"./libraries/Pools.sol\"",
+        "range": {
+          "end": {
+            "character": 41,
+            "line": 4
+          },
+          "start": {
+            "character": 19,
+            "line": 4
+          }
+        }
+      }
+    ],
+    "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/ProtocolFees.sol": [
+      {
+        "newText": "\"./libraries/Pools.sol\"",
+        "range": {
+          "end": {
+            "character": 41,
+            "line": 10
+          },
+          "start": {
+            "character": 19,
+            "line": 10
+          }
+        }
+      }
+    ],
+    "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/test/Fuzzers.sol": [
+      {
+        "newText": "\"../libraries/Pools.sol\"",
+        "range": {
+          "end": {
+            "character": 42,
+            "line": 11
+          },
+          "start": {
+            "character": 19,
+            "line": 11
+          }
+        }
+      }
+    ],
+    "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/test/ProtocolFeesImplementation.sol": [
+      {
+        "newText": "\"../libraries/Pools.sol\"",
+        "range": {
+          "end": {
+            "character": 42,
+            "line": 7
+          },
+          "start": {
+            "character": 19,
+            "line": 7
+          }
+        }
+      }
+    ],
+    "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/test/ProxyPoolManager.sol": [
+      {
+        "newText": "\"../libraries/Pools.sol\"",
+        "range": {
+          "end": {
+            "character": 42,
+            "line": 4
+          },
+          "start": {
+            "character": 19,
+            "line": 4
+          }
+        }
+      }
+    ],
+    "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/test/TickOverflowSafetyEchidnaTest.sol": [
+      {
+        "newText": "\"../libraries/Pools.sol\"",
+        "range": {
+          "end": {
+            "character": 42,
+            "line": 3
+          },
+          "start": {
+            "character": 19,
+            "line": 3
+          }
+        }
+      }
+    ],
+    "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/DynamicFees.t.sol": [
+      {
+        "newText": "\"../src/libraries/Pools.sol\"",
+        "range": {
+          "end": {
+            "character": 46,
+            "line": 19
+          },
+          "start": {
+            "character": 19,
+            "line": 19
+          }
+        }
+      }
+    ],
+    "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/PoolManager.t.sol": [
+      {
+        "newText": "\"../src/libraries/Pools.sol\"",
+        "range": {
+          "end": {
+            "character": 46,
+            "line": 10
+          },
+          "start": {
+            "character": 19,
+            "line": 10
+          }
+        }
+      }
+    ],
+    "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/PoolManagerInitialize.t.sol": [
+      {
+        "newText": "\"../src/libraries/Pools.sol\"",
+        "range": {
+          "end": {
+            "character": 46,
+            "line": 10
+          },
+          "start": {
+            "character": 19,
+            "line": 10
+          }
+        }
+      }
+    ],
+    "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/Tick.t.sol": [
+      {
+        "newText": "\"../src/libraries/Pools.sol\"",
+        "range": {
+          "end": {
+            "character": 46,
+            "line": 6
+          },
+          "start": {
+            "character": 19,
+            "line": 6
+          }
+        }
+      }
+    ],
+    "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/libraries/Pool.t.sol": [
+      {
+        "newText": "\"../../src/libraries/Pools.sol\"",
+        "range": {
+          "end": {
+            "character": 49,
+            "line": 5
+          },
+          "start": {
+            "character": 19,
+            "line": 5
+          }
+        }
+      }
+    ],
+    "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/libraries/StateLibrary.t.sol": [
+      {
+        "newText": "\"../../src/libraries/Pools.sol\"",
+        "range": {
+          "end": {
+            "character": 49,
+            "line": 15
+          },
+          "start": {
+            "character": 19,
+            "line": 15
+          }
+        }
+      }
+    ]
+  }
+}
+```
+</details>
+
+**mmsaki v0.1.24** (52.5 MB) — unsupported
 
 ---

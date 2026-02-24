@@ -24,31 +24,35 @@ Benchmarked against `v4-core` — `test/PoolManager.t.sol`.
 
 | Method | mmsaki v0.1.25 | mmsaki v0.1.24 |
 |--------|----------------|----------------|
-| [initialize](#initialize) | 18.3ms | 11.1ms ⚡ |
-| [textDocument/diagnostic](#textdocumentdiagnostic) | 2.3s ⚡ | 2.4s |
-| [textDocument/semanticTokens/full/delta](#textdocumentsemantictokensfulldelta) | 9.7ms ⚡ | 10.8ms |
-| [textDocument/definition](#textdocumentdefinition) | 8.0ms ⚡ | 149.6ms |
-| [textDocument/declaration](#textdocumentdeclaration) | 0.8ms ⚡ | 153.5ms |
-| [textDocument/hover](#textdocumenthover) | 6.4ms ⚡ | 256.8ms |
-| [textDocument/references](#textdocumentreferences) | 4.4ms ⚡ | 146.8ms |
-| [textDocument/completion](#textdocumentcompletion) | 0.2ms ⚡ | 0.6ms |
-| [textDocument/signatureHelp](#textdocumentsignaturehelp) | 9.9ms ⚡ | 40.2ms |
-| [textDocument/rename](#textdocumentrename) | 6.0ms ⚡ | 289.8ms |
-| [textDocument/prepareRename](#textdocumentpreparerename) | 0.2ms ⚡ | 0.2ms |
-| [textDocument/documentSymbol](#textdocumentdocumentsymbol) | 8.7ms ⚡ | 16.2ms |
-| [textDocument/documentLink](#textdocumentdocumentlink) | 2.4ms ⚡ | 2.7ms |
-| [textDocument/formatting](#textdocumentformatting) | 25.3ms | 22.8ms ⚡ |
-| [textDocument/inlayHint](#textdocumentinlayhint) | 9.1ms ⚡ | 9.6ms |
-| [textDocument/semanticTokens/full](#textdocumentsemantictokensfull) | 9.9ms ⚡ | 13.5ms |
-| [textDocument/semanticTokens/range](#textdocumentsemantictokensrange) | 7.2ms | 6.8ms ⚡ |
-| [workspace/symbol](#workspacesymbol) | 6.5ms ⚡ | 18.8ms |
+| [initialize](#initialize) | 15.4ms | 15.2ms ⚡ |
+| [textDocument/diagnostic](#textdocumentdiagnostic) | 2.0s ⚡ | 2.2s |
+| [textDocument/semanticTokens/full/delta](#textdocumentsemantictokensfulldelta) | 9.6ms ⚡ | 9.8ms |
+| [textDocument/definition](#textdocumentdefinition) | 6.4ms ⚡ | 140.0ms |
+| [textDocument/declaration](#textdocumentdeclaration) | 0.7ms ⚡ | 132.3ms |
+| [textDocument/hover](#textdocumenthover) | 6.2ms ⚡ | 236.3ms |
+| [textDocument/references](#textdocumentreferences) | 4.4ms ⚡ | 135.8ms |
+| [textDocument/completion](#textdocumentcompletion) | 0.2ms ⚡ | 10.5ms |
+| [textDocument/signatureHelp](#textdocumentsignaturehelp) | 5.6ms ⚡ | 33.0ms |
+| [textDocument/rename](#textdocumentrename) | 5.9ms ⚡ | 274.1ms |
+| [textDocument/prepareRename](#textdocumentpreparerename) | 0.2ms | 0.2ms ⚡ |
+| [textDocument/documentSymbol](#textdocumentdocumentsymbol) | 6.4ms ⚡ | 6.4ms ⚡ |
+| [textDocument/documentHighlight](#textdocumentdocumenthighlight) | 7.5ms ⚡ | unsupported |
+| [textDocument/documentLink](#textdocumentdocumentlink) | 3.1ms | 2.2ms ⚡ |
+| [textDocument/formatting](#textdocumentformatting) | 21.2ms | 20.1ms ⚡ |
+| [textDocument/foldingRange](#textdocumentfoldingrange) | 7.2ms ⚡ | unsupported |
+| [textDocument/selectionRange](#textdocumentselectionrange) | 5.9ms ⚡ | unsupported |
+| [textDocument/inlayHint](#textdocumentinlayhint) | 9.4ms | 9.3ms ⚡ |
+| [textDocument/semanticTokens/full](#textdocumentsemantictokensfull) | 10.1ms | 10.0ms ⚡ |
+| [textDocument/semanticTokens/range](#textdocumentsemantictokensrange) | 6.7ms | 6.6ms ⚡ |
+| [workspace/symbol](#workspacesymbol) | 6.1ms | 6.0ms ⚡ |
+| [workspace/willRenameFiles](#workspacewillrenamefiles) | 1.7ms ⚡ | unsupported |
 
 ### Scorecard
 
 | Server | Wins | Out of |
 |--------|------|--------|
-| **mmsaki v0.1.25** | **15** | **18** |
-| mmsaki v0.1.24 | 3 | 18 |
+| **mmsaki v0.1.25** | **14** | **22** |
+| mmsaki v0.1.24 | 9 | 22 |
 
 ---
 
@@ -58,128 +62,156 @@ Benchmarked against `v4-core` — `test/PoolManager.t.sol`.
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki v0.1.25** | 18.3ms | - | ok |
-| **mmsaki v0.1.24** | 11.1ms ⚡ | - | ok |
+| **mmsaki v0.1.25** | 15.4ms | - | ok |
+| **mmsaki v0.1.24** | 15.2ms ⚡ | - | ok |
 
 ### textDocument/diagnostic
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki v0.1.25** | 2.3s ⚡ | 255.0 MB | 15 diagnostics |
-| **mmsaki v0.1.24** | 2.4s | **229.1 MB** | 15 diagnostics |
+| **mmsaki v0.1.25** | 2.0s ⚡ | 254.2 MB | 15 diagnostics |
+| **mmsaki v0.1.24** | 2.2s | **229.8 MB** | 15 diagnostics |
 
 ### textDocument/semanticTokens/full/delta
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki v0.1.25** | 9.7ms ⚡ | 253.7 MB | delta |
-| **mmsaki v0.1.24** | 10.8ms | **228.0 MB** | delta |
+| **mmsaki v0.1.25** | 9.6ms ⚡ | 254.6 MB | delta |
+| **mmsaki v0.1.24** | 9.8ms | **229.4 MB** | delta |
 
 ### textDocument/definition
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki v0.1.25** | 8.0ms ⚡ | 254.7 MB | `TickMath.sol:9` |
-| **mmsaki v0.1.24** | 149.6ms | **229.1 MB** | `TickMath.sol:9` |
+| **mmsaki v0.1.25** | 6.4ms ⚡ | 253.7 MB | `TickMath.sol:9` |
+| **mmsaki v0.1.24** | 140.0ms | **227.1 MB** | `TickMath.sol:9` |
 
 ### textDocument/declaration
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki v0.1.25** | 0.8ms ⚡ | 253.3 MB | `TickMath.sol:9` |
-| **mmsaki v0.1.24** | 153.5ms | **228.3 MB** | `TickMath.sol:9` |
+| **mmsaki v0.1.25** | 0.7ms ⚡ | 253.0 MB | `TickMath.sol:9` |
+| **mmsaki v0.1.24** | 132.3ms | **228.3 MB** | `TickMath.sol:9` |
 
 ### textDocument/hover
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki v0.1.25** | 6.4ms ⚡ | 255.0 MB | error PoolNotInitialized() |
-| **mmsaki v0.1.24** | 256.8ms | **227.9 MB** | error PoolNotInitialized() |
+| **mmsaki v0.1.25** | 6.2ms ⚡ | 253.5 MB | error PoolNotInitialized() |
+| **mmsaki v0.1.24** | 236.3ms | **227.2 MB** | error PoolNotInitialized() |
 
 ### textDocument/references
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki v0.1.25** | 4.4ms ⚡ | 254.5 MB | 7 references |
-| **mmsaki v0.1.24** | 146.8ms | **227.5 MB** | 7 references |
+| **mmsaki v0.1.25** | 4.4ms ⚡ | 253.7 MB | 7 references |
+| **mmsaki v0.1.24** | 135.8ms | **227.2 MB** | 7 references |
 
 ### textDocument/completion
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki v0.1.25** | 0.2ms ⚡ | 254.0 MB | 23 items (amount0, amount1, checkTicks) |
-| **mmsaki v0.1.24** | 0.6ms | **228.3 MB** | 23 items (amount0, amount1, checkTicks) |
+| **mmsaki v0.1.25** | 0.2ms ⚡ | 253.0 MB | 23 items (amount0, amount1, checkTicks) |
+| **mmsaki v0.1.24** | 10.5ms | **227.1 MB** | 23 items (amount0, amount1, checkTicks) |
 
 ### textDocument/signatureHelp
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki v0.1.25** | 9.9ms ⚡ | 254.9 MB | function bound(uint256 x, uint256 min, uint256 max... |
-| **mmsaki v0.1.24** | 40.2ms | **227.5 MB** | function bound(uint256 x, uint256 min, uint256 max... |
+| **mmsaki v0.1.25** | 5.6ms ⚡ | 254.2 MB | function bound(uint256 x, uint256 min, uint256 max... |
+| **mmsaki v0.1.24** | 33.0ms | **227.1 MB** | function bound(uint256 x, uint256 min, uint256 max... |
 
 ### textDocument/rename
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki v0.1.25** | 6.0ms ⚡ | 254.0 MB | 9 edits in 1 files |
-| **mmsaki v0.1.24** | 289.8ms | **227.8 MB** | 9 edits in 1 files |
+| **mmsaki v0.1.25** | 5.9ms ⚡ | 253.9 MB | 9 edits in 1 files |
+| **mmsaki v0.1.24** | 274.1ms | **227.4 MB** | 9 edits in 1 files |
 
 ### textDocument/prepareRename
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki v0.1.25** | 0.2ms ⚡ | 254.7 MB | ready (line 116) |
-| **mmsaki v0.1.24** | 0.2ms | **227.0 MB** | ready (line 116) |
+| **mmsaki v0.1.25** | 0.2ms | 253.7 MB | ready (line 116) |
+| **mmsaki v0.1.24** | 0.2ms ⚡ | **228.3 MB** | ready (line 116) |
 
 ### textDocument/documentSymbol
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki v0.1.25** | 8.7ms ⚡ | 254.4 MB | 35 symbols |
-| **mmsaki v0.1.24** | 16.2ms | **227.8 MB** | 35 symbols |
+| **mmsaki v0.1.25** | 6.4ms ⚡ | 254.1 MB | 35 symbols |
+| **mmsaki v0.1.24** | 6.4ms ⚡ | **229.0 MB** | 35 symbols |
+
+### textDocument/documentHighlight
+
+| Server | p95 | RSS | Result |
+|--------|-----|-----|--------|
+| **mmsaki v0.1.25** | 7.5ms ⚡ | **253.1 MB** | [{"kind":2,"range":{"end":{"character":1... |
+| **mmsaki v0.1.24** | - | 227.7 MB | unsupported |
 
 ### textDocument/documentLink
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki v0.1.25** | 2.4ms ⚡ | 254.4 MB | 33 links |
-| **mmsaki v0.1.24** | 2.7ms | **227.5 MB** | 33 links |
+| **mmsaki v0.1.25** | 3.1ms | 253.0 MB | 33 links |
+| **mmsaki v0.1.24** | 2.2ms ⚡ | **227.8 MB** | 33 links |
 
 ### textDocument/formatting
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki v0.1.25** | 25.3ms | 253.9 MB | 1 edits |
-| **mmsaki v0.1.24** | 22.8ms ⚡ | **229.5 MB** | 1 edits |
+| **mmsaki v0.1.25** | 21.2ms | 254.4 MB | 1 edits |
+| **mmsaki v0.1.24** | 20.1ms ⚡ | **228.4 MB** | 1 edits |
+
+### textDocument/foldingRange
+
+| Server | p95 | RSS | Result |
+|--------|-----|-----|--------|
+| **mmsaki v0.1.25** | 7.2ms ⚡ | **253.7 MB** | [{"endCharacter":1,"endLine":1261,"start... |
+| **mmsaki v0.1.24** | - | 227.4 MB | unsupported |
+
+### textDocument/selectionRange
+
+| Server | p95 | RSS | Result |
+|--------|-----|-----|--------|
+| **mmsaki v0.1.25** | 5.9ms ⚡ | **254.4 MB** | [{"parent":{"parent":{"parent":{"parent"... |
+| **mmsaki v0.1.24** | - | 228.3 MB | unsupported |
 
 ### textDocument/inlayHint
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki v0.1.25** | 9.1ms ⚡ | 254.2 MB | 1082 hints (name:, hooks:, _manager:) |
-| **mmsaki v0.1.24** | 9.6ms | **229.6 MB** | 1080 hints (name:, hooks:, name:) |
+| **mmsaki v0.1.25** | 9.4ms | 254.3 MB | 1082 hints (name:, hooks:, _manager:) |
+| **mmsaki v0.1.24** | 9.3ms ⚡ | **227.2 MB** | 1080 hints (name:, hooks:, name:) |
 
 ### textDocument/semanticTokens/full
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki v0.1.25** | 9.9ms ⚡ | 255.6 MB | 1512 tokens |
-| **mmsaki v0.1.24** | 13.5ms | **228.8 MB** | 1512 tokens |
+| **mmsaki v0.1.25** | 10.1ms | 253.8 MB | 1512 tokens |
+| **mmsaki v0.1.24** | 10.0ms ⚡ | **227.6 MB** | 1512 tokens |
 
 ### textDocument/semanticTokens/range
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki v0.1.25** | 7.2ms | 254.9 MB | 417 tokens |
-| **mmsaki v0.1.24** | 6.8ms ⚡ | **228.6 MB** | 417 tokens |
+| **mmsaki v0.1.25** | 6.7ms | 253.5 MB | 417 tokens |
+| **mmsaki v0.1.24** | 6.6ms ⚡ | **227.4 MB** | 417 tokens |
 
 ### workspace/symbol
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki v0.1.25** | 6.5ms ⚡ | 253.2 MB | 90 symbols |
-| **mmsaki v0.1.24** | 18.8ms | **227.4 MB** | 90 symbols |
+| **mmsaki v0.1.25** | 6.1ms | 253.9 MB | 90 symbols |
+| **mmsaki v0.1.24** | 6.0ms ⚡ | **227.4 MB** | 90 symbols |
+
+### workspace/willRenameFiles
+
+| Server | p95 | RSS | Result |
+|--------|-----|-----|--------|
+| **mmsaki v0.1.25** | 1.7ms ⚡ | **432.3 MB** | 12 edits in 12 files |
+| **mmsaki v0.1.24** | - | 235.5 MB | unsupported |
 
 ---
 
-*Benchmark run: 2026-02-23T18:41:38Z*
+*Benchmark run: 2026-02-24T06:36:37Z*

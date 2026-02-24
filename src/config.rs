@@ -25,6 +25,8 @@ pub struct Settings {
     pub inlay_hints: InlayHintsSettings,
     #[serde(default)]
     pub lint: LintSettings,
+    #[serde(default)]
+    pub file_operations: FileOperationsSettings,
 }
 
 /// Inlay-hint settings.
@@ -79,6 +81,31 @@ impl Default for LintSettings {
             severity: Vec::new(),
             only: Vec::new(),
             exclude: Vec::new(),
+        }
+    }
+}
+
+/// File operation feature settings.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileOperationsSettings {
+    /// Auto-generate Solidity scaffold when creating a new `.sol` file.
+    #[serde(default = "default_true")]
+    pub scaffold_on_create: bool,
+    /// Auto-update Solidity imports during `workspace/willRenameFiles`.
+    #[serde(default = "default_true")]
+    pub update_imports_on_rename: bool,
+    /// Auto-update Solidity imports during `workspace/willDeleteFiles`.
+    #[serde(default = "default_true")]
+    pub update_imports_on_delete: bool,
+}
+
+impl Default for FileOperationsSettings {
+    fn default() -> Self {
+        Self {
+            scaffold_on_create: true,
+            update_imports_on_rename: true,
+            update_imports_on_delete: true,
         }
     }
 }
@@ -893,6 +920,9 @@ src = "src"
         assert!(s.inlay_hints.parameters);
         assert!(s.inlay_hints.gas_estimates);
         assert!(s.lint.enabled);
+        assert!(s.file_operations.scaffold_on_create);
+        assert!(s.file_operations.update_imports_on_rename);
+        assert!(s.file_operations.update_imports_on_delete);
         assert!(s.lint.severity.is_empty());
         assert!(s.lint.only.is_empty());
         assert!(s.lint.exclude.is_empty());
@@ -908,13 +938,21 @@ src = "src"
                     "severity": ["high", "med"],
                     "only": ["incorrect-shift"],
                     "exclude": ["pascal-case-struct", "mixed-case-variable"]
-                }
+                },
+                "fileOperations": {
+                    "scaffoldOnCreate": false,
+                    "updateImportsOnRename": false,
+                    "updateImportsOnDelete": false
+                },
             }
         });
         let s = parse_settings(&value);
         assert!(!s.inlay_hints.parameters);
         assert!(!s.inlay_hints.gas_estimates);
         assert!(s.lint.enabled);
+        assert!(!s.file_operations.scaffold_on_create);
+        assert!(!s.file_operations.update_imports_on_rename);
+        assert!(!s.file_operations.update_imports_on_delete);
         assert_eq!(s.lint.severity, vec!["high", "med"]);
         assert_eq!(s.lint.only, vec!["incorrect-shift"]);
         assert_eq!(
@@ -927,11 +965,19 @@ src = "src"
     fn test_parse_settings_direct() {
         let value = serde_json::json!({
             "inlayHints": { "parameters": false },
-            "lint": { "enabled": false }
+            "lint": { "enabled": false },
+            "fileOperations": {
+                "scaffoldOnCreate": false,
+                "updateImportsOnRename": false,
+                "updateImportsOnDelete": false
+            }
         });
         let s = parse_settings(&value);
         assert!(!s.inlay_hints.parameters);
         assert!(!s.lint.enabled);
+        assert!(!s.file_operations.scaffold_on_create);
+        assert!(!s.file_operations.update_imports_on_rename);
+        assert!(!s.file_operations.update_imports_on_delete);
     }
 
     #[test]
@@ -947,6 +993,9 @@ src = "src"
         assert!(s.inlay_hints.gas_estimates);
         // lint.enabled not specified → defaults to true
         assert!(s.lint.enabled);
+        assert!(s.file_operations.scaffold_on_create);
+        assert!(s.file_operations.update_imports_on_rename);
+        assert!(s.file_operations.update_imports_on_delete);
         assert!(s.lint.severity.is_empty());
         assert!(s.lint.only.is_empty());
         assert_eq!(s.lint.exclude, vec!["unused-import"]);
@@ -961,6 +1010,9 @@ src = "src"
         assert!(s.inlay_hints.parameters);
         assert!(s.inlay_hints.gas_estimates);
         assert!(s.lint.enabled);
+        assert!(s.file_operations.scaffold_on_create);
+        assert!(s.file_operations.update_imports_on_rename);
+        assert!(s.file_operations.update_imports_on_delete);
         assert!(s.lint.severity.is_empty());
         assert!(s.lint.only.is_empty());
         assert!(s.lint.exclude.is_empty());

@@ -1,0 +1,23 @@
+# workspace/willDeleteFiles benchmark — small project (delete A.sol)
+# Tests import cleanup: B.sol imports A.sol, so deleting A.sol should remove
+# the import statement from B.sol.
+#   lsp-bench -c benchmarks/example-will-delete.yaml
+#
+# Expected: WorkspaceEdit removing the import line in B.sol
+
+project: example
+file: B.sol
+line: 3
+col: 8
+output: benchmarks/example-will-delete
+report: README.md
+
+servers:
+  - mmsaki@latest
+
+benchmarks:
+  - workspace/willDeleteFiles
+
+methods:
+  workspace/willDeleteFiles:
+    file: A.sol

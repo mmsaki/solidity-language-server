@@ -5,6 +5,7 @@ cache
 
 # Benchmark results (generated)
 benchmarks/**/*.json
+benchmarks/**/session.txt
 
 # DHAT heap profiling output
 dhat-heap*.json

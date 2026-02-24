@@ -6,7 +6,6 @@ use clap::Parser;
 use eyre::Result;
 use solidity_language_server::lsp::ForgeLsp;
 use tower_lsp::{LspService, Server};
-use tracing::{info, warn};
 
 #[derive(Clone, Debug, clap::ValueEnum)]
 pub enum CompletionMode {
@@ -37,33 +36,12 @@ pub struct LspArgs {
 
 impl LspArgs {
     pub async fn run(self) -> Result<()> {
-        // In --stdio mode the LSP protocol runs over stdout, so logs must go to
-        // stderr to avoid corrupting the Content-Length framed JSON-RPC stream.
-        let sub = tracing_subscriber::fmt()
-            .compact()
-            .without_time()
-            .with_file(true)
-            .with_line_number(true)
-            .with_thread_ids(true)
-            .with_writer(std::io::stderr)
-            .finish();
-        tracing::subscriber::set_global_default(sub).unwrap();
-        info!("Starting lsp server...");
-
-        if self.completion_mode.is_some() {
-            warn!(
-                "--completion-mode is deprecated and has no effect. Scope-aware completions are now always enabled."
-            );
-        }
-
         let stdin = tokio::io::stdin();
         let stdout = tokio::io::stdout();
         let use_solc = !self.use_forge;
         let (service, socket) =
             LspService::new(|client| ForgeLsp::new(client, self.use_solar, use_solc));
         Server::new(stdin, stdout, socket).serve(service).await;
-
-        info!("Solidity LSP Server stopped.");
 
         Ok(())
     }

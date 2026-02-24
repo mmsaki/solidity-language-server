@@ -20,8 +20,6 @@ tempfile = "3.23.0"
 thiserror = "2.0.17"
 tokio = { version = "1.48.0", features = ["full"] }
 tower-lsp = "0.20.0"
-tracing = "0.1.43"
-tracing-subscriber = "0.3.22"
 lintspec-core = { version = "0.15.0", default-features = false }
 toml = "0.8"
 glob = "0.3"
