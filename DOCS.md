@@ -65,6 +65,9 @@ return {
         -- Auto-generate scaffold for new .sol files.
         -- Set to false to disable scaffold generation.
         scaffoldOnCreate = true,
+        -- Auto-update imports via workspace/willRenameFiles (opt-in).
+        -- Default is false.
+        updateImportsOnRename = true,
       },
     },
   },
@@ -148,6 +151,9 @@ return {
         -- Auto-generate scaffold for new .sol files.
         -- Set to false to disable scaffold generation.
         scaffoldOnCreate = true,
+        -- Auto-update imports via workspace/willRenameFiles (opt-in).
+        -- Default is false.
+        updateImportsOnRename = true,
       },
     },
   },
@@ -165,6 +171,7 @@ lint.enabled = true
 lint.severity = ["high", "med"]
 lint.exclude = ["pascal-case-struct"]
 fileOperations.scaffoldOnCreate = true
+fileOperations.updateImportsOnRename = true
 ```
 
 ### VSCode / Cursor
@@ -177,7 +184,8 @@ fileOperations.scaffoldOnCreate = true
   "solidity-language-server.lint.severity": ["high", "med"],
   "solidity-language-server.lint.only": [],
   "solidity-language-server.lint.exclude": ["pascal-case-struct"],
-  "solidity-language-server.fileOperations.scaffoldOnCreate": true
+  "solidity-language-server.fileOperations.scaffoldOnCreate": true,
+  "solidity-language-server.fileOperations.updateImportsOnRename": true
 }
 ```
 
@@ -201,7 +209,8 @@ fileOperations.scaffoldOnCreate = true
           "exclude": ["pascal-case-struct"]
         },
         "fileOperations": {
-          "scaffoldOnCreate": true
+          "scaffoldOnCreate": true,
+          "updateImportsOnRename": true
         }
       }
     }

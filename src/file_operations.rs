@@ -703,8 +703,8 @@ pub fn generate_scaffold(uri: &Url, solc_version: Option<&str>) -> Option<String
         return None;
     }
 
-    let contract_name = sanitize_identifier(stem);
-    if contract_name.is_empty() {
+    let base_name = sanitize_identifier(stem);
+    if base_name.is_empty() {
         return None;
     }
 
@@ -746,6 +746,14 @@ pub fn generate_scaffold(uri: &Url, solc_version: Option<&str>) -> Option<String
         "contract"
     };
 
+    let contract_name = if is_test {
+        format!("{base_name}Test")
+    } else if is_script {
+        format!("{base_name}Script")
+    } else {
+        base_name
+    };
+
     if is_test {
         Some(format!(
             "// SPDX-License-Identifier: MIT\n\
@@ -782,9 +790,9 @@ pub fn generate_scaffold(uri: &Url, solc_version: Option<&str>) -> Option<String
 
 /// Convert a filename stem to a valid Solidity identifier.
 ///
-/// Strips `.t` and `.s` suffixes (Foundry test/script convention),
-/// removes non-alphanumeric/underscore characters, and ensures
-/// the result doesn't start with a digit.
+/// Strips `.t` and `.s` suffixes (Foundry test/script convention), removes
+/// non-alphanumeric/underscore characters, and ensures the result doesn't
+/// start with a digit.
 fn sanitize_identifier(stem: &str) -> String {
     // Strip common Foundry suffixes: "Foo.t" → "Foo", "Bar.s" → "Bar"
     let stem = stem

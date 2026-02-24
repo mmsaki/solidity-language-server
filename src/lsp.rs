@@ -585,8 +585,8 @@ impl LanguageServer for ForgeLsp {
                 .log_message(
                     MessageType::INFO,
                     format!(
-                        "settings: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.scaffoldOnCreate={}",
-                        s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.scaffold_on_create,
+                        "settings: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.scaffoldOnCreate={}, fileOperations.updateImportsOnRename={}",
+                        s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.scaffold_on_create, s.file_operations.update_imports_on_rename,
                     ),
                 )
                 .await;
@@ -1352,11 +1352,11 @@ impl LanguageServer for ForgeLsp {
     async fn did_change_configuration(&self, params: DidChangeConfigurationParams) {
         let s = config::parse_settings(&params.settings);
         self.client
-            .log_message(
-                MessageType::INFO,
+                .log_message(
+                    MessageType::INFO,
                     format!(
-                    "settings updated: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.scaffoldOnCreate={}",
-                    s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.scaffold_on_create,
+                    "settings updated: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.scaffoldOnCreate={}, fileOperations.updateImportsOnRename={}",
+                    s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.scaffold_on_create, s.file_operations.update_imports_on_rename,
                 ),
             )
             .await;
@@ -2593,6 +2593,21 @@ impl LanguageServer for ForgeLsp {
                 format!("workspace/willRenameFiles: {} file(s)", params.files.len()),
             )
             .await;
+        if !self
+            .settings
+            .read()
+            .await
+            .file_operations
+            .update_imports_on_rename
+        {
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    "willRenameFiles: updateImportsOnRename disabled",
+                )
+                .await;
+            return Ok(None);
+        }
 
         // ── Phase 1: discover source files (blocking I/O) ──────────────
         let config = self.foundry_config.read().await.clone();

@@ -96,6 +96,8 @@ return {
       fileOperations = {
         -- Auto-generate scaffold for new .sol files.
         scaffoldOnCreate = true,
+        -- Auto-update imports via workspace/willRenameFiles (opt-in).
+        updateImportsOnRename = true,
       },
     },
   },
@@ -113,6 +115,7 @@ lint.enabled = true
 lint.severity = ["high", "med"]
 lint.exclude = ["pascal-case-struct"]
 fileOperations.scaffoldOnCreate = true
+fileOperations.updateImportsOnRename = true
 ```
 
 ## AI Integrations
@@ -136,7 +139,8 @@ Add to `~/.config/opencode/config.json`:
           "enabled": true
         },
         "fileOperations": {
-          "scaffoldOnCreate": true
+          "scaffoldOnCreate": true,
+          "updateImportsOnRename": true
         }
       }
     }

@@ -1023,36 +1023,36 @@ fn test_scaffold_library() {
 
 #[test]
 fn test_scaffold_test_file() {
-    // Foo.t.sol → contract Foo is Test (strips .t suffix, adds forge-std import)
+    // Foo.t.sol → contract FooTest is Test (adds Test suffix)
     let uri = Url::from_file_path("/tmp/project/test/Foo.t.sol").unwrap();
     let scaffold = file_operations::generate_scaffold(&uri, None).unwrap();
     assert!(scaffold.contains("import {Test} from \"forge-std/Test.sol\""));
-    assert!(scaffold.contains("contract Foo is Test {"));
+    assert!(scaffold.contains("contract FooTest is Test {"));
 }
 
 #[test]
 fn test_scaffold_script_file() {
-    // Deploy.s.sol → contract Deploy is Script (strips .s suffix, adds forge-std import)
+    // Deploy.s.sol → contract DeployScript is Script (adds Script suffix)
     let uri = Url::from_file_path("/tmp/project/script/Deploy.s.sol").unwrap();
     let scaffold = file_operations::generate_scaffold(&uri, None).unwrap();
     assert!(scaffold.contains("import {Script} from \"forge-std/Script.sol\""));
-    assert!(scaffold.contains("contract Deploy is Script {"));
+    assert!(scaffold.contains("contract DeployScript is Script {"));
 }
 
 #[test]
 fn test_scaffold_test_file_forces_contract_kind() {
     let uri = Url::from_file_path("/tmp/project/test/IFoo.t.sol").unwrap();
     let scaffold = file_operations::generate_scaffold(&uri, None).unwrap();
-    assert!(scaffold.contains("contract IFoo is Test {"));
-    assert!(!scaffold.contains("interface IFoo is Test {"));
+    assert!(scaffold.contains("contract IFooTest is Test {"));
+    assert!(!scaffold.contains("interface IFooTest is Test {"));
 }
 
 #[test]
 fn test_scaffold_script_file_forces_contract_kind() {
     let uri = Url::from_file_path("/tmp/project/script/LibDeploy.s.sol").unwrap();
     let scaffold = file_operations::generate_scaffold(&uri, None).unwrap();
-    assert!(scaffold.contains("contract LibDeploy is Script {"));
-    assert!(!scaffold.contains("library LibDeploy is Script {"));
+    assert!(scaffold.contains("contract LibDeployScript is Script {"));
+    assert!(!scaffold.contains("library LibDeployScript is Script {"));
 }
 
 #[test]
