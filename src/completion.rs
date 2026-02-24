@@ -1,13 +1,28 @@
 use serde_json::Value;
 use std::collections::HashMap;
+use std::path::Path;
 use tower_lsp::lsp_types::{
-    CompletionItem, CompletionItemKind, CompletionList, CompletionResponse, Position,
+    CompletionItem, CompletionItemKind, CompletionList, CompletionResponse, Position, Range,
+    TextEdit,
 };
 
 use crate::goto::CHILD_KEYS;
 use crate::hover::build_function_signature;
 use crate::types::{FileId, NodeId, SourceLoc};
 use crate::utils::push_if_node_or_array;
+
+/// A directly-declared top-level symbol that can be imported.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TopLevelImportable {
+    /// Symbol name.
+    pub name: String,
+    /// Absolute source path where the symbol is declared.
+    pub declaring_path: String,
+    /// AST node type for this declaration.
+    pub node_type: String,
+    /// LSP completion kind mapped from the AST node type.
+    pub kind: CompletionItemKind,
+}
 
 /// A declaration found within a specific scope.
 #[derive(Debug, Clone)]
@@ -94,6 +109,19 @@ pub struct CompletionCache {
     /// Values are `"contract"`, `"interface"`, or `"library"`.
     /// Used to determine which `type(X).` members to offer.
     pub contract_kinds: HashMap<NodeId, String>,
+
+    /// Directly-declared importable top-level symbols keyed by symbol name.
+    ///
+    /// This intentionally excludes imported aliases/re-exports and excludes
+    /// non-constant variables. It is used for import-on-completion candidate
+    /// lookup without re-scanning the full AST per request.
+    pub top_level_importables_by_name: HashMap<String, Vec<TopLevelImportable>>,
+
+    /// Directly-declared importable top-level symbols keyed by declaring file path.
+    ///
+    /// This enables cheap incremental invalidation/update on file edits/deletes:
+    /// only the changed file's symbols need to be replaced.
+    pub top_level_importables_by_file: HashMap<String, Vec<TopLevelImportable>>,
 }
 
 /// Map AST nodeType to LSP CompletionItemKind.
@@ -250,6 +278,88 @@ fn count_signature_params(sig: &str) -> usize {
     count_abi_params(sig)
 }
 
+fn is_top_level_importable_decl(node_type: &str, node: &Value) -> bool {
+    match node_type {
+        "ContractDefinition"
+        | "StructDefinition"
+        | "EnumDefinition"
+        | "UserDefinedValueTypeDefinition"
+        | "FunctionDefinition" => true,
+        "VariableDeclaration" => node.get("constant").and_then(|v| v.as_bool()) == Some(true),
+        _ => false,
+    }
+}
+
+fn build_top_level_importables_by_name(
+    by_file: &HashMap<String, Vec<TopLevelImportable>>,
+) -> HashMap<String, Vec<TopLevelImportable>> {
+    let mut by_name: HashMap<String, Vec<TopLevelImportable>> = HashMap::new();
+    for symbols in by_file.values() {
+        for symbol in symbols {
+            by_name
+                .entry(symbol.name.clone())
+                .or_default()
+                .push(symbol.clone());
+        }
+    }
+    by_name
+}
+
+/// Extract directly-declared importable top-level symbols from a file AST.
+///
+/// - Includes: contract/interface/library/struct/enum/UDVT/top-level free function/top-level constant
+/// - Excludes: imported aliases/re-exports, nested declarations, non-constant variables
+pub fn extract_top_level_importables_for_file(
+    path: &str,
+    ast: &Value,
+) -> Vec<TopLevelImportable> {
+    let mut out: Vec<TopLevelImportable> = Vec::new();
+    let mut stack: Vec<&Value> = vec![ast];
+    let mut source_unit_id: Option<NodeId> = None;
+
+    while let Some(tree) = stack.pop() {
+        let node_type = tree.get("nodeType").and_then(|v| v.as_str()).unwrap_or("");
+        let node_id = tree.get("id").and_then(|v| v.as_u64()).map(NodeId);
+        if node_type == "SourceUnit" {
+            source_unit_id = node_id;
+        }
+        let name = tree.get("name").and_then(|v| v.as_str()).unwrap_or("");
+
+        if !name.is_empty()
+            && is_top_level_importable_decl(node_type, tree)
+            && let Some(src_scope) = source_unit_id
+            && tree.get("scope").and_then(|v| v.as_u64()) == Some(src_scope.0)
+        {
+            out.push(TopLevelImportable {
+                name: name.to_string(),
+                declaring_path: path.to_string(),
+                node_type: node_type.to_string(),
+                kind: node_type_to_completion_kind(node_type),
+            });
+        }
+
+        for key in CHILD_KEYS {
+            push_if_node_or_array(tree, key, &mut stack);
+        }
+    }
+
+    out
+}
+
+impl CompletionCache {
+    /// Replace top-level importables for a file path and rebuild the by-name index.
+    /// Pass an empty `symbols` list when the file is deleted.
+    pub fn replace_top_level_importables_for_path(
+        &mut self,
+        path: String,
+        symbols: Vec<TopLevelImportable>,
+    ) {
+        self.top_level_importables_by_file.insert(path, symbols);
+        self.top_level_importables_by_name =
+            build_top_level_importables_by_name(&self.top_level_importables_by_file);
+    }
+}
+
 /// Build a CompletionCache from AST sources and contracts.
 /// `contracts` is the `.contracts` section of the compiler output (optional).
 pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> CompletionCache {
@@ -296,6 +406,8 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
     let mut path_to_file_id: HashMap<String, FileId> = HashMap::with_capacity(source_count);
     let mut linearized_base_contracts: HashMap<NodeId, Vec<NodeId>> =
         HashMap::with_capacity(est_contracts);
+    let mut top_level_importables_by_file: HashMap<String, Vec<TopLevelImportable>> =
+        HashMap::with_capacity(est_names);
 
     if let Some(sources_obj) = sources.as_object() {
         for (path, source_data) in sources_obj {
@@ -303,6 +415,10 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
                 // Map file path → source file id for scope resolution
                 if let Some(fid) = source_data.get("id").and_then(|v| v.as_u64()) {
                     path_to_file_id.insert(path.clone(), FileId(fid));
+                }
+                let file_importables = extract_top_level_importables_for_file(path, ast);
+                if !file_importables.is_empty() {
+                    top_level_importables_by_file.insert(path.clone(), file_importables);
                 }
                 let mut stack: Vec<&Value> = vec![ast];
 
@@ -781,6 +897,9 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
         }
     }
 
+    let top_level_importables_by_name =
+        build_top_level_importables_by_name(&top_level_importables_by_file);
+
     CompletionCache {
         names,
         name_to_type,
@@ -798,6 +917,8 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
         path_to_file_id,
         linearized_base_contracts,
         contract_kinds,
+        top_level_importables_by_name,
+        top_level_importables_by_file,
     }
 }
 
@@ -1577,21 +1698,155 @@ pub fn get_general_completions(cache: &CompletionCache) -> Vec<CompletionItem> {
     items
 }
 
-/// Handle a completion request.
+/// Append auto-import candidates at the tail of completion results.
 ///
-/// When `cache` is `Some`, full AST-aware completions are returned.
-/// When `cache` is `None`, only static completions (keywords, globals, units)
-/// and magic dot completions (msg., block., tx., abi., type().) are returned
-/// immediately — no blocking.
+/// This enforces lower priority ordering by:
+/// 1) appending after base completions
+/// 2) assigning high `sortText` values (`zz_autoimport_*`) when missing
+pub fn append_auto_import_candidates_last(
+    mut base: Vec<CompletionItem>,
+    mut auto_import_candidates: Vec<CompletionItem>,
+) -> Vec<CompletionItem> {
+    let mut unique_label_edits: HashMap<String, Option<Vec<TextEdit>>> = HashMap::new();
+    for item in &auto_import_candidates {
+        let entry = unique_label_edits.entry(item.label.clone()).or_insert_with(|| {
+            item.additional_text_edits.clone()
+        });
+        if *entry != item.additional_text_edits {
+            *entry = None;
+        }
+    }
+
+    // If a label maps to exactly one import edit, attach it to the corresponding
+    // base completion item too. This ensures accepting the normal item can still
+    // apply import edits in clients that de-prioritize or collapse duplicate labels.
+    for item in &mut base {
+        if item.additional_text_edits.is_none()
+            && let Some(Some(edits)) = unique_label_edits.get(&item.label)
+        {
+            item.additional_text_edits = Some(edits.clone());
+        }
+    }
+
+    for (idx, item) in auto_import_candidates.iter_mut().enumerate() {
+        if item.sort_text.is_none() {
+            item.sort_text = Some(format!("zz_autoimport_{idx:06}"));
+        }
+    }
+
+    base.extend(auto_import_candidates);
+    base
+}
+
+/// Convert cached top-level importable symbols into completion items.
 ///
-/// `file_id` is the AST source file id, needed for scope-aware resolution.
-/// When `None`, scope resolution is skipped and flat lookup is used.
-pub fn handle_completion(
+/// These are intended as low-priority tail candidates appended after normal
+/// per-file completions.
+pub fn top_level_importable_completion_candidates(
+    cache: &CompletionCache,
+    current_file_path: Option<&str>,
+    source_text: &str,
+) -> Vec<CompletionItem> {
+    let mut out = Vec::new();
+    for symbols in cache.top_level_importables_by_name.values() {
+        for symbol in symbols {
+            if let Some(cur) = current_file_path
+                && cur == symbol.declaring_path
+            {
+                continue;
+            }
+
+            let import_path = match current_file_path.and_then(|cur| {
+                to_relative_import_path(Path::new(cur), Path::new(&symbol.declaring_path))
+            }) {
+                Some(p) => p,
+                None => continue,
+            };
+
+            if import_statement_already_present(source_text, &symbol.name, &import_path) {
+                continue;
+            }
+
+            let import_edit = build_import_text_edit(source_text, &symbol.name, &import_path);
+            out.push(CompletionItem {
+                label: symbol.name.clone(),
+                kind: Some(symbol.kind),
+                detail: Some(format!("{} ({import_path})", symbol.node_type)),
+                additional_text_edits: import_edit.map(|e| vec![e]),
+                ..Default::default()
+            });
+        }
+    }
+    out
+}
+
+fn to_relative_import_path(current_file: &Path, target_file: &Path) -> Option<String> {
+    let from_dir = current_file.parent()?;
+    let rel = pathdiff::diff_paths(target_file, from_dir)?;
+    let mut s = rel.to_string_lossy().replace('\\', "/");
+    if !s.starts_with("./") && !s.starts_with("../") {
+        s = format!("./{s}");
+    }
+    Some(s)
+}
+
+fn import_statement_already_present(source_text: &str, symbol: &str, import_path: &str) -> bool {
+    let named = format!("import {{{symbol}}} from \"{import_path}\";");
+    let full = format!("import \"{import_path}\";");
+    source_text.contains(&named) || source_text.contains(&full)
+}
+
+fn build_import_text_edit(source_text: &str, symbol: &str, import_path: &str) -> Option<TextEdit> {
+    let import_stmt = format!("import {{{symbol}}} from \"{import_path}\";\n");
+    let lines: Vec<&str> = source_text.lines().collect();
+
+    let last_import_line = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| line.trim_start().starts_with("import "))
+        .map(|(idx, _)| idx)
+        .last();
+
+    let insert_line = if let Some(idx) = last_import_line {
+        idx + 1
+    } else if let Some(idx) = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| line.trim_start().starts_with("pragma "))
+        .map(|(idx, _)| idx)
+        .last()
+    {
+        idx + 1
+    } else {
+        0
+    };
+
+    Some(TextEdit {
+        range: Range {
+            start: Position {
+                line: insert_line as u32,
+                character: 0,
+            },
+            end: Position {
+                line: insert_line as u32,
+                character: 0,
+            },
+        },
+        new_text: import_stmt,
+    })
+}
+
+/// Handle a completion request with optional tail candidates.
+///
+/// Tail candidates are only appended for non-dot completions and are always
+/// ordered last via `append_auto_import_candidates_last`.
+pub fn handle_completion_with_tail_candidates(
     cache: Option<&CompletionCache>,
     source_text: &str,
     position: Position,
     trigger_char: Option<&str>,
     file_id: Option<FileId>,
+    tail_candidates: Vec<CompletionItem>,
 ) -> Option<CompletionResponse> {
     let lines: Vec<&str> = source_text.lines().collect();
     let line = lines.get(position.line as usize)?;
@@ -1636,7 +1891,9 @@ pub fn handle_completion(
         }
     } else {
         match cache {
-            Some(c) => c.general_completions.clone(),
+            Some(c) => {
+                append_auto_import_candidates_last(c.general_completions.clone(), tail_candidates)
+            }
             None => get_static_completions(),
         }
     };
@@ -1645,6 +1902,32 @@ pub fn handle_completion(
         is_incomplete: cache.is_none(),
         items,
     }))
+}
+
+/// Handle a completion request.
+///
+/// When `cache` is `Some`, full AST-aware completions are returned.
+/// When `cache` is `None`, only static completions (keywords, globals, units)
+/// and magic dot completions (msg., block., tx., abi., type().) are returned
+/// immediately — no blocking.
+///
+/// `file_id` is the AST source file id, needed for scope-aware resolution.
+/// When `None`, scope resolution is skipped and flat lookup is used.
+pub fn handle_completion(
+    cache: Option<&CompletionCache>,
+    source_text: &str,
+    position: Position,
+    trigger_char: Option<&str>,
+    file_id: Option<FileId>,
+) -> Option<CompletionResponse> {
+    handle_completion_with_tail_candidates(
+        cache,
+        source_text,
+        position,
+        trigger_char,
+        file_id,
+        vec![],
+    )
 }
 
 const SOLIDITY_KEYWORDS: &[&str] = &[
@@ -1762,3 +2045,314 @@ const GLOBAL_FUNCTIONS: &[(&str, &str)] = &[
     // Contract-related
     ("selfdestruct(address payable recipient)", ""),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        CompletionCache, TopLevelImportable, append_auto_import_candidates_last,
+        build_completion_cache, extract_top_level_importables_for_file,
+    };
+    use serde_json::json;
+    use std::collections::HashMap;
+    use tower_lsp::lsp_types::CompletionItemKind;
+    use tower_lsp::lsp_types::{CompletionItem, CompletionResponse, Position, Range, TextEdit};
+
+    fn empty_cache() -> CompletionCache {
+        CompletionCache {
+            names: vec![],
+            name_to_type: HashMap::new(),
+            node_members: HashMap::new(),
+            type_to_node: HashMap::new(),
+            name_to_node_id: HashMap::new(),
+            method_identifiers: HashMap::new(),
+            function_return_types: HashMap::new(),
+            using_for: HashMap::new(),
+            using_for_wildcard: vec![],
+            general_completions: vec![],
+            scope_declarations: HashMap::new(),
+            scope_parent: HashMap::new(),
+            scope_ranges: vec![],
+            path_to_file_id: HashMap::new(),
+            linearized_base_contracts: HashMap::new(),
+            contract_kinds: HashMap::new(),
+            top_level_importables_by_name: HashMap::new(),
+            top_level_importables_by_file: HashMap::new(),
+        }
+    }
+
+    #[test]
+    fn top_level_importables_include_only_direct_declared_symbols() {
+        let sources = json!({
+            "/tmp/A.sol": {
+                "id": 0,
+                "ast": {
+                    "id": 1,
+                    "nodeType": "SourceUnit",
+                    "src": "0:100:0",
+                    "nodes": [
+                        { "id": 10, "nodeType": "ImportDirective", "name": "Alias", "scope": 1, "src": "1:1:0" },
+                        { "id": 11, "nodeType": "ContractDefinition", "name": "C", "scope": 1, "src": "2:1:0", "nodes": [
+                            { "id": 21, "nodeType": "VariableDeclaration", "name": "inside", "scope": 11, "constant": true, "src": "3:1:0" }
+                        ] },
+                        { "id": 12, "nodeType": "StructDefinition", "name": "S", "scope": 1, "src": "4:1:0" },
+                        { "id": 13, "nodeType": "EnumDefinition", "name": "E", "scope": 1, "src": "5:1:0" },
+                        { "id": 14, "nodeType": "UserDefinedValueTypeDefinition", "name": "Wad", "scope": 1, "src": "6:1:0" },
+                        { "id": 15, "nodeType": "FunctionDefinition", "name": "freeFn", "scope": 1, "src": "7:1:0" },
+                        { "id": 16, "nodeType": "VariableDeclaration", "name": "TOP_CONST", "scope": 1, "constant": true, "src": "8:1:0" },
+                        { "id": 17, "nodeType": "VariableDeclaration", "name": "TOP_VAR", "scope": 1, "constant": false, "src": "9:1:0" }
+                    ]
+                }
+            }
+        });
+
+        let cache = build_completion_cache(&sources, None);
+        let map = &cache.top_level_importables_by_name;
+        let by_file = &cache.top_level_importables_by_file;
+
+        assert!(map.contains_key("C"));
+        assert!(map.contains_key("S"));
+        assert!(map.contains_key("E"));
+        assert!(map.contains_key("Wad"));
+        assert!(map.contains_key("freeFn"));
+        assert!(map.contains_key("TOP_CONST"));
+
+        assert!(!map.contains_key("Alias"));
+        assert!(!map.contains_key("inside"));
+        assert!(!map.contains_key("TOP_VAR"));
+
+        let file_symbols = by_file.get("/tmp/A.sol").unwrap();
+        let file_names: Vec<&str> = file_symbols.iter().map(|s| s.name.as_str()).collect();
+        assert!(file_names.contains(&"C"));
+        assert!(file_names.contains(&"TOP_CONST"));
+        assert!(!file_names.contains(&"Alias"));
+    }
+
+    #[test]
+    fn top_level_importables_keep_multiple_declarations_for_same_name() {
+        let sources = json!({
+            "/tmp/A.sol": {
+                "id": 0,
+                "ast": {
+                    "id": 1,
+                    "nodeType": "SourceUnit",
+                    "src": "0:100:0",
+                    "nodes": [
+                        { "id": 11, "nodeType": "FunctionDefinition", "name": "dup", "scope": 1, "src": "1:1:0" }
+                    ]
+                }
+            },
+            "/tmp/B.sol": {
+                "id": 1,
+                "ast": {
+                    "id": 2,
+                    "nodeType": "SourceUnit",
+                    "src": "0:100:1",
+                    "nodes": [
+                        { "id": 22, "nodeType": "FunctionDefinition", "name": "dup", "scope": 2, "src": "2:1:1" }
+                    ]
+                }
+            }
+        });
+
+        let cache = build_completion_cache(&sources, None);
+        let entries = cache.top_level_importables_by_name.get("dup").unwrap();
+        assert_eq!(entries.len(), 2);
+    }
+
+    #[test]
+    fn extract_top_level_importables_for_file_finds_expected_symbols() {
+        let ast = json!({
+            "id": 1,
+            "nodeType": "SourceUnit",
+            "src": "0:100:0",
+            "nodes": [
+                { "id": 2, "nodeType": "FunctionDefinition", "name": "f", "scope": 1, "src": "1:1:0" },
+                { "id": 3, "nodeType": "VariableDeclaration", "name": "K", "scope": 1, "constant": true, "src": "2:1:0" },
+                { "id": 4, "nodeType": "VariableDeclaration", "name": "V", "scope": 1, "constant": false, "src": "3:1:0" }
+            ]
+        });
+
+        let symbols = extract_top_level_importables_for_file("/tmp/A.sol", &ast);
+        let names: Vec<&str> = symbols.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains(&"f"));
+        assert!(names.contains(&"K"));
+        assert!(!names.contains(&"V"));
+    }
+
+    #[test]
+    fn top_level_importables_can_be_replaced_per_file() {
+        let sources = json!({
+            "/tmp/A.sol": {
+                "id": 0,
+                "ast": {
+                    "id": 1,
+                    "nodeType": "SourceUnit",
+                    "src": "0:100:0",
+                    "nodes": [
+                        { "id": 11, "nodeType": "FunctionDefinition", "name": "dup", "scope": 1, "src": "1:1:0" }
+                    ]
+                }
+            },
+            "/tmp/B.sol": {
+                "id": 1,
+                "ast": {
+                    "id": 2,
+                    "nodeType": "SourceUnit",
+                    "src": "0:100:1",
+                    "nodes": [
+                        { "id": 22, "nodeType": "FunctionDefinition", "name": "dup", "scope": 2, "src": "2:1:1" }
+                    ]
+                }
+            }
+        });
+
+        let mut cache = build_completion_cache(&sources, None);
+        assert_eq!(cache.top_level_importables_by_name["dup"].len(), 2);
+
+        cache.replace_top_level_importables_for_path(
+            "/tmp/A.sol".to_string(),
+            vec![TopLevelImportable {
+                name: "newA".to_string(),
+                declaring_path: "/tmp/A.sol".to_string(),
+                node_type: "FunctionDefinition".to_string(),
+                kind: CompletionItemKind::FUNCTION,
+            }],
+        );
+        assert_eq!(cache.top_level_importables_by_name["dup"].len(), 1);
+        assert!(cache.top_level_importables_by_name.contains_key("newA"));
+
+        cache.replace_top_level_importables_for_path("/tmp/A.sol".to_string(), vec![]);
+        assert!(!cache.top_level_importables_by_name.contains_key("newA"));
+    }
+
+    #[test]
+    fn append_auto_import_candidates_last_sets_tail_sort_text() {
+        let base = vec![CompletionItem {
+            label: "localVar".to_string(),
+            ..Default::default()
+        }];
+        let auto = vec![CompletionItem {
+            label: "ImportMe".to_string(),
+            ..Default::default()
+        }];
+
+        let out = append_auto_import_candidates_last(base, auto);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[1].label, "ImportMe");
+        assert!(
+            out[1]
+                .sort_text
+                .as_deref()
+                .is_some_and(|s| s.starts_with("zz_autoimport_"))
+        );
+    }
+
+    #[test]
+    fn append_auto_import_candidates_last_keeps_same_label_candidates() {
+        let base = vec![CompletionItem {
+            label: "B".to_string(),
+            ..Default::default()
+        }];
+        let auto = vec![
+            CompletionItem {
+                label: "B".to_string(),
+                detail: Some("ContractDefinition (./B.sol)".to_string()),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "B".to_string(),
+                detail: Some("ContractDefinition (./deps/B.sol)".to_string()),
+                ..Default::default()
+            },
+        ];
+
+        let out = append_auto_import_candidates_last(base, auto);
+        assert_eq!(out.len(), 3);
+    }
+
+    #[test]
+    fn append_auto_import_candidates_last_enriches_unique_base_label_with_edit() {
+        let base = vec![CompletionItem {
+            label: "B".to_string(),
+            ..Default::default()
+        }];
+        let auto = vec![CompletionItem {
+            label: "B".to_string(),
+            additional_text_edits: Some(vec![TextEdit {
+                range: Range {
+                    start: Position {
+                        line: 0,
+                        character: 0,
+                    },
+                    end: Position {
+                        line: 0,
+                        character: 0,
+                    },
+                },
+                new_text: "import {B} from \"./B.sol\";\n".to_string(),
+            }]),
+            ..Default::default()
+        }];
+        let out = append_auto_import_candidates_last(base, auto);
+        assert!(
+            out[0].additional_text_edits.is_some(),
+            "base item should inherit unique import edit"
+        );
+    }
+
+    #[test]
+    fn top_level_importable_candidates_include_import_edit() {
+        let mut cache = empty_cache();
+        cache.top_level_importables_by_name.insert(
+            "B".to_string(),
+            vec![TopLevelImportable {
+                name: "B".to_string(),
+                declaring_path: "/tmp/example/B.sol".to_string(),
+                node_type: "ContractDefinition".to_string(),
+                kind: CompletionItemKind::CLASS,
+            }],
+        );
+
+        let source = "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.26;\n\ncontract A {}\n";
+        let items = super::top_level_importable_completion_candidates(
+            &cache,
+            Some("/tmp/example/A.sol"),
+            source,
+        );
+        assert_eq!(items.len(), 1);
+        let edit_text = items[0]
+            .additional_text_edits
+            .as_ref()
+            .and_then(|edits| edits.first())
+            .map(|e| e.new_text.clone())
+            .unwrap_or_default();
+        assert!(edit_text.contains("import {B} from \"./B.sol\";"));
+    }
+
+    #[test]
+    fn handle_completion_general_path_keeps_base_items() {
+        let mut cache = empty_cache();
+        cache.general_completions = vec![CompletionItem {
+            label: "A".to_string(),
+            ..Default::default()
+        }];
+
+        let resp = super::handle_completion(
+            Some(&cache),
+            "contract X {}",
+            Position {
+                line: 0,
+                character: 0,
+            },
+            None,
+            None,
+        );
+        match resp {
+            Some(CompletionResponse::List(list)) => {
+                assert_eq!(list.items.len(), 1);
+                assert_eq!(list.items[0].label, "A");
+            }
+            _ => panic!("expected completion list"),
+        }
+    }
+}

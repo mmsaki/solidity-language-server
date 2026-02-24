@@ -1470,11 +1470,28 @@ impl LanguageServer for ForgeLsp {
             }
         };
 
-        // Clone the Arc (pointer copy, instant) and drop the lock immediately.
-        let cached: Option<Arc<completion::CompletionCache>> = {
+        // Clone URI-specific cache (pointer copy, instant) and drop the lock immediately.
+        let local_cached: Option<Arc<completion::CompletionCache>> = {
             let comp_cache = self.completion_cache.read().await;
             comp_cache.get(&uri.to_string()).cloned()
         };
+
+        // Project-wide cache for global top-level symbol tail candidates.
+        let root_cached: Option<Arc<completion::CompletionCache>> = {
+            let root_key = self.root_uri.read().await.as_ref().map(|u| u.to_string());
+            match root_key {
+                Some(root_key) => {
+                    let ast_cache = self.ast_cache.read().await;
+                    ast_cache
+                        .get(&root_key)
+                        .map(|root_build| root_build.completion_cache.clone())
+                }
+                None => None,
+            }
+        };
+
+        // Base cache remains per-file first; root cache is only a fallback.
+        let cached = local_cached.or(root_cached.clone());
 
         if cached.is_none() {
             // Use pre-built completion cache from CachedBuild
@@ -1509,8 +1526,31 @@ impl LanguageServer for ForgeLsp {
             })
         };
 
-        let result =
-            completion::handle_completion(cache_ref, &source_text, position, trigger_char, file_id);
+        let current_file_path = uri
+            .to_file_path()
+            .ok()
+            .and_then(|p| p.to_str().map(|s| s.to_string()));
+
+        let tail_candidates = if trigger_char == Some(".") {
+            vec![]
+        } else {
+            root_cached.as_deref().map_or_else(Vec::new, |c| {
+                completion::top_level_importable_completion_candidates(
+                    c,
+                    current_file_path.as_deref(),
+                    &source_text,
+                )
+            })
+        };
+
+        let result = completion::handle_completion_with_tail_candidates(
+            cache_ref,
+            &source_text,
+            position,
+            trigger_char,
+            file_id,
+            tail_candidates,
+        );
         Ok(result)
     }
 

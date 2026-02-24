@@ -853,6 +853,12 @@ Only single-return functions are stored in `function_return_types`. Functions re
 
 Currently, scope-awareness only applies to dot-completion type resolution (resolving the identifier before the dot). General (non-dot) completions still return the full flat list of all names + keywords. A future improvement could filter general completions to only names visible in the current scope.
 
+### Planned auto-import candidate scope
+
+For import-on-completion, candidates should come from direct top-level declarations in source files only (contract/interface/library/struct/enum/user-defined value type/top-level function/top-level constant).
+
+Imported aliases/re-exports from `ImportDirective` are intentionally excluded from candidate generation. We do not chase transitive imports for this feature.
+
 ## Exploration Tools: Scope Data
 
 ### jq: Scope Fields
