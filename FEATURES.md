@@ -11,7 +11,7 @@
 - **Diagnostics** — from `solc` and `forge lint`
 - **Signature Help** — parameter info on function calls, event emits, and mapping access
 - **Inlay Hints** — parameter names and gas estimates
-- **File Operations** — `workspace/willRenameFiles`/`workspace/willDeleteFiles` import edits + `workspace/didRenameFiles`/`workspace/didDeleteFiles` cache migration/re-index
+- **File Operations** — `workspace/willCreateFiles` scaffolding + `workspace/willRenameFiles`/`workspace/willDeleteFiles` import edits + `workspace/didCreateFiles`/`workspace/didRenameFiles`/`workspace/didDeleteFiles` cache migration/re-index (`fileOperations.scaffoldOnCreate`, `fileOperations.updateImportsOnRename`, `fileOperations.updateImportsOnDelete`)
 
 See [FEATURES.md](FEATURES.md) for the full LSP feature set and roadmap.
 
@@ -75,7 +75,8 @@ See [FEATURES.md](FEATURES.md) for the full LSP feature set and roadmap.
 - [x] `workspace/didChangeWorkspaceFolders` - Acknowledges workspace folder changes (logs only)
 - [ ] `workspace/applyEdit` - Apply workspace edits
 - [ ] `workspace/executeCommand` - Execute workspace commands (stub implementation)
-- [ ] `workspace/willCreateFiles` - File creation preview
+- [x] `workspace/willCreateFiles` - File creation preview (scaffolding for `.sol`, `.t.sol`, `.s.sol`)
+- [x] `workspace/didCreateFiles` - Post-create scaffold fallback + cache/index refresh
 - [x] `workspace/willRenameFiles` - File rename preview (import path updates)
 - [x] `workspace/didRenameFiles` - Post-rename cache migration + background re-index
 - [x] `workspace/willDeleteFiles` - File deletion preview (removes imports to deleted files)
