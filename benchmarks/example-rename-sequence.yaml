@@ -1,0 +1,55 @@
+# Multi-rename sequence — example/ project (A.sol ↔ AA.sol round-trip)
+#
+# Tests the full rename lifecycle:
+#   1. A.sol → AA.sol  (B.sol import should update "./A.sol" → "./AA.sol")
+#   2. AA.sol → A.sol   (B.sol import should update back "./AA.sol" → "./A.sol")
+#   3. A.sol → AA.sol   (repeat — verifies re-index worked after step 2)
+#   4. AA.sol → A.sol    (repeat — verifies no corruption on second round-trip)
+#
+# This catches:
+#   - First rename with no buffers open (eager project index)
+#   - Stale AST cache between renames
+#   - Corrupted imports on rename-back
+#   - text_cache not migrated after didRenameFiles
+#
+#   lsp-bench -c benchmarks/example-rename-sequence.yaml
+
+project: example
+file: B.sol
+line: 3
+col: 8
+output: benchmarks/example-rename-sequence
+report: README.md
+
+servers:
+  - mmsaki@latest
+
+benchmarks:
+  - workspace/willRenameFiles
+
+methods:
+  workspace/willRenameFiles:
+    renameSteps:
+      # Step 1: A.sol → AA.sol
+      - file: A.sol
+        newName: AA.sol
+        expect:
+          count: 1        # 1 file (B.sol) should have edits
+
+      # Step 2: AA.sol → A.sol (rename back)
+      - file: AA.sol
+        newName: A.sol
+        expect:
+          count: 1
+
+      # Step 3: A.sol → AA.sol (second round-trip)
+      - file: A.sol
+        newName: AA.sol
+        expect:
+          count: 1
+
+      # Step 4: AA.sol → A.sol (restore)
+      - file: AA.sol
+        newName: A.sol
+        expect:
+          count: 1

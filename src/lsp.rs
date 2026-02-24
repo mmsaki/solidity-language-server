@@ -1,5 +1,6 @@
 use crate::completion;
 use crate::config::{self, FoundryConfig, LintConfig, Settings};
+use crate::file_operations;
 use crate::folding;
 use crate::goto;
 use crate::highlight;
@@ -13,7 +14,7 @@ use crate::selection;
 use crate::semantic_tokens;
 use crate::symbols;
 use crate::utils;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::RwLock;
@@ -83,6 +84,17 @@ impl ForgeLsp {
         }
     }
 
+    /// Resolve the foundry configuration for a specific file.
+    ///
+    /// Looks for `foundry.toml` starting from the file's own directory, which
+    /// handles files in nested projects (e.g. `lib/`, `example/`,
+    /// `node_modules/`).  When no `foundry.toml` exists at all (Hardhat, bare
+    /// projects), the file's git root or parent directory is used as the
+    /// project root so solc can still resolve imports.
+    async fn foundry_config_for_file(&self, file_path: &std::path::Path) -> FoundryConfig {
+        config::load_foundry_config(file_path)
+    }
+
     async fn on_change(&self, params: TextDocumentItem) {
         let uri = params.uri.clone();
         let version = params.version;
@@ -120,7 +132,7 @@ impl ForgeLsp {
         // This avoids running `forge build` separately (~27s on large projects).
         // On solc failure, fall back to the forge-based pipeline.
         let (lint_result, build_result, ast_result) = if self.use_solc {
-            let foundry_cfg = self.foundry_config.read().await.clone();
+            let foundry_cfg = self.foundry_config_for_file(&file_path).await;
             let solc_future = crate::solc::solc_ast(path_str, &foundry_cfg, Some(&self.client));
 
             if should_lint {
@@ -408,7 +420,7 @@ impl ForgeLsp {
                     })
                     .await;
 
-                match crate::solc::solc_project_index(&foundry_config, Some(&client)).await {
+                match crate::solc::solc_project_index(&foundry_config, Some(&client), None).await {
                     Ok(ast_data) => {
                         let cached_build = Arc::new(crate::goto::CachedBuild::new(ast_data, 0));
                         let source_count = cached_build.nodes.len();
@@ -492,7 +504,7 @@ impl ForgeLsp {
         // Cache miss — build the AST from disk.
         let path_str = file_path.to_str()?;
         let ast_result = if self.use_solc {
-            let foundry_cfg = self.foundry_config.read().await.clone();
+            let foundry_cfg = self.foundry_config_for_file(&file_path).await;
             match crate::solc::solc_ast(path_str, &foundry_cfg, Some(&self.client)).await {
                 Ok(data) => Ok(data),
                 Err(_) => self.compiler.ast(path_str).await,
@@ -702,6 +714,54 @@ impl LanguageServer for ForgeLsp {
                         change: Some(TextDocumentSyncKind::FULL),
                     },
                 )),
+                workspace: Some(WorkspaceServerCapabilities {
+                    workspace_folders: None,
+                    file_operations: Some(WorkspaceFileOperationsServerCapabilities {
+                        will_rename: Some(FileOperationRegistrationOptions {
+                            filters: vec![
+                                // Match .sol files
+                                FileOperationFilter {
+                                    scheme: Some("file".to_string()),
+                                    pattern: FileOperationPattern {
+                                        glob: "**/*.sol".to_string(),
+                                        matches: Some(FileOperationPatternKind::File),
+                                        options: None,
+                                    },
+                                },
+                                // Match folders (moving a directory moves all .sol files within)
+                                FileOperationFilter {
+                                    scheme: Some("file".to_string()),
+                                    pattern: FileOperationPattern {
+                                        glob: "**".to_string(),
+                                        matches: Some(FileOperationPatternKind::Folder),
+                                        options: None,
+                                    },
+                                },
+                            ],
+                        }),
+                        did_rename: Some(FileOperationRegistrationOptions {
+                            filters: vec![
+                                FileOperationFilter {
+                                    scheme: Some("file".to_string()),
+                                    pattern: FileOperationPattern {
+                                        glob: "**/*.sol".to_string(),
+                                        matches: Some(FileOperationPatternKind::File),
+                                        options: None,
+                                    },
+                                },
+                                FileOperationFilter {
+                                    scheme: Some("file".to_string()),
+                                    pattern: FileOperationPattern {
+                                        glob: "**".to_string(),
+                                        matches: Some(FileOperationPatternKind::Folder),
+                                        options: None,
+                                    },
+                                },
+                            ],
+                        }),
+                        ..Default::default()
+                    }),
+                }),
                 ..ServerCapabilities::default()
             },
         })
@@ -756,6 +816,108 @@ impl LanguageServer for ForgeLsp {
                     .log_message(MessageType::INFO, "registered foundry.toml file watcher")
                     .await;
             }
+        }
+
+        // Eagerly build the project index on startup so cross-file features
+        // (willRenameFiles, references, goto) work immediately — even before
+        // the user opens any .sol file.
+        if self.use_solc {
+            self.project_indexed
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+            let foundry_config = self.foundry_config.read().await.clone();
+            let root_uri = self.root_uri.read().await.clone();
+            let cache_key = root_uri.as_ref().map(|u| u.to_string());
+            let ast_cache = self.ast_cache.clone();
+            let client = self.client.clone();
+
+            tokio::spawn(async move {
+                let Some(cache_key) = cache_key else {
+                    return;
+                };
+                if !foundry_config.root.is_dir() {
+                    client
+                        .log_message(
+                            MessageType::INFO,
+                            format!(
+                                "project index: {} not found, skipping eager index",
+                                foundry_config.root.display(),
+                            ),
+                        )
+                        .await;
+                    return;
+                }
+
+                let token = NumberOrString::String("solidity/projectIndex".to_string());
+                let _ = client
+                    .send_request::<request::WorkDoneProgressCreate>(WorkDoneProgressCreateParams {
+                        token: token.clone(),
+                    })
+                    .await;
+
+                client
+                    .send_notification::<notification::Progress>(ProgressParams {
+                        token: token.clone(),
+                        value: ProgressParamsValue::WorkDone(WorkDoneProgress::Begin(
+                            WorkDoneProgressBegin {
+                                title: "Indexing project".to_string(),
+                                message: Some("Discovering source files...".to_string()),
+                                cancellable: Some(false),
+                                percentage: None,
+                            },
+                        )),
+                    })
+                    .await;
+
+                match crate::solc::solc_project_index(&foundry_config, Some(&client), None).await {
+                    Ok(ast_data) => {
+                        let cached_build = Arc::new(crate::goto::CachedBuild::new(ast_data, 0));
+                        let source_count = cached_build.nodes.len();
+                        ast_cache.write().await.insert(cache_key, cached_build);
+                        client
+                            .log_message(
+                                MessageType::INFO,
+                                format!(
+                                    "project index (eager): cached {} source files",
+                                    source_count
+                                ),
+                            )
+                            .await;
+
+                        client
+                            .send_notification::<notification::Progress>(ProgressParams {
+                                token: token.clone(),
+                                value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(
+                                    WorkDoneProgressEnd {
+                                        message: Some(format!(
+                                            "Indexed {} source files",
+                                            source_count
+                                        )),
+                                    },
+                                )),
+                            })
+                            .await;
+                    }
+                    Err(e) => {
+                        client
+                            .log_message(
+                                MessageType::WARNING,
+                                format!("project index (eager): failed: {e}"),
+                            )
+                            .await;
+
+                        client
+                            .send_notification::<notification::Progress>(ProgressParams {
+                                token,
+                                value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(
+                                    WorkDoneProgressEnd {
+                                        message: Some(format!("Index failed: {e}")),
+                                    },
+                                )),
+                            })
+                            .await;
+                    }
+                }
+            });
         }
     }
 
@@ -2178,5 +2340,313 @@ impl LanguageServer for ForgeLsp {
                 .await;
             Ok(Some(hints))
         }
+    }
+
+    async fn will_rename_files(
+        &self,
+        params: RenameFilesParams,
+    ) -> tower_lsp::jsonrpc::Result<Option<WorkspaceEdit>> {
+        self.client
+            .log_message(
+                MessageType::INFO,
+                format!("workspace/willRenameFiles: {} file(s)", params.files.len()),
+            )
+            .await;
+
+        // ── Phase 1: discover source files (blocking I/O) ──────────────
+        let config = self.foundry_config.read().await.clone();
+        let project_root = config.root.clone();
+        let source_files: Vec<String> = tokio::task::spawn_blocking(move || {
+            crate::solc::discover_source_files(&config)
+                .into_iter()
+                .filter_map(|p| p.to_str().map(String::from))
+                .collect()
+        })
+        .await
+        .unwrap_or_default();
+
+        if source_files.is_empty() {
+            self.client
+                .log_message(
+                    MessageType::WARNING,
+                    "willRenameFiles: no source files found",
+                )
+                .await;
+            return Ok(None);
+        }
+
+        // ── Phase 2: parse rename params & expand folders ──────────────
+        let raw_renames: Vec<(std::path::PathBuf, std::path::PathBuf)> = params
+            .files
+            .iter()
+            .filter_map(|fr| {
+                let old_uri = Url::parse(&fr.old_uri).ok()?;
+                let new_uri = Url::parse(&fr.new_uri).ok()?;
+                let old_path = old_uri.to_file_path().ok()?;
+                let new_path = new_uri.to_file_path().ok()?;
+                Some((old_path, new_path))
+            })
+            .collect();
+
+        let renames = file_operations::expand_folder_renames(&raw_renames, &source_files);
+
+        if renames.is_empty() {
+            return Ok(None);
+        }
+
+        self.client
+            .log_message(
+                MessageType::INFO,
+                format!(
+                    "willRenameFiles: {} rename(s) after folder expansion",
+                    renames.len()
+                ),
+            )
+            .await;
+
+        // ── Phase 3: hydrate text_cache (blocking I/O) ─────────────────
+        // Collect which files need reading from disk (not already in cache).
+        let files_to_read: Vec<(String, String)> = {
+            let tc = self.text_cache.read().await;
+            source_files
+                .iter()
+                .filter_map(|fs_path| {
+                    let uri = Url::from_file_path(fs_path).ok()?;
+                    let uri_str = uri.to_string();
+                    if tc.contains_key(&uri_str) {
+                        None
+                    } else {
+                        Some((uri_str, fs_path.clone()))
+                    }
+                })
+                .collect()
+        };
+
+        if !files_to_read.is_empty() {
+            let loaded: Vec<(String, String)> = tokio::task::spawn_blocking(move || {
+                files_to_read
+                    .into_iter()
+                    .filter_map(|(uri_str, fs_path)| {
+                        let content = std::fs::read_to_string(&fs_path).ok()?;
+                        Some((uri_str, content))
+                    })
+                    .collect()
+            })
+            .await
+            .unwrap_or_default();
+
+            let mut tc = self.text_cache.write().await;
+            for (uri_str, content) in loaded {
+                tc.entry(uri_str).or_insert((0, content));
+            }
+        }
+
+        // ── Phase 4: compute edits (pure, no I/O) ──────────────────────
+        // Build source-bytes provider that reads from the cache held behind
+        // the Arc<RwLock>.  We hold a read guard only for the duration of
+        // each lookup, not for the full computation.
+        let text_cache = self.text_cache.clone();
+        let result = {
+            let tc = text_cache.read().await;
+            let get_source_bytes = |fs_path: &str| -> Option<Vec<u8>> {
+                let uri = Url::from_file_path(fs_path).ok()?;
+                let (_, content) = tc.get(&uri.to_string())?;
+                Some(content.as_bytes().to_vec())
+            };
+
+            file_operations::rename_imports(
+                &source_files,
+                &renames,
+                &project_root,
+                &get_source_bytes,
+            )
+        };
+
+        // ── Phase 5: log diagnostics ───────────────────────────────────
+        let stats = &result.stats;
+        if stats.read_failures > 0 || stats.pathdiff_failures > 0 || stats.duplicate_renames > 0 {
+            self.client
+                .log_message(
+                    MessageType::WARNING,
+                    format!(
+                        "willRenameFiles stats: read_failures={}, pathdiff_failures={}, \
+                         duplicate_renames={}, no_parent={}, no_op_skips={}, dedup_skips={}",
+                        stats.read_failures,
+                        stats.pathdiff_failures,
+                        stats.duplicate_renames,
+                        stats.no_parent,
+                        stats.no_op_skips,
+                        stats.dedup_skips,
+                    ),
+                )
+                .await;
+        }
+
+        let all_edits = result.edits;
+
+        if all_edits.is_empty() {
+            self.client
+                .log_message(MessageType::INFO, "willRenameFiles: no import edits needed")
+                .await;
+            return Ok(None);
+        }
+
+        // ── Phase 6: patch own text_cache ──────────────────────────────
+        {
+            let mut tc = self.text_cache.write().await;
+            let patched = file_operations::apply_edits_to_cache(&all_edits, &mut tc);
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    format!("willRenameFiles: patched {} cached file(s)", patched),
+                )
+                .await;
+        }
+
+        let total_edits: usize = all_edits.values().map(|v| v.len()).sum();
+        self.client
+            .log_message(
+                MessageType::INFO,
+                format!(
+                    "willRenameFiles: {} edit(s) across {} file(s)",
+                    total_edits,
+                    all_edits.len()
+                ),
+            )
+            .await;
+
+        Ok(Some(WorkspaceEdit {
+            changes: Some(all_edits),
+            document_changes: None,
+            change_annotations: None,
+        }))
+    }
+
+    async fn did_rename_files(&self, params: RenameFilesParams) {
+        self.client
+            .log_message(
+                MessageType::INFO,
+                format!("workspace/didRenameFiles: {} file(s)", params.files.len()),
+            )
+            .await;
+
+        // ── Phase 1: parse params & expand folder renames ──────────────
+        let raw_uri_pairs: Vec<(Url, Url)> = params
+            .files
+            .iter()
+            .filter_map(|fr| {
+                let old_uri = Url::parse(&fr.old_uri).ok()?;
+                let new_uri = Url::parse(&fr.new_uri).ok()?;
+                Some((old_uri, new_uri))
+            })
+            .collect();
+
+        let file_renames = {
+            let tc = self.text_cache.read().await;
+            let cache_paths: Vec<std::path::PathBuf> = tc
+                .keys()
+                .filter_map(|k| Url::parse(k).ok())
+                .filter_map(|u| u.to_file_path().ok())
+                .collect();
+            drop(tc);
+
+            // Include discovered project files so folder renames also migrate
+            // entries that aren't currently present in text_cache.
+            let cfg = self.foundry_config.read().await.clone();
+            let discovered_paths = tokio::task::spawn_blocking(move || {
+                crate::solc::discover_source_files(&cfg)
+            })
+            .await
+            .unwrap_or_default();
+
+            let mut all_paths: HashSet<std::path::PathBuf> =
+                discovered_paths.into_iter().collect();
+            all_paths.extend(cache_paths);
+            let all_paths: Vec<std::path::PathBuf> = all_paths.into_iter().collect();
+
+            file_operations::expand_folder_renames_from_paths(&raw_uri_pairs, &all_paths)
+        };
+
+        self.client
+            .log_message(
+                MessageType::INFO,
+                format!(
+                    "didRenameFiles: migrating {} cache entry/entries",
+                    file_renames.len()
+                ),
+            )
+            .await;
+
+        // ── Phase 2: migrate per-file caches ───────────────────────────
+        // Take a single write lock per cache type and do all migrations
+        // in one pass (avoids repeated lock/unlock per file).
+        {
+            let mut tc = self.text_cache.write().await;
+            for (old_key, new_key) in &file_renames {
+                if let Some(entry) = tc.remove(old_key) {
+                    tc.insert(new_key.clone(), entry);
+                }
+            }
+        }
+        {
+            let mut ac = self.ast_cache.write().await;
+            for (old_key, _) in &file_renames {
+                ac.remove(old_key);
+            }
+        }
+        {
+            let mut cc = self.completion_cache.write().await;
+            for (old_key, _) in &file_renames {
+                cc.remove(old_key);
+            }
+        }
+
+        // Invalidate the project index cache and rebuild so subsequent
+        // willRenameFiles requests see the updated file layout.
+        let root_key = self.root_uri.read().await.as_ref().map(|u| u.to_string());
+        if let Some(ref key) = root_key {
+            self.ast_cache.write().await.remove(key);
+        }
+
+        let foundry_config = self.foundry_config.read().await.clone();
+        let ast_cache = self.ast_cache.clone();
+        let client = self.client.clone();
+        // Snapshot text_cache so the re-index uses in-memory content
+        // (with updated import paths from willRenameFiles) rather than
+        // reading from disk where files may not yet reflect the edits.
+        let text_cache_snapshot = self.text_cache.read().await.clone();
+
+        tokio::spawn(async move {
+            let Some(cache_key) = root_key else {
+                return;
+            };
+            match crate::solc::solc_project_index(
+                &foundry_config,
+                Some(&client),
+                Some(&text_cache_snapshot),
+            )
+            .await
+            {
+                Ok(ast_data) => {
+                    let cached_build = Arc::new(crate::goto::CachedBuild::new(ast_data, 0));
+                    let source_count = cached_build.nodes.len();
+                    ast_cache.write().await.insert(cache_key, cached_build);
+                    client
+                        .log_message(
+                            MessageType::INFO,
+                            format!("didRenameFiles: re-indexed {} source files", source_count),
+                        )
+                        .await;
+                }
+                Err(e) => {
+                    client
+                        .log_message(
+                            MessageType::WARNING,
+                            format!("didRenameFiles: re-index failed: {e}"),
+                        )
+                        .await;
+                }
+            }
+        });
     }
 }

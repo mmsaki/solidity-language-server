@@ -556,7 +556,17 @@ pub fn goto_declaration_cached(
         let absolute_path = if target_file_path.is_absolute() {
             target_file_path.to_path_buf()
         } else {
-            std::env::current_dir().ok()?.join(target_file_path)
+            // Resolve relative paths against the current file's directory,
+            // not CWD. This handles solc standard-json output where
+            // absolutePath is relative (e.g. "A.sol") and the server's CWD
+            // differs from the project root.
+            let base = file_uri
+                .to_file_path()
+                .ok()
+                .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+                .or_else(|| std::env::current_dir().ok())
+                .unwrap_or_default();
+            base.join(target_file_path)
         };
 
         if let Ok(target_source_bytes) = std::fs::read(&absolute_path)
@@ -677,7 +687,13 @@ pub fn goto_declaration_by_name(
     let absolute_path = if target_file_path.is_absolute() {
         target_file_path.to_path_buf()
     } else {
-        std::env::current_dir().ok()?.join(target_file_path)
+        let base = file_uri
+            .to_file_path()
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+            .or_else(|| std::env::current_dir().ok())
+            .unwrap_or_default();
+        base.join(target_file_path)
     };
 
     let target_source_bytes = std::fs::read(&absolute_path).ok()?;

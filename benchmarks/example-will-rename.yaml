@@ -1,0 +1,22 @@
+# workspace/willRenameFiles benchmark — small project (example/A.sol → AA.sol)
+# Tests import path update in B.sol when A.sol is renamed.
+#   lsp-bench -c benchmarks/example-will-rename.yaml
+#
+# Expected: B.sol import changes from "./A.sol" to "./AA.sol"
+
+project: example
+file: A.sol
+line: 4
+col: 8
+output: benchmarks/example-will-rename
+report: README.md
+
+servers:
+  - mmsaki@latest
+
+benchmarks:
+  - workspace/willRenameFiles
+
+methods:
+  workspace/willRenameFiles:
+    newName: AA.sol

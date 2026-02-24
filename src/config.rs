@@ -158,10 +158,26 @@ impl Default for FoundryConfig {
 }
 
 /// Load project configuration from the nearest `foundry.toml`.
+///
+/// When no `foundry.toml` is found, returns a default config with `root` set
+/// to the nearest git root or the file's parent directory.  This ensures that
+/// bare Solidity projects (Hardhat, node_modules, loose files) still get a
+/// usable project root for solc invocation.
 pub fn load_foundry_config(file_path: &Path) -> FoundryConfig {
     let toml_path = match find_foundry_toml(file_path) {
         Some(p) => p,
-        None => return FoundryConfig::default(),
+        None => {
+            let start = if file_path.is_file() {
+                file_path.parent().unwrap_or(file_path)
+            } else {
+                file_path
+            };
+            let root = find_git_root(start).unwrap_or_else(|| start.to_path_buf());
+            return FoundryConfig {
+                root,
+                ..Default::default()
+            };
+        }
     };
     load_foundry_config_from_toml(&toml_path)
 }

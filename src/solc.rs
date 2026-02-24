@@ -7,9 +7,11 @@
 use crate::config::FoundryConfig;
 use crate::runner::RunnerError;
 use serde_json::{Map, Value, json};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use tokio::process::Command;
+use tower_lsp::lsp_types::Url;
 
 /// Cached list of installed solc versions. Populated on first access,
 /// invalidated after a successful `svm::install`.
@@ -517,7 +519,30 @@ pub async fn run_solc(
 ///
 /// Takes ownership and uses `Value::take()` to move AST nodes in-place,
 /// avoiding expensive clones of multi-MB AST data.
+///
+/// Also resolves `absolutePath` on nested `ImportDirective` nodes so that
+/// goto-definition on import strings works regardless of CWD.
 pub fn normalize_solc_output(mut solc_output: Value, project_root: Option<&Path>) -> Value {
+    /// Walk an AST node tree and resolve `absolutePath` on `ImportDirective` nodes.
+    fn resolve_import_absolute_paths(node: &mut Value, resolve: &dyn Fn(&str) -> String) {
+        let is_import = node.get("nodeType").and_then(|v| v.as_str()) == Some("ImportDirective");
+
+        if is_import {
+            if let Some(abs_path) = node.get("absolutePath").and_then(|v| v.as_str()) {
+                let resolved = resolve(abs_path);
+                node.as_object_mut()
+                    .unwrap()
+                    .insert("absolutePath".to_string(), json!(resolved));
+            }
+        }
+
+        // Recurse into "nodes" array (top-level AST children)
+        if let Some(nodes) = node.get_mut("nodes").and_then(|v| v.as_array_mut()) {
+            for child in nodes {
+                resolve_import_absolute_paths(child, resolve);
+            }
+        }
+    }
     let mut result = Map::new();
 
     // Move errors out (defaults to [] if absent)
@@ -554,14 +579,17 @@ pub fn normalize_solc_output(mut solc_output: Value, project_root: Option<&Path>
             if let Some(mut source_data) = sources.remove(&key) {
                 let abs_key = resolve(&key);
 
-                // Update the AST absolutePath field to match
-                if let Some(ast) = source_data.get_mut("ast")
-                    && let Some(abs_path) = ast.get("absolutePath").and_then(|v| v.as_str())
-                {
-                    let resolved = resolve(abs_path);
-                    ast.as_object_mut()
-                        .unwrap()
-                        .insert("absolutePath".to_string(), json!(resolved));
+                // Update the AST absolutePath field to match, and resolve
+                // absolutePath on nested ImportDirective nodes so that
+                // goto-definition works regardless of CWD.
+                if let Some(ast) = source_data.get_mut("ast") {
+                    if let Some(abs_path) = ast.get("absolutePath").and_then(|v| v.as_str()) {
+                        let resolved = resolve(abs_path);
+                        ast.as_object_mut()
+                            .unwrap()
+                            .insert("absolutePath".to_string(), json!(resolved));
+                    }
+                    resolve_import_absolute_paths(ast, &resolve);
                 }
 
                 if let Some(id) = source_data.get("id") {
@@ -780,6 +808,24 @@ pub fn build_batch_standard_json_input(
     remappings: &[String],
     config: &FoundryConfig,
 ) -> Value {
+    build_batch_standard_json_input_with_cache(source_files, remappings, config, None)
+}
+
+/// Build a batch standard-json input for solc.
+///
+/// When `content_cache` is provided, files whose URI string appears as a key
+/// are included with `"content"` (in-memory source).  Files not in the cache
+/// fall back to `"urls"` (solc reads from disk).
+///
+/// This allows the re-index after a rename to feed solc the updated import
+/// paths from our text_cache without requiring the editor to have flushed
+/// them to disk yet.
+pub fn build_batch_standard_json_input_with_cache(
+    source_files: &[PathBuf],
+    remappings: &[String],
+    config: &FoundryConfig,
+    content_cache: Option<&HashMap<String, (i32, String)>>,
+) -> Value {
     let mut contract_outputs = vec!["abi", "devdoc", "userdoc", "evm.methodIdentifiers"];
     if !config.via_ir {
         contract_outputs.push("evm.gasEstimates");
@@ -808,7 +854,18 @@ pub fn build_batch_standard_json_input(
             .strip_prefix(&config.root)
             .map(|p| p.to_string_lossy().into_owned())
             .unwrap_or_else(|_| file.to_string_lossy().into_owned());
-        sources.insert(rel_path.clone(), json!({ "urls": [rel_path] }));
+
+        // Try to use cached content so solc doesn't need to read from disk.
+        let cached_content = content_cache.and_then(|cache| {
+            let uri = Url::from_file_path(file).ok()?;
+            cache.get(&uri.to_string()).map(|(_, c)| c.as_str())
+        });
+
+        if let Some(content) = cached_content {
+            sources.insert(rel_path, json!({ "content": content }));
+        } else {
+            sources.insert(rel_path.clone(), json!({ "urls": [rel_path] }));
+        }
     }
 
     json!({
@@ -822,9 +879,15 @@ pub fn build_batch_standard_json_input(
 ///
 /// Discovers all source files, compiles them in a single `solc --standard-json`
 /// invocation, and returns the normalized AST data.
+///
+/// When `text_cache` is provided, files whose URI string appears as a key
+/// are fed to solc via `"content"` (in-memory) rather than `"urls"` (disk).
+/// This ensures the re-index after a rename uses the updated import paths
+/// from our cache, even if the editor hasn't flushed them to disk yet.
 pub async fn solc_project_index(
     config: &FoundryConfig,
     client: Option<&tower_lsp::Client>,
+    text_cache: Option<&HashMap<String, (i32, String)>>,
 ) -> Result<Value, RunnerError> {
     let source_files = discover_source_files(config);
     if source_files.is_empty() {
@@ -846,11 +909,18 @@ pub async fn solc_project_index(
     }
 
     // Use the first file to detect pragma and resolve solc binary.
-    let first_source = std::fs::read_to_string(&source_files[0]).ok();
+    // Prefer cached content over disk.
+    let first_source = text_cache
+        .and_then(|tc| {
+            let uri = Url::from_file_path(&source_files[0]).ok()?;
+            tc.get(&uri.to_string()).map(|(_, c)| c.clone())
+        })
+        .or_else(|| std::fs::read_to_string(&source_files[0]).ok());
     let solc_binary = resolve_solc_binary(config, first_source.as_deref(), client).await;
     let remappings = resolve_remappings(config).await;
 
-    let input = build_batch_standard_json_input(&source_files, &remappings, config);
+    let input =
+        build_batch_standard_json_input_with_cache(&source_files, &remappings, config, text_cache);
     let raw_output = run_solc(&solc_binary, &input, &config.root).await?;
     Ok(normalize_solc_output(raw_output, Some(&config.root)))
 }

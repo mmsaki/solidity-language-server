@@ -1,0 +1,52 @@
+# Multi-rename sequence — v4-core Pool.sol (cross-file, many importers)
+#
+# Tests renaming Pool.sol which is imported by ~12 files in v4-core.
+# Each rename should update all importers, then renaming back should
+# restore them correctly.
+#
+# This catches:
+#   - Stale AST across large project re-indexes
+#   - Correct edit application when many files are affected
+#   - Re-index timing with 50+ source files
+#
+#   lsp-bench -c benchmarks/pool-rename-sequence.yaml
+
+project: v4-core
+file: src/libraries/Pool.sol
+line: 102
+col: 15
+output: benchmarks/pool-rename-sequence
+report: README.md
+
+servers:
+  - mmsaki@latest
+
+benchmarks:
+  - workspace/willRenameFiles
+
+methods:
+  workspace/willRenameFiles:
+    renameSteps:
+      # Step 1: Pool.sol → Pools.sol
+      - file: src/libraries/Pool.sol
+        newName: Pools.sol
+        expect:
+          minCount: 5     # at least 5 files import Pool.sol
+
+      # Step 2: Pools.sol → Pool.sol (rename back)
+      - file: src/libraries/Pools.sol
+        newName: Pool.sol
+        expect:
+          minCount: 5
+
+      # Step 3: repeat to verify re-index
+      - file: src/libraries/Pool.sol
+        newName: Pools.sol
+        expect:
+          minCount: 5
+
+      # Step 4: restore
+      - file: src/libraries/Pools.sol
+        newName: Pool.sol
+        expect:
+          minCount: 5

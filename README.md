@@ -56,7 +56,6 @@ p95 latency. `-` = unsupported, empty, error, or crash.
 return {
   name = "Solidity Language Server",
   cmd = { "solidity-language-server" },
-  root_dir = vim.fs.root(0, { "foundry.toml", ".git" }),
   filetypes = { "solidity" },
   root_markers = { "foundry.toml", ".git" },
   on_attach = function(_, _)

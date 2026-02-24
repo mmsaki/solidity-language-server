@@ -67,3 +67,7 @@ methods:
     line: 102
     col: 43
     # Inside TickMath.getTickAtSqrtPrice(sqrtPriceX96)
+
+  workspace/willRenameFiles:
+    newName: Pools.sol
+    # Rename Pool.sol → Pools.sol — imported by PoolManager.sol, ProtocolFees.sol, PoolManager.t.sol

@@ -15,7 +15,7 @@ exclude:
   - textDocument/documentColor
 
 servers:
-  - mmsaki@v0.1.25
+  - mmsaki@latest
   - mmsaki@v0.1.24
   # - solc
   # - qiuxiang
@@ -67,3 +67,8 @@ methods:
     line: 116
     col: 37
     # Inside bound(sqrtPriceX96, TickMath.MIN_SQRT_PRICE, ...)
+
+  workspace/willRenameFiles:
+    file: src/libraries/Pool.sol
+    newName: Pools.sol
+    # Rename Pool.sol → Pools.sol (file override — benchmark file is PoolManager.t.sol)

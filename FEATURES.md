@@ -11,6 +11,7 @@
 - **Diagnostics** — from `solc` and `forge lint`
 - **Signature Help** — parameter info on function calls, event emits, and mapping access
 - **Inlay Hints** — parameter names and gas estimates
+- **File Operations** — `workspace/willRenameFiles` import rewrite + `workspace/didRenameFiles` cache migration/re-index
 
 See [FEATURES.md](FEATURES.md) for the full LSP feature set and roadmap.
 
@@ -75,7 +76,8 @@ See [FEATURES.md](FEATURES.md) for the full LSP feature set and roadmap.
 - [ ] `workspace/applyEdit` - Apply workspace edits
 - [ ] `workspace/executeCommand` - Execute workspace commands (stub implementation)
 - [ ] `workspace/willCreateFiles` - File creation preview
-- [ ] `workspace/willRenameFiles` - File rename preview
+- [x] `workspace/willRenameFiles` - File rename preview (import path updates)
+- [x] `workspace/didRenameFiles` - Post-rename cache migration + background re-index
 - [ ] `workspace/willDeleteFiles` - File deletion preview
 
 **Window Features**

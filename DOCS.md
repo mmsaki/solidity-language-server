@@ -25,7 +25,6 @@ If you have neovim 0.11+ installed add these to your config
 return {
   name = "Solidity Language Server",
   cmd = { "solidity-language-server" },
-  root_dir = vim.fs.root(0, { "foundry.toml", ".git" }),
   filetypes = { "solidity" },
   root_markers = { "foundry.toml", ".git" },
   on_attach = function(_, _)
@@ -114,7 +113,6 @@ return {
   cmd = { "solidity-language-server" },
   filetypes = { "solidity" },
   root_markers = { "foundry.toml", ".git" },
-  root_dir = vim.fs.root(0, { "foundry.toml", ".git" }),
   settings = {
     ["solidity-language-server"] = {
       inlayHints = {
@@ -222,3 +220,56 @@ Enable traces in neovim to view full traces in logs:
 # for [debug] traces
 :lua vim.lsp.set_log_level("trace")
 ```
+
+## FAQ
+
+### Renaming a `.sol` file doesn't update imports in Neovim
+
+When you rename a file through a file explorer plugin (e.g. oil.nvim), the server should automatically update import paths in other files. If this isn't working, check the following:
+
+**1. Verify workspace folders are set correctly**
+
+Open a `.sol` file and run:
+
+```vim
+:lua for _, c in ipairs(vim.lsp.get_clients()) do print(c.name, vim.inspect(c.workspace_folders)) end
+```
+
+You should see an **absolute** `file://` URI like:
+
+```
+Solidity Language Server { { name = "/Users/you/project", uri = "file:///Users/you/project" } }
+```
+
+If you see `file://.` or a relative path, the problem is `root_dir` in your LSP config. **Do not** use `root_dir = vim.fs.root(0, { ... })` — it evaluates at config load time when buffer 0 may not be a `.sol` file, producing a bad value. Use `root_markers` instead, which Neovim resolves lazily per buffer:
+
+```lua
+-- lsp/solidity-language-server.lua
+return {
+  cmd = { "solidity-language-server" },
+  filetypes = { "solidity" },
+  root_markers = { "foundry.toml", ".git" },  -- use this, not root_dir
+}
+```
+
+**2. Verify your file explorer sends `willRenameFiles`**
+
+Not all file explorer plugins send LSP file operation requests. For oil.nvim, make sure `lsp_file_methods` is enabled:
+
+```lua
+require("oil").setup({
+  lsp_file_methods = {
+    enabled = true,
+    timeout_ms = 1000,
+    autosave_changes = "unmodified",
+  },
+})
+```
+
+**3. Check the LSP log for server responses**
+
+```bash
+tail -f ~/.local/state/nvim/lsp.log
+```
+
+You should see `workspace/willRenameFiles` followed by `willRenameFiles: N edit(s) across M file(s)`. If you see `willRenameFiles: no import edits needed`, the server couldn't find matching imports — the project index may not have finished building yet (wait for the "Indexing project" spinner to complete before renaming).

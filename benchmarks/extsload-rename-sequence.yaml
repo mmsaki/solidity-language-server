@@ -1,0 +1,47 @@
+# Extsload.sol rename sequence — v4-core project
+#
+# Reproduces the bug: rename Extsload.sol → Extsloads.sol, then rename back.
+# The second rename corrupts import strings:
+#   "./Extsloads.so"./Extsload.sol"
+#
+#   lsp-bench -c benchmarks/extsload-rename-sequence.yaml
+
+project: v4-core
+file: src/PoolManager.sol
+line: 26
+col: 10
+output: benchmarks/extsload-rename-sequence
+report: README.md
+
+servers:
+  - mmsaki@latest
+
+benchmarks:
+  - workspace/willRenameFiles
+
+methods:
+  workspace/willRenameFiles:
+    renameSteps:
+      # Step 1: Extsload.sol → Extsloads.sol (add s)
+      - file: src/Extsload.sol
+        newName: Extsloads.sol
+        expect:
+          count: 3        # PoolManager.sol, ProxyPoolManager.sol, test/Extsload.t.sol
+
+      # Step 2: Extsloads.sol → Extsload.sol (rename back)
+      - file: src/Extsloads.sol
+        newName: Extsload.sol
+        expect:
+          count: 3
+
+      # Step 3: repeat rename (verifies second round-trip)
+      - file: src/Extsload.sol
+        newName: Extsloads.sol
+        expect:
+          count: 3
+
+      # Step 4: restore
+      - file: src/Extsloads.sol
+        newName: Extsload.sol
+        expect:
+          count: 3

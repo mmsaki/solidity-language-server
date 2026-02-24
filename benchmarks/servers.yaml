@@ -26,7 +26,7 @@ mmsaki:
     v0.1.25:
       cmd: ./target/release/solidity-language-server
     latest:
-      cmd: ./target/release/solidity-language-server
+      cmd: /Users/meek/developer/mmsaki/solidity-language-server/target/release/solidity-language-server
 
 solc:
   cmd: solc
