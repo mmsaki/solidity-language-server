@@ -232,10 +232,12 @@ The LSP spec says when a server returns a `WorkspaceEdit` from `willRenameFiles`
 
 ## Known limitations
 
-- **Remapped imports are not rewritten.** Imports like `import "src/Foo.sol"` (via Foundry remappings) are not resolved — only relative imports starting with `./` or `../` are handled.
+- **Library/remapped imports are not rewritten.** Imports resolved through remappings to external libraries (e.g. `import "forge-std/Test.sol"`, `import "solmate/src/auth/Owned.sol"`, `import "@openzeppelin/contracts/proxy/Proxy.sol"`) are not touched. These point to files in `lib/` or `node_modules/` which are excluded from `discover_source_files()` and should never be project rename targets.
+- **The server never writes files to disk.** All edits are returned to the client as a `WorkspaceEdit` and applied to the in-memory `text_cache`. The `didRenameFiles` re-index feeds cached content to solc via `"content"` in standard-json rather than `"urls"`. The client is responsible for persisting changes to disk.
 - **Rapid successive renames.** If the user renames two files faster than the re-index can complete, the second rename's `willRenameFiles` may use a stale project index. The `discover_source_files()` fallback mitigates this but doesn't guarantee the cache is up to date.
 - **Folder renames depend on editor behavior.** The server registers a folder glob (`**`), but whether the editor sends individual file entries for each file inside a renamed folder varies by client.
 - **First rename reads from disk.** The initial `willRenameFiles` must read non-open files from disk to populate the cache. All subsequent renames work entirely from memory.
+- **Intermittent missed imports.** In large projects, 1–2 files may occasionally not get their imports updated. The root cause is unknown. Renaming again or manually fixing the affected imports works around this.
 
 ## Tests
 
@@ -243,13 +245,16 @@ The LSP spec says when a server returns a `WorkspaceEdit` from `willRenameFiles`
 cargo test --release --test file_operations
 ```
 
-11 tests covering:
+14 tests covering:
 - Simple rename (A.sol → AA.sol, 1 importer)
 - Multiple importers (A.sol imported by B.sol and C.sol)
 - Cross-directory imports (src/ → test/)
 - File move updates own imports (A.sol → sub/A.sol)
 - Same-directory rename does not touch own imports
 - Remapped imports are skipped (forge-std/Test.sol)
+- Non-relative imports resolved against project root (src/PoolManager.sol)
+- Mixed relative and non-relative importers updated correctly
+- Non-relative imports don't false-match library imports
 - Unrelated imports are not affected
 - Nonexistent files, files nobody imports
 - Live `example/` project with real tree-sitter parsing

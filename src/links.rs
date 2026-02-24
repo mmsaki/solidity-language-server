@@ -1,6 +1,7 @@
 use crate::goto::{CachedBuild, bytes_to_pos};
 use crate::types::SourceLoc;
-use tower_lsp::lsp_types::{DocumentLink, Position, Range, Url};
+use crate::utils;
+use tower_lsp::lsp_types::{DocumentLink, Range, Url};
 use tree_sitter::Parser;
 
 /// Extract document links for import directives in the current file.
@@ -156,14 +157,13 @@ fn collect_imports(node: tree_sitter::Node, source_bytes: &[u8], out: &mut Vec<T
                         let path = String::from_utf8_lossy(&source_bytes[inner_start..inner_end])
                             .to_string();
 
-                        let start_pos = Position {
-                            line: child.start_position().row as u32,
-                            character: child.start_position().column as u32 + 1,
-                        };
-                        let end_pos = Position {
-                            line: child.end_position().row as u32,
-                            character: child.end_position().column as u32 - 1,
-                        };
+                        // Convert byte offsets to LSP positions using the
+                        // negotiated encoding (UTF-8 or UTF-16).  Tree-sitter
+                        // columns are byte offsets, which only coincide with
+                        // LSP character units for pure-ASCII lines.
+                        let source_str = std::str::from_utf8(source_bytes).unwrap_or("");
+                        let start_pos = utils::byte_offset_to_position(source_str, inner_start);
+                        let end_pos = utils::byte_offset_to_position(source_str, inner_end);
 
                         out.push(TsImport {
                             path,

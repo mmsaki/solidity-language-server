@@ -14,7 +14,7 @@ use crate::selection;
 use crate::semantic_tokens;
 use crate::symbols;
 use crate::utils;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::RwLock;
@@ -2353,16 +2353,17 @@ impl LanguageServer for ForgeLsp {
             )
             .await;
 
-        // Discover source files.  Always walk the filesystem so we never miss
-        // files that solc failed to compile (those wouldn't appear in the
-        // cached project index's path_to_abs).
-        let source_files: Vec<String> = {
-            let config = self.foundry_config.read().await.clone();
+        // ── Phase 1: discover source files (blocking I/O) ──────────────
+        let config = self.foundry_config.read().await.clone();
+        let project_root = config.root.clone();
+        let source_files: Vec<String> = tokio::task::spawn_blocking(move || {
             crate::solc::discover_source_files(&config)
                 .into_iter()
                 .filter_map(|p| p.to_str().map(String::from))
                 .collect()
-        };
+        })
+        .await
+        .unwrap_or_default();
 
         if source_files.is_empty() {
             self.client
@@ -2374,56 +2375,114 @@ impl LanguageServer for ForgeLsp {
             return Ok(None);
         }
 
-        // Pre-populate: read all source files into text_cache so that every
-        // file is in memory.  Files the editor already opened (via didOpen /
-        // didChange) keep their cached version; files never opened are read
-        // from disk once and cached.  After this block, all source files are
-        // available from text_cache and no further disk reads are needed.
-        {
-            let mut tc = self.text_cache.write().await;
-            for fs_path in &source_files {
-                if let Ok(uri) = Url::from_file_path(fs_path) {
-                    let uri_str = uri.to_string();
-                    if !tc.contains_key(&uri_str) {
-                        if let Ok(content) = std::fs::read_to_string(fs_path) {
-                            tc.insert(uri_str, (0, content));
-                        }
-                    }
-                }
-            }
+        // ── Phase 2: parse rename params & expand folders ──────────────
+        let raw_renames: Vec<(std::path::PathBuf, std::path::PathBuf)> = params
+            .files
+            .iter()
+            .filter_map(|fr| {
+                let old_uri = Url::parse(&fr.old_uri).ok()?;
+                let new_uri = Url::parse(&fr.new_uri).ok()?;
+                let old_path = old_uri.to_file_path().ok()?;
+                let new_path = new_uri.to_file_path().ok()?;
+                Some((old_path, new_path))
+            })
+            .collect();
+
+        let renames = file_operations::expand_folder_renames(&raw_renames, &source_files);
+
+        if renames.is_empty() {
+            return Ok(None);
         }
 
-        // Snapshot after pre-populate so the closure sees all files.
-        let text_cache_snapshot = self.text_cache.read().await.clone();
-        let get_source_bytes = |fs_path: &str| -> Option<Vec<u8>> {
-            let uri = Url::from_file_path(fs_path).ok()?;
-            let (_, content) = text_cache_snapshot.get(&uri.to_string())?;
-            Some(content.as_bytes().to_vec())
+        self.client
+            .log_message(
+                MessageType::INFO,
+                format!(
+                    "willRenameFiles: {} rename(s) after folder expansion",
+                    renames.len()
+                ),
+            )
+            .await;
+
+        // ── Phase 3: hydrate text_cache (blocking I/O) ─────────────────
+        // Collect which files need reading from disk (not already in cache).
+        let files_to_read: Vec<(String, String)> = {
+            let tc = self.text_cache.read().await;
+            source_files
+                .iter()
+                .filter_map(|fs_path| {
+                    let uri = Url::from_file_path(fs_path).ok()?;
+                    let uri_str = uri.to_string();
+                    if tc.contains_key(&uri_str) {
+                        None
+                    } else {
+                        Some((uri_str, fs_path.clone()))
+                    }
+                })
+                .collect()
         };
 
-        let mut all_edits: HashMap<Url, Vec<TextEdit>> = HashMap::new();
+        if !files_to_read.is_empty() {
+            let loaded: Vec<(String, String)> = tokio::task::spawn_blocking(move || {
+                files_to_read
+                    .into_iter()
+                    .filter_map(|(uri_str, fs_path)| {
+                        let content = std::fs::read_to_string(&fs_path).ok()?;
+                        Some((uri_str, content))
+                    })
+                    .collect()
+            })
+            .await
+            .unwrap_or_default();
 
-        for file_rename in &params.files {
-            let old_uri = match Url::parse(&file_rename.old_uri) {
-                Ok(u) => u,
-                Err(_) => continue,
-            };
-            let new_uri = match Url::parse(&file_rename.new_uri) {
-                Ok(u) => u,
-                Err(_) => continue,
-            };
-
-            let edits = file_operations::rename_imports(
-                &source_files,
-                &old_uri,
-                &new_uri,
-                &get_source_bytes,
-            );
-
-            for (uri, text_edits) in edits {
-                all_edits.entry(uri).or_default().extend(text_edits);
+            let mut tc = self.text_cache.write().await;
+            for (uri_str, content) in loaded {
+                tc.entry(uri_str).or_insert((0, content));
             }
         }
+
+        // ── Phase 4: compute edits (pure, no I/O) ──────────────────────
+        // Build source-bytes provider that reads from the cache held behind
+        // the Arc<RwLock>.  We hold a read guard only for the duration of
+        // each lookup, not for the full computation.
+        let text_cache = self.text_cache.clone();
+        let result = {
+            let tc = text_cache.read().await;
+            let get_source_bytes = |fs_path: &str| -> Option<Vec<u8>> {
+                let uri = Url::from_file_path(fs_path).ok()?;
+                let (_, content) = tc.get(&uri.to_string())?;
+                Some(content.as_bytes().to_vec())
+            };
+
+            file_operations::rename_imports(
+                &source_files,
+                &renames,
+                &project_root,
+                &get_source_bytes,
+            )
+        };
+
+        // ── Phase 5: log diagnostics ───────────────────────────────────
+        let stats = &result.stats;
+        if stats.read_failures > 0 || stats.pathdiff_failures > 0 || stats.duplicate_renames > 0 {
+            self.client
+                .log_message(
+                    MessageType::WARNING,
+                    format!(
+                        "willRenameFiles stats: read_failures={}, pathdiff_failures={}, \
+                         duplicate_renames={}, no_parent={}, no_op_skips={}, dedup_skips={}",
+                        stats.read_failures,
+                        stats.pathdiff_failures,
+                        stats.duplicate_renames,
+                        stats.no_parent,
+                        stats.no_op_skips,
+                        stats.dedup_skips,
+                    ),
+                )
+                .await;
+        }
+
+        let all_edits = result.edits;
 
         if all_edits.is_empty() {
             self.client
@@ -2432,20 +2491,16 @@ impl LanguageServer for ForgeLsp {
             return Ok(None);
         }
 
-        // Apply the edits we're about to return to our own text_cache.
-        // The editor will apply these same edits to its buffers, but it
-        // won't send didChange back to us for non-open files.  By updating
-        // our cache now, the content stays in sync and subsequent operations
-        // (including the solc re-index) see the updated import paths.
+        // ── Phase 6: patch own text_cache ──────────────────────────────
         {
             let mut tc = self.text_cache.write().await;
-            for (uri, text_edits) in &all_edits {
-                let uri_str = uri.to_string();
-                if let Some((version, content)) = tc.get(&uri_str).cloned() {
-                    let new_content = file_operations::apply_text_edits(&content, text_edits);
-                    tc.insert(uri_str, (version, new_content));
-                }
-            }
+            let patched = file_operations::apply_edits_to_cache(&all_edits, &mut tc);
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    format!("willRenameFiles: patched {} cached file(s)", patched),
+                )
+                .await;
         }
 
         let total_edits: usize = all_edits.values().map(|v| v.len()).sum();
@@ -2475,30 +2530,73 @@ impl LanguageServer for ForgeLsp {
             )
             .await;
 
-        // Migrate per-file caches from old_uri → new_uri so that subsequent
-        // requests (willRenameFiles again, goto, hover, etc.) don't read stale
-        // entries keyed by the old URI.
-        for file_rename in &params.files {
-            let old_key = &file_rename.old_uri;
-            let new_key = &file_rename.new_uri;
+        // ── Phase 1: parse params & expand folder renames ──────────────
+        let raw_uri_pairs: Vec<(Url, Url)> = params
+            .files
+            .iter()
+            .filter_map(|fr| {
+                let old_uri = Url::parse(&fr.old_uri).ok()?;
+                let new_uri = Url::parse(&fr.new_uri).ok()?;
+                Some((old_uri, new_uri))
+            })
+            .collect();
 
-            // text_cache: move the buffer content to the new URI
-            {
-                let mut tc = self.text_cache.write().await;
+        let file_renames = {
+            let tc = self.text_cache.read().await;
+            let cache_paths: Vec<std::path::PathBuf> = tc
+                .keys()
+                .filter_map(|k| Url::parse(k).ok())
+                .filter_map(|u| u.to_file_path().ok())
+                .collect();
+            drop(tc);
+
+            // Include discovered project files so folder renames also migrate
+            // entries that aren't currently present in text_cache.
+            let cfg = self.foundry_config.read().await.clone();
+            let discovered_paths = tokio::task::spawn_blocking(move || {
+                crate::solc::discover_source_files(&cfg)
+            })
+            .await
+            .unwrap_or_default();
+
+            let mut all_paths: HashSet<std::path::PathBuf> =
+                discovered_paths.into_iter().collect();
+            all_paths.extend(cache_paths);
+            let all_paths: Vec<std::path::PathBuf> = all_paths.into_iter().collect();
+
+            file_operations::expand_folder_renames_from_paths(&raw_uri_pairs, &all_paths)
+        };
+
+        self.client
+            .log_message(
+                MessageType::INFO,
+                format!(
+                    "didRenameFiles: migrating {} cache entry/entries",
+                    file_renames.len()
+                ),
+            )
+            .await;
+
+        // ── Phase 2: migrate per-file caches ───────────────────────────
+        // Take a single write lock per cache type and do all migrations
+        // in one pass (avoids repeated lock/unlock per file).
+        {
+            let mut tc = self.text_cache.write().await;
+            for (old_key, new_key) in &file_renames {
                 if let Some(entry) = tc.remove(old_key) {
                     tc.insert(new_key.clone(), entry);
                 }
             }
-
-            // ast_cache: invalidate the per-file entry (stale AST with old byte offsets)
-            {
-                let mut ac = self.ast_cache.write().await;
+        }
+        {
+            let mut ac = self.ast_cache.write().await;
+            for (old_key, _) in &file_renames {
                 ac.remove(old_key);
             }
-
-            // completion_cache: invalidate
-            {
-                let mut cc = self.completion_cache.write().await;
+        }
+        {
+            let mut cc = self.completion_cache.write().await;
+            for (old_key, _) in &file_renames {
                 cc.remove(old_key);
             }
         }
