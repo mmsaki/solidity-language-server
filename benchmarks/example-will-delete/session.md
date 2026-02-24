@@ -20,6 +20,6 @@
 
 **Responses:**
 
-**mmsaki** (10.7 MB) — empty
+**mmsaki** — empty
 
 ---

@@ -38,8 +38,8 @@ Benchmarked against `example` — `B.sol`.
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki** | - | 10.7 MB | empty |
+| **mmsaki** | - | - | empty |
 
 ---
 
-*Benchmark run: 2026-02-24T18:29:48Z*
+*Benchmark run: 2026-02-24T21:12:30Z*

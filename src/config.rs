@@ -95,6 +95,9 @@ pub struct FileOperationsSettings {
     /// Auto-update Solidity imports during `workspace/willRenameFiles`.
     #[serde(default = "default_true")]
     pub update_imports_on_rename: bool,
+    /// Auto-update Solidity imports during `workspace/willDeleteFiles`.
+    #[serde(default = "default_true")]
+    pub update_imports_on_delete: bool,
 }
 
 impl Default for FileOperationsSettings {
@@ -102,6 +105,7 @@ impl Default for FileOperationsSettings {
         Self {
             scaffold_on_create: true,
             update_imports_on_rename: true,
+            update_imports_on_delete: true,
         }
     }
 }
@@ -918,6 +922,7 @@ src = "src"
         assert!(s.lint.enabled);
         assert!(s.file_operations.scaffold_on_create);
         assert!(s.file_operations.update_imports_on_rename);
+        assert!(s.file_operations.update_imports_on_delete);
         assert!(s.lint.severity.is_empty());
         assert!(s.lint.only.is_empty());
         assert!(s.lint.exclude.is_empty());
@@ -936,7 +941,8 @@ src = "src"
                 },
                 "fileOperations": {
                     "scaffoldOnCreate": false,
-                    "updateImportsOnRename": false
+                    "updateImportsOnRename": false,
+                    "updateImportsOnDelete": false
                 },
             }
         });
@@ -946,6 +952,7 @@ src = "src"
         assert!(s.lint.enabled);
         assert!(!s.file_operations.scaffold_on_create);
         assert!(!s.file_operations.update_imports_on_rename);
+        assert!(!s.file_operations.update_imports_on_delete);
         assert_eq!(s.lint.severity, vec!["high", "med"]);
         assert_eq!(s.lint.only, vec!["incorrect-shift"]);
         assert_eq!(
@@ -961,7 +968,8 @@ src = "src"
             "lint": { "enabled": false },
             "fileOperations": {
                 "scaffoldOnCreate": false,
-                "updateImportsOnRename": false
+                "updateImportsOnRename": false,
+                "updateImportsOnDelete": false
             }
         });
         let s = parse_settings(&value);
@@ -969,6 +977,7 @@ src = "src"
         assert!(!s.lint.enabled);
         assert!(!s.file_operations.scaffold_on_create);
         assert!(!s.file_operations.update_imports_on_rename);
+        assert!(!s.file_operations.update_imports_on_delete);
     }
 
     #[test]
@@ -986,6 +995,7 @@ src = "src"
         assert!(s.lint.enabled);
         assert!(s.file_operations.scaffold_on_create);
         assert!(s.file_operations.update_imports_on_rename);
+        assert!(s.file_operations.update_imports_on_delete);
         assert!(s.lint.severity.is_empty());
         assert!(s.lint.only.is_empty());
         assert_eq!(s.lint.exclude, vec!["unused-import"]);
@@ -1002,6 +1012,7 @@ src = "src"
         assert!(s.lint.enabled);
         assert!(s.file_operations.scaffold_on_create);
         assert!(s.file_operations.update_imports_on_rename);
+        assert!(s.file_operations.update_imports_on_delete);
         assert!(s.lint.severity.is_empty());
         assert!(s.lint.only.is_empty());
         assert!(s.lint.exclude.is_empty());

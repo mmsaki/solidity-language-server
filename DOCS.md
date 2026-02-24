@@ -67,6 +67,8 @@ return {
         scaffoldOnCreate = true,
         -- Auto-update imports via workspace/willRenameFiles.
         updateImportsOnRename = true,
+        -- Auto-remove imports via workspace/willDeleteFiles.
+        updateImportsOnDelete = true,
       },
     },
   },
@@ -152,6 +154,8 @@ return {
         scaffoldOnCreate = true,
         -- Auto-update imports via workspace/willRenameFiles.
         updateImportsOnRename = true,
+        -- Auto-remove imports via workspace/willDeleteFiles.
+        updateImportsOnDelete = true,
       },
     },
   },
@@ -170,6 +174,7 @@ lint.severity = ["high", "med"]
 lint.exclude = ["pascal-case-struct"]
 fileOperations.scaffoldOnCreate = true
 fileOperations.updateImportsOnRename = true
+fileOperations.updateImportsOnDelete = true
 ```
 
 ### VSCode / Cursor
@@ -183,7 +188,8 @@ fileOperations.updateImportsOnRename = true
   "solidity-language-server.lint.only": [],
   "solidity-language-server.lint.exclude": ["pascal-case-struct"],
   "solidity-language-server.fileOperations.scaffoldOnCreate": true,
-  "solidity-language-server.fileOperations.updateImportsOnRename": true
+  "solidity-language-server.fileOperations.updateImportsOnRename": true,
+  "solidity-language-server.fileOperations.updateImportsOnDelete": true
 }
 ```
 
@@ -208,7 +214,8 @@ fileOperations.updateImportsOnRename = true
         },
         "fileOperations": {
           "scaffoldOnCreate": true,
-          "updateImportsOnRename": true
+          "updateImportsOnRename": true,
+          "updateImportsOnDelete": true
         }
       }
     }

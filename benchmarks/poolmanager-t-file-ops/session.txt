@@ -1,0 +1,53 @@
+# v4-core / test/PoolManager.t.sol
+
+── workspace/willRenameFiles (103.8ms, 10.5 MB) ──
+
+{
+  "id": 1,
+  "jsonrpc": "2.0",
+  "method": "workspace/willRenameFiles",
+  "params": {
+    "files": [
+      {
+        "newUri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/__lsp_bench_renamed__.sol",
+        "oldUri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/PoolManager.t.sol"
+      }
+    ]
+  }
+}
+
+← mmsaki [content] { changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/PoolManager.sol: Array(1) [{ newText: ""./libraries/Pools.sol"", range: { end: { character: 41, line: 4 }, star...
+
+── workspace/willCreateFiles (0.7ms, 10.5 MB) ──
+
+{
+  "id": 1,
+  "jsonrpc": "2.0",
+  "method": "workspace/willCreateFiles",
+  "params": {
+    "files": [
+      {
+        "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/__lsp_bench_created__.sol"
+      }
+    ]
+  }
+}
+
+← mmsaki [null] null
+
+── workspace/willDeleteFiles (84.8ms, 10.5 MB) ──
+
+{
+  "id": 1,
+  "jsonrpc": "2.0",
+  "method": "workspace/willDeleteFiles",
+  "params": {
+    "files": [
+      {
+        "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/PoolManager.t.sol"
+      }
+    ]
+  }
+}
+
+← mmsaki [content] { changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/PoolManager.sol: Array(1) [{ newText: "", range: { end: { character: 0, line: 5 }, start: { character: 0, line:...

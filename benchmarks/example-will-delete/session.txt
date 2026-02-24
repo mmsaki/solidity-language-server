@@ -1,6 +1,6 @@
 # example / B.sol
 
-── workspace/willDeleteFiles (10.7 MB) ──
+── workspace/willDeleteFiles ──
 
 {
   "id": 1,

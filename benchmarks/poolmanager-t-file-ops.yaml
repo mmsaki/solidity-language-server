@@ -1,0 +1,56 @@
+# PoolManager.t.sol — file operation methods benchmark
+#   lsp-bench -c benchmarks/poolmanager-t-file-ops.yaml
+#
+# Focuses on new file-operation methods:
+#   - workspace/willCreateFiles
+#   - workspace/willRenameFiles
+#   - workspace/willDeleteFiles
+#
+# Notes:
+# - lsp-bench currently models full lifecycle (including didRenameFiles) for
+#   workspace/willRenameFiles.
+# - For willCreateFiles / willDeleteFiles, lsp-bench benchmarks the request/
+#   response latency directly.
+
+project: v4-core
+file: test/PoolManager.t.sol
+line: 116
+col: 51
+output: benchmarks/poolmanager-t-file-ops
+report: README.md
+
+iterations: 10
+warmup: 2
+timeout: 10
+index_timeout: 15
+
+servers:
+  - mmsaki@latest
+  # - mmsaki@v0.1.24
+
+benchmarks:
+  - workspace/willCreateFiles
+  - workspace/willRenameFiles
+  - workspace/willDeleteFiles
+
+methods:
+  workspace/willCreateFiles:
+    createSteps:
+      - file: test/PoolManagerBenchCreate.sol
+    # Full create lifecycle:
+    # willCreateFiles -> apply edits -> create on disk -> didCreateFiles
+
+  workspace/willRenameFiles:
+    renameSteps:
+      - file: src/libraries/Pool.sol
+        newName: Pools.sol
+      - file: src/libraries/Pools.sol
+        newName: Pool.sol
+    # Full rename lifecycle:
+    # willRenameFiles -> apply edits -> rename on disk -> didRenameFiles
+
+  workspace/willDeleteFiles:
+    deleteSteps:
+      - file: src/libraries/Pool.sol
+    # Full delete lifecycle:
+    # willDeleteFiles -> apply edits -> delete on disk -> didDeleteFiles
