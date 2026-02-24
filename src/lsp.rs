@@ -759,6 +759,46 @@ impl LanguageServer for ForgeLsp {
                                 },
                             ],
                         }),
+                        will_delete: Some(FileOperationRegistrationOptions {
+                            filters: vec![
+                                FileOperationFilter {
+                                    scheme: Some("file".to_string()),
+                                    pattern: FileOperationPattern {
+                                        glob: "**/*.sol".to_string(),
+                                        matches: Some(FileOperationPatternKind::File),
+                                        options: None,
+                                    },
+                                },
+                                FileOperationFilter {
+                                    scheme: Some("file".to_string()),
+                                    pattern: FileOperationPattern {
+                                        glob: "**".to_string(),
+                                        matches: Some(FileOperationPatternKind::Folder),
+                                        options: None,
+                                    },
+                                },
+                            ],
+                        }),
+                        did_delete: Some(FileOperationRegistrationOptions {
+                            filters: vec![
+                                FileOperationFilter {
+                                    scheme: Some("file".to_string()),
+                                    pattern: FileOperationPattern {
+                                        glob: "**/*.sol".to_string(),
+                                        matches: Some(FileOperationPatternKind::File),
+                                        options: None,
+                                    },
+                                },
+                                FileOperationFilter {
+                                    scheme: Some("file".to_string()),
+                                    pattern: FileOperationPattern {
+                                        glob: "**".to_string(),
+                                        matches: Some(FileOperationPatternKind::Folder),
+                                        options: None,
+                                    },
+                                },
+                            ],
+                        }),
                         ..Default::default()
                     }),
                 }),
@@ -2553,14 +2593,12 @@ impl LanguageServer for ForgeLsp {
             // Include discovered project files so folder renames also migrate
             // entries that aren't currently present in text_cache.
             let cfg = self.foundry_config.read().await.clone();
-            let discovered_paths = tokio::task::spawn_blocking(move || {
-                crate::solc::discover_source_files(&cfg)
-            })
-            .await
-            .unwrap_or_default();
+            let discovered_paths =
+                tokio::task::spawn_blocking(move || crate::solc::discover_source_files(&cfg))
+                    .await
+                    .unwrap_or_default();
 
-            let mut all_paths: HashSet<std::path::PathBuf> =
-                discovered_paths.into_iter().collect();
+            let mut all_paths: HashSet<std::path::PathBuf> = discovered_paths.into_iter().collect();
             all_paths.extend(cache_paths);
             let all_paths: Vec<std::path::PathBuf> = all_paths.into_iter().collect();
 
@@ -2643,6 +2681,306 @@ impl LanguageServer for ForgeLsp {
                         .log_message(
                             MessageType::WARNING,
                             format!("didRenameFiles: re-index failed: {e}"),
+                        )
+                        .await;
+                }
+            }
+        });
+    }
+
+    async fn will_delete_files(
+        &self,
+        params: DeleteFilesParams,
+    ) -> tower_lsp::jsonrpc::Result<Option<WorkspaceEdit>> {
+        self.client
+            .log_message(
+                MessageType::INFO,
+                format!("workspace/willDeleteFiles: {} file(s)", params.files.len()),
+            )
+            .await;
+
+        let config = self.foundry_config.read().await.clone();
+        let project_root = config.root.clone();
+        let source_files: Vec<String> = tokio::task::spawn_blocking(move || {
+            crate::solc::discover_source_files(&config)
+                .into_iter()
+                .filter_map(|p| p.to_str().map(String::from))
+                .collect()
+        })
+        .await
+        .unwrap_or_default();
+
+        if source_files.is_empty() {
+            self.client
+                .log_message(
+                    MessageType::WARNING,
+                    "willDeleteFiles: no source files found",
+                )
+                .await;
+            return Ok(None);
+        }
+
+        let raw_deletes: Vec<std::path::PathBuf> = params
+            .files
+            .iter()
+            .filter_map(|fd| Url::parse(&fd.uri).ok())
+            .filter_map(|u| u.to_file_path().ok())
+            .collect();
+
+        let deletes = file_operations::expand_folder_deletes(&raw_deletes, &source_files);
+        if deletes.is_empty() {
+            return Ok(None);
+        }
+
+        self.client
+            .log_message(
+                MessageType::INFO,
+                format!(
+                    "willDeleteFiles: {} delete target(s) after folder expansion",
+                    deletes.len()
+                ),
+            )
+            .await;
+
+        let files_to_read: Vec<(String, String)> = {
+            let tc = self.text_cache.read().await;
+            source_files
+                .iter()
+                .filter_map(|fs_path| {
+                    let uri = Url::from_file_path(fs_path).ok()?;
+                    let uri_str = uri.to_string();
+                    if tc.contains_key(&uri_str) {
+                        None
+                    } else {
+                        Some((uri_str, fs_path.clone()))
+                    }
+                })
+                .collect()
+        };
+
+        if !files_to_read.is_empty() {
+            let loaded: Vec<(String, String)> = tokio::task::spawn_blocking(move || {
+                files_to_read
+                    .into_iter()
+                    .filter_map(|(uri_str, fs_path)| {
+                        let content = std::fs::read_to_string(&fs_path).ok()?;
+                        Some((uri_str, content))
+                    })
+                    .collect()
+            })
+            .await
+            .unwrap_or_default();
+
+            let mut tc = self.text_cache.write().await;
+            for (uri_str, content) in loaded {
+                tc.entry(uri_str).or_insert((0, content));
+            }
+        }
+
+        let result = {
+            let tc = self.text_cache.read().await;
+            let get_source_bytes = |fs_path: &str| -> Option<Vec<u8>> {
+                let uri = Url::from_file_path(fs_path).ok()?;
+                let (_, content) = tc.get(&uri.to_string())?;
+                Some(content.as_bytes().to_vec())
+            };
+
+            file_operations::delete_imports(
+                &source_files,
+                &deletes,
+                &project_root,
+                &get_source_bytes,
+            )
+        };
+
+        let stats = &result.stats;
+        if stats.read_failures > 0
+            || stats.statement_range_failures > 0
+            || stats.duplicate_deletes > 0
+        {
+            self.client
+                .log_message(
+                    MessageType::WARNING,
+                    format!(
+                        "willDeleteFiles stats: read_failures={}, statement_range_failures={}, \
+                         duplicate_deletes={}, no_parent={}, dedup_skips={}",
+                        stats.read_failures,
+                        stats.statement_range_failures,
+                        stats.duplicate_deletes,
+                        stats.no_parent,
+                        stats.dedup_skips,
+                    ),
+                )
+                .await;
+        }
+
+        let all_edits = result.edits;
+        if all_edits.is_empty() {
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    "willDeleteFiles: no import-removal edits needed",
+                )
+                .await;
+            return Ok(None);
+        }
+
+        {
+            let mut tc = self.text_cache.write().await;
+            let patched = file_operations::apply_edits_to_cache(&all_edits, &mut tc);
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    format!("willDeleteFiles: patched {} cached file(s)", patched),
+                )
+                .await;
+        }
+
+        let total_edits: usize = all_edits.values().map(|v| v.len()).sum();
+        self.client
+            .log_message(
+                MessageType::INFO,
+                format!(
+                    "willDeleteFiles: {} edit(s) across {} file(s)",
+                    total_edits,
+                    all_edits.len()
+                ),
+            )
+            .await;
+
+        Ok(Some(WorkspaceEdit {
+            changes: Some(all_edits),
+            document_changes: None,
+            change_annotations: None,
+        }))
+    }
+
+    async fn did_delete_files(&self, params: DeleteFilesParams) {
+        self.client
+            .log_message(
+                MessageType::INFO,
+                format!("workspace/didDeleteFiles: {} file(s)", params.files.len()),
+            )
+            .await;
+
+        let raw_delete_uris: Vec<Url> = params
+            .files
+            .iter()
+            .filter_map(|fd| Url::parse(&fd.uri).ok())
+            .collect();
+
+        let deleted_paths = {
+            let tc = self.text_cache.read().await;
+            let cache_paths: Vec<std::path::PathBuf> = tc
+                .keys()
+                .filter_map(|k| Url::parse(k).ok())
+                .filter_map(|u| u.to_file_path().ok())
+                .collect();
+            drop(tc);
+
+            let cfg = self.foundry_config.read().await.clone();
+            let discovered_paths =
+                tokio::task::spawn_blocking(move || crate::solc::discover_source_files(&cfg))
+                    .await
+                    .unwrap_or_default();
+
+            let mut all_paths: HashSet<std::path::PathBuf> = discovered_paths.into_iter().collect();
+            all_paths.extend(cache_paths);
+            let all_paths: Vec<std::path::PathBuf> = all_paths.into_iter().collect();
+
+            file_operations::expand_folder_deletes_from_paths(&raw_delete_uris, &all_paths)
+        };
+
+        let mut deleted_keys: HashSet<String> = HashSet::new();
+        let mut deleted_uris: Vec<Url> = Vec::new();
+        for path in deleted_paths {
+            if let Ok(uri) = Url::from_file_path(&path) {
+                deleted_keys.insert(uri.to_string());
+                deleted_uris.push(uri);
+            }
+        }
+        if deleted_keys.is_empty() {
+            return;
+        }
+
+        self.client
+            .log_message(
+                MessageType::INFO,
+                format!(
+                    "didDeleteFiles: deleting {} cache/diagnostic entry(ies)",
+                    deleted_keys.len()
+                ),
+            )
+            .await;
+
+        for uri in &deleted_uris {
+            self.client
+                .publish_diagnostics(uri.clone(), vec![], None)
+                .await;
+        }
+
+        {
+            let mut tc = self.text_cache.write().await;
+            for key in &deleted_keys {
+                tc.remove(key);
+            }
+        }
+        {
+            let mut ac = self.ast_cache.write().await;
+            for key in &deleted_keys {
+                ac.remove(key);
+            }
+        }
+        {
+            let mut cc = self.completion_cache.write().await;
+            for key in &deleted_keys {
+                cc.remove(key);
+            }
+        }
+        {
+            let mut sc = self.semantic_token_cache.write().await;
+            for key in &deleted_keys {
+                sc.remove(key);
+            }
+        }
+
+        let root_key = self.root_uri.read().await.as_ref().map(|u| u.to_string());
+        if let Some(ref key) = root_key {
+            self.ast_cache.write().await.remove(key);
+        }
+
+        let foundry_config = self.foundry_config.read().await.clone();
+        let ast_cache = self.ast_cache.clone();
+        let client = self.client.clone();
+        let text_cache_snapshot = self.text_cache.read().await.clone();
+
+        tokio::spawn(async move {
+            let Some(cache_key) = root_key else {
+                return;
+            };
+            match crate::solc::solc_project_index(
+                &foundry_config,
+                Some(&client),
+                Some(&text_cache_snapshot),
+            )
+            .await
+            {
+                Ok(ast_data) => {
+                    let cached_build = Arc::new(crate::goto::CachedBuild::new(ast_data, 0));
+                    let source_count = cached_build.nodes.len();
+                    ast_cache.write().await.insert(cache_key, cached_build);
+                    client
+                        .log_message(
+                            MessageType::INFO,
+                            format!("didDeleteFiles: re-indexed {} source files", source_count),
+                        )
+                        .await;
+                }
+                Err(e) => {
+                    client
+                        .log_message(
+                            MessageType::WARNING,
+                            format!("didDeleteFiles: re-index failed: {e}"),
                         )
                         .await;
                 }

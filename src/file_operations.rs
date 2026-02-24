@@ -38,6 +38,27 @@ pub struct RenameResult {
     pub stats: RenameStats,
 }
 
+/// Diagnostic counters returned alongside delete edits.
+#[derive(Debug, Default)]
+pub struct DeleteStats {
+    /// Source files whose bytes could not be read.
+    pub read_failures: usize,
+    /// Source files with no parseable parent directory.
+    pub no_parent: usize,
+    /// Imports where we could not determine a full import-statement span.
+    pub statement_range_failures: usize,
+    /// Duplicate delete targets detected in the delete list.
+    pub duplicate_deletes: usize,
+    /// Duplicate edits skipped for the same statement range.
+    pub dedup_skips: usize,
+}
+
+/// Result of delete_imports call: edits + diagnostic stats.
+pub struct DeleteResult {
+    pub edits: HashMap<Url, Vec<TextEdit>>,
+    pub stats: DeleteStats,
+}
+
 // ---------------------------------------------------------------------------
 // Folder expansion
 // ---------------------------------------------------------------------------
@@ -70,6 +91,27 @@ pub fn expand_folder_renames(
         .into_iter()
         .map(|(old_path, new_path)| FileRename { old_path, new_path })
         .collect()
+}
+
+/// Expand delete entries that target folders into per-file paths.
+///
+/// For each entry, if it is a directory (or has no `.sol` extension),
+/// every source file under it is expanded to a concrete file path.
+pub fn expand_folder_deletes(params: &[PathBuf], source_files: &[String]) -> Vec<PathBuf> {
+    let mut dedup: HashMap<PathBuf, ()> = HashMap::new();
+    for old_path in params {
+        if old_path.is_dir() || !old_path.extension().map_or(false, |e| e == "sol") {
+            for sf in source_files {
+                let sf_path = Path::new(sf);
+                if sf_path.strip_prefix(old_path).is_ok() {
+                    dedup.insert(sf_path.to_path_buf(), ());
+                }
+            }
+        } else {
+            dedup.insert(old_path.clone(), ());
+        }
+    }
+    dedup.into_keys().collect()
 }
 
 /// Expand folder renames using candidate filesystem paths.
@@ -110,6 +152,34 @@ pub fn expand_folder_renames_from_paths(
         }
     }
     dedup.into_iter().collect()
+}
+
+/// Expand delete entries using candidate filesystem paths.
+///
+/// `candidate_paths` should be the union of discovered project files and files
+/// currently present in `text_cache` so folder deletes don't miss entries.
+pub fn expand_folder_deletes_from_paths(
+    params: &[Url],
+    candidate_paths: &[PathBuf],
+) -> Vec<PathBuf> {
+    let mut dedup: HashMap<PathBuf, ()> = HashMap::new();
+    for uri in params {
+        let old_path = match uri.to_file_path() {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+
+        if old_path.extension().map_or(false, |e| e == "sol") && !old_path.is_dir() {
+            dedup.insert(old_path, ());
+        } else {
+            for existing_path in candidate_paths {
+                if existing_path.strip_prefix(&old_path).is_ok() {
+                    dedup.insert(existing_path.clone(), ());
+                }
+            }
+        }
+    }
+    dedup.into_keys().collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -340,6 +410,104 @@ pub fn rename_imports(
     RenameResult { edits, stats }
 }
 
+/// Compute import-statement removal edits needed when one or more files are
+/// deleted.
+///
+/// For each Solidity source file, this scans all import directives and removes
+/// the full import statement (`import ...;`) if it resolves to a deleted file.
+///
+/// This is intended for `workspace/willDeleteFiles` preview edits.
+pub fn delete_imports(
+    source_files: &[String],
+    deletes: &[PathBuf],
+    project_root: &Path,
+    get_source_bytes: &dyn Fn(&str) -> Option<Vec<u8>>,
+) -> DeleteResult {
+    let mut edits: HashMap<Url, Vec<TextEdit>> = HashMap::new();
+    let mut stats = DeleteStats::default();
+
+    if deletes.is_empty() {
+        return DeleteResult { edits, stats };
+    }
+
+    let mut delete_set: HashMap<PathBuf, ()> = HashMap::with_capacity(deletes.len());
+    for p in deletes {
+        if delete_set.insert(normalize_path(p), ()).is_some() {
+            stats.duplicate_deletes += 1;
+        }
+    }
+
+    for source_fs_str in source_files {
+        let source_path = Path::new(source_fs_str);
+        let source_dir = match source_path.parent() {
+            Some(d) => d,
+            None => {
+                stats.no_parent += 1;
+                continue;
+            }
+        };
+
+        let bytes = match get_source_bytes(source_fs_str) {
+            Some(b) => b,
+            None => {
+                stats.read_failures += 1;
+                continue;
+            }
+        };
+
+        let source_str = match std::str::from_utf8(&bytes) {
+            Ok(s) => s,
+            Err(_) => {
+                stats.read_failures += 1;
+                continue;
+            }
+        };
+
+        let imports = links::ts_find_imports(&bytes);
+        let source_uri = match Url::from_file_path(source_fs_str) {
+            Ok(u) => u,
+            Err(_) => continue,
+        };
+
+        for imp in &imports {
+            let resolved = normalize_path(&source_dir.join(&imp.path));
+
+            let is_deleted = if delete_set.contains_key(&resolved) {
+                true
+            } else if !imp.path.starts_with('.') {
+                let via_root = normalize_path(&project_root.join(&imp.path));
+                delete_set.contains_key(&via_root)
+            } else {
+                false
+            };
+
+            if !is_deleted {
+                continue;
+            }
+
+            let Some(statement_range) = import_statement_range(source_str, imp.inner_range) else {
+                stats.statement_range_failures += 1;
+                continue;
+            };
+
+            let duplicate = edits.get(&source_uri).map_or(false, |file_edits| {
+                file_edits.iter().any(|e| e.range == statement_range)
+            });
+            if duplicate {
+                stats.dedup_skips += 1;
+                continue;
+            }
+
+            edits.entry(source_uri.clone()).or_default().push(TextEdit {
+                range: statement_range,
+                new_text: String::new(),
+            });
+        }
+    }
+
+    DeleteResult { edits, stats }
+}
+
 /// Backward-compatible wrapper: single rename, used by existing tests.
 pub fn rename_imports_single(
     source_files: &[String],
@@ -421,6 +589,54 @@ fn ensure_dot_prefix(rel: &Path) -> String {
 /// Solidity uses forward slashes in import strings regardless of platform.
 fn normalize_slashes(s: &str) -> String {
     s.replace('\\', "/")
+}
+
+/// Determine a range that covers the full import statement containing `inner`.
+///
+/// The returned range starts at the `import` keyword and ends at the
+/// terminating `;`, plus one trailing newline when present.
+fn import_statement_range(source: &str, inner: Range) -> Option<Range> {
+    let start = utils::position_to_byte_offset(source, inner.start);
+    let end = utils::position_to_byte_offset(source, inner.end);
+    if start > end || end > source.len() {
+        return None;
+    }
+
+    let bytes = source.as_bytes();
+    let mut import_start = None;
+    let mut i = start;
+    while i > 0 {
+        if i >= 6 && &bytes[i - 6..i] == b"import" {
+            import_start = Some(i - 6);
+            break;
+        }
+        if bytes[i - 1] == b';' {
+            break;
+        }
+        i -= 1;
+    }
+    let import_start = import_start?;
+
+    let mut semi = end;
+    while semi < bytes.len() && bytes[semi] != b';' {
+        semi += 1;
+    }
+    if semi >= bytes.len() || bytes[semi] != b';' {
+        return None;
+    }
+
+    let mut import_end = semi + 1;
+    if import_end + 1 < bytes.len() && bytes[import_end] == b'\r' && bytes[import_end + 1] == b'\n'
+    {
+        import_end += 2;
+    } else if import_end < bytes.len() && bytes[import_end] == b'\n' {
+        import_end += 1;
+    }
+
+    Some(Range {
+        start: utils::byte_offset_to_position(source, import_start),
+        end: utils::byte_offset_to_position(source, import_end),
+    })
 }
 
 /// Apply a set of `TextEdit`s to a source string and return the new content.

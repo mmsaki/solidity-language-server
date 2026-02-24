@@ -861,3 +861,120 @@ fn test_expand_folder_renames_from_paths_uses_component_prefix() {
     assert!(expanded[0].0.ends_with("/tmp/project/src/A.sol"));
     assert!(expanded[0].1.ends_with("/tmp/project/contracts/A.sol"));
 }
+
+// =============================================================================
+// delete_imports tests
+// =============================================================================
+
+#[test]
+fn test_delete_file_removes_relative_import_statement() {
+    let proj = TempProject::new();
+
+    let a_path = proj.write_file(
+        "A.sol",
+        "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\ncontract A {}\n",
+    );
+    let b_path = proj.write_file(
+        "B.sol",
+        "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\nimport {A} from \"./A.sol\";\ncontract B is A {}\n",
+    );
+
+    let source_files = vec![a_path, b_path.clone()];
+    let deletes = vec![proj.path("A.sol")];
+    let provider = |fs_path: &str| -> Option<Vec<u8>> { std::fs::read(fs_path).ok() };
+
+    let result = file_operations::delete_imports(&source_files, &deletes, proj.root(), &provider);
+    let b_uri = proj.uri("B.sol");
+    assert!(result.edits.contains_key(&b_uri));
+    assert_eq!(result.edits[&b_uri].len(), 1);
+
+    let b_source = std::fs::read_to_string(proj.path("B.sol")).unwrap();
+    let patched = file_operations::apply_text_edits(&b_source, &result.edits[&b_uri]);
+    assert!(!patched.contains("import {A} from \"./A.sol\";"));
+    assert!(patched.contains("contract B is A {}"));
+}
+
+#[test]
+fn test_delete_file_removes_non_relative_import_statement() {
+    let proj = TempProject::new();
+
+    let a_path = proj.write_file(
+        "src/A.sol",
+        "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\ncontract A {}\n",
+    );
+    let t_path = proj.write_file(
+        "test/T.t.sol",
+        "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\nimport {A} from \"src/A.sol\";\ncontract T is A {}\n",
+    );
+
+    let source_files = vec![a_path, t_path];
+    let deletes = vec![proj.path("src/A.sol")];
+    let provider = |fs_path: &str| -> Option<Vec<u8>> { std::fs::read(fs_path).ok() };
+
+    let result = file_operations::delete_imports(&source_files, &deletes, proj.root(), &provider);
+    let t_uri = proj.uri("test/T.t.sol");
+    assert!(result.edits.contains_key(&t_uri));
+    assert_eq!(result.edits[&t_uri].len(), 1);
+}
+
+#[test]
+fn test_delete_file_removes_multiline_import_statement() {
+    let proj = TempProject::new();
+
+    let a_path = proj.write_file(
+        "src/A.sol",
+        "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\ncontract A {}\n",
+    );
+    let c_path = proj.write_file(
+        "src/C.sol",
+        "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\nimport {\n    A\n} from \"./A.sol\";\ncontract C is A {}\n",
+    );
+
+    let source_files = vec![a_path, c_path.clone()];
+    let deletes = vec![proj.path("src/A.sol")];
+    let provider = |fs_path: &str| -> Option<Vec<u8>> { std::fs::read(fs_path).ok() };
+
+    let result = file_operations::delete_imports(&source_files, &deletes, proj.root(), &provider);
+    let c_uri = proj.uri("src/C.sol");
+    assert!(result.edits.contains_key(&c_uri));
+
+    let c_source = std::fs::read_to_string(proj.path("src/C.sol")).unwrap();
+    let patched = file_operations::apply_text_edits(&c_source, &result.edits[&c_uri]);
+    assert!(!patched.contains("from \"./A.sol\";"));
+    assert!(patched.contains("contract C is A {}"));
+}
+
+#[test]
+fn test_delete_file_no_matching_imports_returns_empty() {
+    let proj = TempProject::new();
+
+    let a_path = proj.write_file(
+        "A.sol",
+        "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\ncontract A {}\n",
+    );
+    let b_path = proj.write_file(
+        "B.sol",
+        "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\ncontract B {}\n",
+    );
+
+    let source_files = vec![a_path, b_path];
+    let deletes = vec![proj.path("Missing.sol")];
+    let provider = |fs_path: &str| -> Option<Vec<u8>> { std::fs::read(fs_path).ok() };
+
+    let result = file_operations::delete_imports(&source_files, &deletes, proj.root(), &provider);
+    assert!(result.edits.is_empty());
+}
+
+#[test]
+fn test_expand_folder_deletes_from_paths_uses_component_prefix() {
+    let delete_uri = Url::from_file_path("/tmp/project/src").unwrap();
+    let params = vec![delete_uri];
+    let candidates = vec![
+        std::path::PathBuf::from("/tmp/project/src/A.sol"),
+        std::path::PathBuf::from("/tmp/project/src2/B.sol"),
+    ];
+
+    let expanded = file_operations::expand_folder_deletes_from_paths(&params, &candidates);
+    assert_eq!(expanded.len(), 1, "should not match sibling src2 path");
+    assert!(expanded[0].ends_with("/tmp/project/src/A.sol"));
+}
