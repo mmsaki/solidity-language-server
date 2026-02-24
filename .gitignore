@@ -5,6 +5,7 @@ cache
 
 # Benchmark results (generated)
 benchmarks/**/*.json
+benchmarks/**/session.txt
 
 # DHAT heap profiling output
 dhat-heap*.json
@@ -14,6 +15,3 @@ poolmanager-t-full.json
 
 # VS Code extension build artifacts
 editors/vscode/*.vsix
-# Benchmark session artifacts
-benchmarks/**/session.md
-benchmarks/**/session.txt
