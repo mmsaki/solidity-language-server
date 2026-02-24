@@ -5,7 +5,7 @@
 
 ## Testing and Debugging
 
-Always use `lsp-bench` as the first choice when you want to debug lsp methods and their output. The lsp-bench is located locally at ../solidity-lsp-benchmarks.
+Always use `lsp-bench` as the first choice when you want to debug lsp methods and their output. The lsp-bench repo is https://github.com/mmsaki/lsp-bench (local clone path: `../lsp-bench`).
 
 There are many examples on ./benchmarks on how to write a simple yaml config to you needs.
 

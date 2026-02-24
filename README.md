@@ -6,7 +6,7 @@
 [![GitHub Release](https://img.shields.io/github/v/release/mmsaki/solidity-language-server)](https://github.com/mmsaki/solidity-language-server/releases/latest)
 [![Telegram](https://img.shields.io/badge/Telegram-Join%20Chat-blue?logo=telegram)](https://t.me/+R1lW7xWJ55tlYzcx)
 
-The fastest Solidity language server — go-to-definition, references, rename, completions, hover, and more. See [benchmarks](https://github.com/mmsaki/solidity-lsp-benchmarks).
+The fastest Solidity language server — go-to-definition, references, rename, completions, hover, and more. See [benchmarks](https://github.com/mmsaki/lsp-bench).
 
 ## Install
 
@@ -98,6 +98,8 @@ return {
         scaffoldOnCreate = true,
         -- Auto-update imports via workspace/willRenameFiles.
         updateImportsOnRename = true,
+        -- Auto-remove imports via workspace/willDeleteFiles.
+        updateImportsOnDelete = true,
       },
     },
   },
@@ -116,6 +118,7 @@ lint.severity = ["high", "med"]
 lint.exclude = ["pascal-case-struct"]
 fileOperations.scaffoldOnCreate = true
 fileOperations.updateImportsOnRename = true
+fileOperations.updateImportsOnDelete = true
 ```
 
 ## AI Integrations
@@ -140,7 +143,8 @@ Add to `~/.config/opencode/config.json`:
         },
         "fileOperations": {
           "scaffoldOnCreate": true,
-          "updateImportsOnRename": true
+          "updateImportsOnRename": true,
+          "updateImportsOnDelete": true
         }
       }
     }

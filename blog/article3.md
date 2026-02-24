@@ -135,6 +135,6 @@ cargo install solidity-language-server
 
 Or grab a pre-built binary from the [release page](https://github.com/mmsaki/solidity-language-server/releases). GPG-signed checksums included. Works with Neovim, Helix, Zed, and any LSP-compatible editor.
 
-Benchmark source: [github.com/mmsaki/solidity-lsp-benchmarks](https://github.com/mmsaki/solidity-lsp-benchmarks)
+Benchmark source: [github.com/mmsaki/lsp-bench](https://github.com/mmsaki/lsp-bench)
 
 The server: [github.com/mmsaki/solidity-language-server](https://github.com/mmsaki/solidity-language-server)

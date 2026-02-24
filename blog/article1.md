@@ -72,7 +72,7 @@ Try It Yourself
 
 The benchmarks are fully reproducible. Clone the repo, build with cargo, and run any subcommand — spawn, diagnostics, definition, declaration, hover, references, documentSymbol.
 
-Benchmark source: github.com/mmsaki/solidity-lsp-benchmarks (<https://github.com/mmsaki/solidity-lsp-benchmarks>)
+Benchmark source: github.com/mmsaki/lsp-bench (<https://github.com/mmsaki/lsp-bench>)
 
 The LSP server: github.com/mmsaki/solidity-language-server (<https://github.com/mmsaki/solidity-language-server>)
 The numbers speak for themselves.
