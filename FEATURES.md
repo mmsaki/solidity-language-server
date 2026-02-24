@@ -29,7 +29,7 @@ See [FEATURES.md](FEATURES.md) for the full LSP feature set and roadmap.
 - [x] `textDocument/didSave` - Handle file saving with diagnostics refresh
 - [x] `textDocument/didClose` - Handle file closing
 - [x] `textDocument/willSave` - File will save notification
-- [x] `textDocument/willSaveWaitUntil` - File will save wait until
+- [ ] `textDocument/willSaveWaitUntil` - File will save wait until
 
 **Diagnostics**
 
@@ -72,7 +72,7 @@ See [FEATURES.md](FEATURES.md) for the full LSP feature set and roadmap.
 - [x] `workspace/didChangeConfiguration` - Updates editor settings (inlay hints, lint options)
 - [x] `workspace/didChangeWatchedFiles` - Acknowledges watched file changes (logs only)
 - [x] `workspace/didChangeWorkspaceFolders` - Acknowledges workspace folder changes (logs only)
-- [x] `workspace/applyEdit` - Apply workspace edits
+- [ ] `workspace/applyEdit` - Apply workspace edits
 - [ ] `workspace/executeCommand` - Execute workspace commands (stub implementation)
 - [ ] `workspace/willCreateFiles` - File creation preview
 - [ ] `workspace/willRenameFiles` - File rename preview
@@ -82,4 +82,4 @@ See [FEATURES.md](FEATURES.md) for the full LSP feature set and roadmap.
 
 - [ ] `window/showMessage` - Show message to user
 - [ ] `window/showMessageRequest` - Show message request to user
-- [ ] `window/workDoneProgress` - Work done progress
+- [x] `window/workDoneProgress` - Work done progress
