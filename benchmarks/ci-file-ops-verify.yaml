@@ -1,0 +1,39 @@
+# CI workspace file-ops benchmark.
+# Run from repo root:
+#   lsp-bench -c benchmarks/ci-file-ops-verify.yaml -s benchmarks/servers.ci.yaml --verify
+
+project: example
+file: A.sol
+line: 3
+col: 8
+iterations: 1
+warmup: 0
+timeout: 10
+index_timeout: 15
+output: target/benchmarks/ci-file-ops-verify
+report: README.md
+response: full
+
+servers:
+  - mmsaki@latest
+
+benchmarks:
+  - workspace/willCreateFiles
+  - workspace/willDeleteFiles
+  - workspace/willRenameFiles
+
+methods:
+  workspace/willCreateFiles:
+    createSteps:
+      - file: CIFileOpsCreate.sol
+
+  workspace/willDeleteFiles:
+    deleteSteps:
+      - file: B.sol
+
+  workspace/willRenameFiles:
+    renameSteps:
+      - file: A.sol
+        newName: AA.sol
+      - file: AA.sol
+        newName: A.sol
