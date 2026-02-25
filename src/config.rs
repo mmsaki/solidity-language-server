@@ -27,6 +27,8 @@ pub struct Settings {
     pub lint: LintSettings,
     #[serde(default)]
     pub file_operations: FileOperationsSettings,
+    #[serde(default)]
+    pub project_index: ProjectIndexSettings,
 }
 
 /// Inlay-hint settings.
@@ -106,6 +108,24 @@ impl Default for FileOperationsSettings {
             template_on_create: true,
             update_imports_on_rename: true,
             update_imports_on_delete: true,
+        }
+    }
+}
+
+/// Project indexing feature settings.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectIndexSettings {
+    /// If true, run a full-project index scan at startup / first successful build.
+    /// If false (default), skip eager full-project scanning for faster startup.
+    #[serde(default)]
+    pub full_project_scan: bool,
+}
+
+impl Default for ProjectIndexSettings {
+    fn default() -> Self {
+        Self {
+            full_project_scan: false,
         }
     }
 }
@@ -923,6 +943,7 @@ src = "src"
         assert!(s.file_operations.template_on_create);
         assert!(s.file_operations.update_imports_on_rename);
         assert!(s.file_operations.update_imports_on_delete);
+        assert!(!s.project_index.full_project_scan);
         assert!(s.lint.severity.is_empty());
         assert!(s.lint.only.is_empty());
         assert!(s.lint.exclude.is_empty());
@@ -944,6 +965,9 @@ src = "src"
                     "updateImportsOnRename": false,
                     "updateImportsOnDelete": false
                 },
+                "projectIndex": {
+                    "fullProjectScan": true
+                },
             }
         });
         let s = parse_settings(&value);
@@ -953,6 +977,7 @@ src = "src"
         assert!(!s.file_operations.template_on_create);
         assert!(!s.file_operations.update_imports_on_rename);
         assert!(!s.file_operations.update_imports_on_delete);
+        assert!(s.project_index.full_project_scan);
         assert_eq!(s.lint.severity, vec!["high", "med"]);
         assert_eq!(s.lint.only, vec!["incorrect-shift"]);
         assert_eq!(
@@ -970,6 +995,9 @@ src = "src"
                 "templateOnCreate": false,
                 "updateImportsOnRename": false,
                 "updateImportsOnDelete": false
+            },
+            "projectIndex": {
+                "fullProjectScan": true
             }
         });
         let s = parse_settings(&value);
@@ -978,6 +1006,7 @@ src = "src"
         assert!(!s.file_operations.template_on_create);
         assert!(!s.file_operations.update_imports_on_rename);
         assert!(!s.file_operations.update_imports_on_delete);
+        assert!(s.project_index.full_project_scan);
     }
 
     #[test]
@@ -996,6 +1025,7 @@ src = "src"
         assert!(s.file_operations.template_on_create);
         assert!(s.file_operations.update_imports_on_rename);
         assert!(s.file_operations.update_imports_on_delete);
+        assert!(!s.project_index.full_project_scan);
         assert!(s.lint.severity.is_empty());
         assert!(s.lint.only.is_empty());
         assert_eq!(s.lint.exclude, vec!["unused-import"]);
@@ -1013,6 +1043,7 @@ src = "src"
         assert!(s.file_operations.template_on_create);
         assert!(s.file_operations.update_imports_on_rename);
         assert!(s.file_operations.update_imports_on_delete);
+        assert!(!s.project_index.full_project_scan);
         assert!(s.lint.severity.is_empty());
         assert!(s.lint.only.is_empty());
         assert!(s.lint.exclude.is_empty());

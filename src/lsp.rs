@@ -372,6 +372,7 @@ impl ForgeLsp {
         // so the user sees diagnostics immediately without waiting for the index.
         if build_succeeded
             && self.use_solc
+            && self.settings.read().await.project_index.full_project_scan
             && !self
                 .project_indexed
                 .load(std::sync::atomic::Ordering::Relaxed)
@@ -589,8 +590,8 @@ impl LanguageServer for ForgeLsp {
                 .log_message(
                     MessageType::INFO,
                     format!(
-                        "settings: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.templateOnCreate={}, fileOperations.updateImportsOnRename={}, fileOperations.updateImportsOnDelete={}",
-                        s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.template_on_create, s.file_operations.update_imports_on_rename, s.file_operations.update_imports_on_delete,
+                        "settings: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.templateOnCreate={}, fileOperations.updateImportsOnRename={}, fileOperations.updateImportsOnDelete={}, projectIndex.fullProjectScan={}",
+                        s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.template_on_create, s.file_operations.update_imports_on_rename, s.file_operations.update_imports_on_delete, s.project_index.full_project_scan,
                     ),
                 )
                 .await;
@@ -900,7 +901,7 @@ impl LanguageServer for ForgeLsp {
         // Eagerly build the project index on startup so cross-file features
         // (willRenameFiles, references, goto) work immediately — even before
         // the user opens any .sol file.
-        if self.use_solc {
+        if self.use_solc && self.settings.read().await.project_index.full_project_scan {
             self.project_indexed
                 .store(true, std::sync::atomic::Ordering::Relaxed);
             let foundry_config = self.foundry_config.read().await.clone();
@@ -1359,8 +1360,8 @@ impl LanguageServer for ForgeLsp {
                 .log_message(
                     MessageType::INFO,
                     format!(
-                    "settings updated: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.templateOnCreate={}, fileOperations.updateImportsOnRename={}, fileOperations.updateImportsOnDelete={}",
-                    s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.template_on_create, s.file_operations.update_imports_on_rename, s.file_operations.update_imports_on_delete,
+                    "settings updated: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.templateOnCreate={}, fileOperations.updateImportsOnRename={}, fileOperations.updateImportsOnDelete={}, projectIndex.fullProjectScan={}",
+                    s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.template_on_create, s.file_operations.update_imports_on_rename, s.file_operations.update_imports_on_delete, s.project_index.full_project_scan,
                 ),
             )
             .await;

@@ -1,0 +1,62 @@
+# Editor Setup
+
+All editor configs support the same server settings.
+
+## Full settings schema
+
+```json [settings.json]
+{
+  "solidity-language-server": {
+    "inlayHints": {
+      "parameters": true,
+      "gasEstimates": true
+    },
+    "lint": {
+      "enabled": true,
+      "severity": [],
+      "only": [],
+      "exclude": []
+    },
+    "fileOperations": {
+      "templateOnCreate": true,
+      "updateImportsOnRename": true,
+      "updateImportsOnDelete": true
+    },
+    "projectIndex": {
+      "fullProjectScan": false
+    }
+  }
+}
+```
+
+## Lint values
+
+Foundry lint config reference (lint_on_build): [Foundry linter config docs](https://www.getfoundry.sh/config/reference/linter#lint_on_build)
+
+- `lint.severity`: `"high"`, `"med"`, `"low"`, `"info"`, `"gas"`, `"code-size"`
+- `lint.only` / `lint.exclude` rule IDs:
+  - `incorrect-shift`
+  - `unchecked-call`
+  - `erc20-unchecked-transfer`
+  - `divide-before-multiply`
+  - `unsafe-typecast`
+  - `pascal-case-struct`
+  - `mixed-case-function`
+  - `mixed-case-variable`
+  - `screaming-snake-case-const`
+  - `screaming-snake-case-immutable`
+  - `unused-import`
+  - `unaliased-plain-import`
+  - `named-struct-fields`
+  - `unsafe-cheatcode`
+  - `asm-keccak256`
+  - `custom-errors`
+  - `unwrapped-modifier-logic`
+
+## Notes
+
+- Empty arrays for `severity`, `only`, `exclude` mean "no filter".
+- Defaults are all enabled (`true`) with empty lint arrays.
+- `projectIndex.fullProjectScan` defaults to `false` to keep startup latency low.
+- `projectIndex.fullProjectScan` is available only in versions newer than `v0.1.26` (`v0.1.27+`).
+- For file rename workflows, editors may require explicit save-all to persist buffer edits to disk.
