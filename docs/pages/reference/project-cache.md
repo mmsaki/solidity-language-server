@@ -56,6 +56,24 @@ If any check fails, the server rebuilds and writes a fresh cache.
 - On startup/full-index flows, server first attempts to warm-load this on-disk cache.
 - After successful full-project indexing, cache is persisted again.
 
+## When disk cache is refreshed
+
+Disk cache refresh during a running session is intentionally tied to file-structure changes:
+
+- `workspace/didCreateFiles` marks cache as dirty
+- `workspace/didRenameFiles` marks cache as dirty
+- `workspace/didDeleteFiles` marks cache as dirty
+
+Then on `textDocument/didSave`, the server runs a debounced single-flight sync:
+
+- multiple saves in a burst are coalesced into one trailing sync
+- only one sync worker runs at a time (no overlapping full re-index jobs)
+- sync uses on-disk project state (`solc_project_index` with no text-buffer override)
+- on success, in-memory project cache is updated and disk cache is atomically replaced
+- on failure, dirty state is restored so the next save retries
+
+Regular content-only saves (without create/rename/delete) do not force disk cache rewrite.
+
 ## Notes
 
 - This cache path is focused on references/goto warm-load.
