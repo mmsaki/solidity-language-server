@@ -32,7 +32,7 @@ src/
 ├── lint.rs          # forge lint diagnostics
 └── utils.rs         # shared utilities
 
-docs/                # Implementation docs and exploration notes
+docs/pages/          # Vocs docs content (quickstart, setup, reference, benchmarks)
 build.rs             # Compile-time: git commit hash, OS, arch
 ```
 
@@ -71,7 +71,7 @@ Test against a real Foundry project — the LSP needs `foundry.toml` in the proj
 4. **Add handler in `src/lsp.rs`** — implement the `LanguageServer` trait method
 5. **Use `ast_cache`** — read from `self.ast_cache` instead of calling `self.compiler.ast()` directly
 6. **Write tests** — use `pool-manager-ast.json` fixture, assert against known node IDs
-7. **Add docs** — document the approach in `docs/FEATURE.md`
+7. **Add docs** — document behavior in `docs/pages/reference/*.md` (and update setup/quickstart pages if needed)
 
 ## AST Exploration
 
@@ -88,7 +88,7 @@ cat pool-manager-ast.json | jq '[.. | objects | select(.nodeType == "FunctionDef
 cat pool-manager-ast.json | jq '.. | objects | select(.functionSelector != null) | {id, name, functionSelector}'
 ```
 
-See `docs/` for detailed exploration guides per feature.
+See [documentation site](https://solidity-language-server-docs.pages.dev) and `docs/pages/reference/` for implementation-deep feature guides.
 
 ## Pull Requests
 
