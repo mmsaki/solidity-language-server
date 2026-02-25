@@ -59,4 +59,5 @@ Foundry lint config reference (lint_on_build): [Foundry linter config docs](http
 - Defaults are all enabled (`true`) with empty lint arrays.
 - `projectIndex.fullProjectScan` defaults to `false` to keep startup latency low.
 - `projectIndex.fullProjectScan` is available only in versions newer than `v0.1.26` (`v0.1.27+`).
+- In `v0.1.27+`, on-disk project cache uses a single-flight `didSave` sync after file operations (`didCreateFiles` / `didRenameFiles` / `didDeleteFiles`) to avoid overlapping re-index jobs during save bursts.
 - For file rename workflows, editors may require explicit save-all to persist buffer edits to disk.

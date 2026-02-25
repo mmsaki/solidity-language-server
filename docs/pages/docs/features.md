@@ -13,6 +13,7 @@
 - **Inlay Hints** — parameter names and gas estimates
 - **File Operations** — `workspace/willCreateFiles` scaffolding + `workspace/willRenameFiles`/`workspace/willDeleteFiles` import edits + `workspace/didCreateFiles`/`workspace/didRenameFiles`/`workspace/didDeleteFiles` cache migration/re-index (`fileOperations.templateOnCreate`, `fileOperations.updateImportsOnRename`, `fileOperations.updateImportsOnDelete`)
 - **Project Indexing Mode** — optional full-project indexing via `projectIndex.fullProjectScan` (available in versions newer than `v0.1.26`)
+- **Persistent Project Cache** — on-disk warm-start cache for reference/goto data, with atomic writes and single-flight save-sync after file operations
 
 ### LSP Methods
 
