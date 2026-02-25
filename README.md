@@ -6,7 +6,7 @@
 [![GitHub Release](https://img.shields.io/github/v/release/mmsaki/solidity-language-server)](https://github.com/mmsaki/solidity-language-server/releases/latest)
 [![Telegram](https://img.shields.io/badge/Telegram-Join%20Chat-blue?logo=telegram)](https://t.me/+R1lW7xWJ55tlYzcx)
 
-The fastest Solidity language server — go-to-definition, references, rename, completions, hover, and more. See [benchmarks](https://github.com/mmsaki/lsp-bench).
+The fastest Solidity language server — instant, accurate go-to-definition/declaration first, then references, hover, completions, and file operations. See [benchmarks](https://github.com/mmsaki/lsp-bench).
 
 ## Install
 
@@ -54,7 +54,10 @@ Benchmarked against `v4-core` — `test/PoolManager.t.sol` (`v0.1.26`, p95 laten
 
 ## Docs
 
-- [DOCS.md](DOCS.md) - Docs on how to install.
+- [Documentation Site](https://solidity-language-server-docs.pages.dev) — canonical docs (Quickstart, setup, references, benchmarks)
+- [Quickstart](https://solidity-language-server-docs.pages.dev/docs/quickstart)
+- [Reference Index](https://solidity-language-server-docs.pages.dev/reference)
+- [Neovim Setup](https://solidity-language-server-docs.pages.dev/setup/neovim)
 - [FEATURES.md](FEATURES.md) — full LSP feature set and roadmap
 - [CONTRIBUTING.md](CONTRIBUTING.md) — development setup, project structure, and how to contribute
 - [CHANGELOG.md](CHANGELOG.md) — release history

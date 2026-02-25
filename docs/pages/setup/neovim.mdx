@@ -1,0 +1,76 @@
+# Neovim
+
+Example from your real setup in `~/.config/nvim/lsp`.
+
+For the full settings schema, see [Setup Overview](/setup).
+
+Server config:
+
+```lua [.config/nvim/lsp/solidity-language-server.lua]
+// [!include ~/snippets/setup/neovim.lua]
+```
+
+LSP capabilities + enable:
+
+```lua [.config/nvim/plugin/lsp.lua]
+// [!include ~/snippets/setup/neovim-plugin-lsp.lua]
+```
+
+## File manager requirement
+
+For `templateOnCreate`, rename import updates, and delete import updates to work, your file manager must send LSP file operation events:
+
+- `workspace/willCreateFiles`
+- `workspace/willRenameFiles`
+- `workspace/willDeleteFiles`
+
+If these events are not sent, the server cannot apply those file-operation edits.
+
+Example (`oil.nvim`):
+
+```lua [.config/nvim/lua/plugins/oil.lua]
+// [!include ~/snippets/setup/neovim-oil.lua]
+```
+
+## Neovim note for rename flows
+
+After file renames, if your editor leaves updated imports in modified buffers, run:
+
+```vim
+:wa
+```
+
+This writes all modified buffers so tools reading from disk (for example `forge`) see updated imports.
+
+## Debugging
+
+Neovim LSP logs are written to:
+
+```text
+~/.local/state/nvim/lsp.log
+```
+
+Clear logs:
+
+```bash
+> ~/.local/state/nvim/lsp.log
+```
+
+Tail logs in real time:
+
+```bash
+tail -f ~/.local/state/nvim/lsp.log
+```
+
+Enable LSP log levels from Neovim:
+
+```vim
+" info level
+:lua vim.lsp.set_log_level("info")
+" trace/debug level
+:lua vim.lsp.set_log_level("trace")
+```
+
+## Lint options reference
+
+Lint options (severity, rule IDs, `only`, `exclude`) are documented in [Setup Overview → Lint values](/setup#lint-values).
