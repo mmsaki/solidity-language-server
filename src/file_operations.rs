@@ -228,11 +228,16 @@ pub fn rename_imports(
 
     // ── Case 1: files that import a renamed file ───────────────────────
     for source_fs_str in source_files {
-        let source_path = Path::new(source_fs_str);
+        let source_path_raw = Path::new(source_fs_str);
+        let source_path = if source_path_raw.is_absolute() {
+            normalize_path(source_path_raw)
+        } else {
+            normalize_path(&project_root.join(source_path_raw))
+        };
 
         // If this source file is itself being renamed, use its NEW directory
         // for computing replacement import paths.
-        let source_new_path = rename_map.get(source_path);
+        let source_new_path = rename_map.get(&source_path);
 
         let effective_source_dir = match source_new_path {
             Some(new_p) => match new_p.parent() {
@@ -259,7 +264,11 @@ pub fn rename_imports(
             }
         };
 
-        let bytes = match get_source_bytes(source_fs_str) {
+        let bytes = match source_path
+            .to_str()
+            .and_then(get_source_bytes)
+            .or_else(|| get_source_bytes(source_fs_str))
+        {
             Some(b) => b,
             None => {
                 stats.read_failures += 1;
@@ -315,7 +324,7 @@ pub fn rename_imports(
                 continue;
             }
 
-            let source_uri = match Url::from_file_path(source_fs_str) {
+            let source_uri = match Url::from_file_path(&source_path) {
                 Ok(u) => u,
                 Err(_) => continue,
             };
@@ -438,7 +447,12 @@ pub fn delete_imports(
     }
 
     for source_fs_str in source_files {
-        let source_path = Path::new(source_fs_str);
+        let source_path_raw = Path::new(source_fs_str);
+        let source_path = if source_path_raw.is_absolute() {
+            normalize_path(source_path_raw)
+        } else {
+            normalize_path(&project_root.join(source_path_raw))
+        };
         let source_dir = match source_path.parent() {
             Some(d) => d,
             None => {
@@ -447,7 +461,11 @@ pub fn delete_imports(
             }
         };
 
-        let bytes = match get_source_bytes(source_fs_str) {
+        let bytes = match source_path
+            .to_str()
+            .and_then(get_source_bytes)
+            .or_else(|| get_source_bytes(source_fs_str))
+        {
             Some(b) => b,
             None => {
                 stats.read_failures += 1;
@@ -464,7 +482,7 @@ pub fn delete_imports(
         };
 
         let imports = links::ts_find_imports(&bytes);
-        let source_uri = match Url::from_file_path(source_fs_str) {
+        let source_uri = match Url::from_file_path(&source_path) {
             Ok(u) => u,
             Err(_) => continue,
         };
