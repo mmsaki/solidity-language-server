@@ -18,7 +18,7 @@ Or download a pre-built binary from the [latest release](https://github.com/mmsa
 
 ## Benchmarks
 
-Latest local runs for `solidity-language-server` (`v0.1.26`, p95 latency):
+Latest local runs for `solidity-language-server` **v0.1.26** (p95 latency):
 
 | Profile | initialize | diagnostic | definition | references | rename | willRenameFiles |
 |--------|------------|------------|------------|------------|--------|-----------------|
