@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
+import {A} from "./A.sol";
 
 //
 //                                                  █████
@@ -262,4 +263,3 @@ contract Shop {
         revert("Direct transfers not allowed");
     }
 }
-
