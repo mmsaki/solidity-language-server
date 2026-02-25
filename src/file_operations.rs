@@ -228,12 +228,7 @@ pub fn rename_imports(
 
     // ── Case 1: files that import a renamed file ───────────────────────
     for source_fs_str in source_files {
-        let source_path_raw = Path::new(source_fs_str);
-        let source_path = if source_path_raw.is_absolute() {
-            normalize_path(source_path_raw)
-        } else {
-            normalize_path(&project_root.join(source_path_raw))
-        };
+        let source_path = resolve_source_path(source_fs_str, project_root);
 
         // If this source file is itself being renamed, use its NEW directory
         // for computing replacement import paths.
@@ -447,12 +442,7 @@ pub fn delete_imports(
     }
 
     for source_fs_str in source_files {
-        let source_path_raw = Path::new(source_fs_str);
-        let source_path = if source_path_raw.is_absolute() {
-            normalize_path(source_path_raw)
-        } else {
-            normalize_path(&project_root.join(source_path_raw))
-        };
+        let source_path = resolve_source_path(source_fs_str, project_root);
         let source_dir = match source_path.parent() {
             Some(d) => d,
             None => {
@@ -601,6 +591,33 @@ fn ensure_dot_prefix(rel: &Path) -> String {
     } else {
         format!("./{s}")
     }
+}
+
+/// Resolve a source-file string to an absolute filesystem path.
+///
+/// Handles mixed forms produced by different indexers:
+/// - absolute (`/repo/example/A.sol`)
+/// - project-root relative (`A.sol`)
+/// - workspace-root relative (`example/A.sol`)
+fn resolve_source_path(source_fs_str: &str, project_root: &Path) -> PathBuf {
+    let raw = Path::new(source_fs_str);
+    if raw.is_absolute() {
+        return normalize_path(raw);
+    }
+
+    let joined_project = normalize_path(&project_root.join(raw));
+    if joined_project.exists() {
+        return joined_project;
+    }
+
+    if let Ok(cwd) = std::env::current_dir() {
+        let joined_cwd = normalize_path(&cwd.join(raw));
+        if joined_cwd.exists() {
+            return joined_cwd;
+        }
+    }
+
+    joined_project
 }
 
 /// Replace backslashes with forward slashes for Solidity import paths.

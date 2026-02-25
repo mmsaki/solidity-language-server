@@ -83,21 +83,24 @@ fn test_get_identifier_range_matches_identifier_bounds() {
 
 #[tokio::test]
 async fn test_references_namelocations_fallback() {
-    // Build A.sol which imports and uses BType from B.sol.
-    // With name_location_index=Some(0), definition resolution must still
-    // fall back correctly for nodes that only expose nameLocation.
-    let (build, _) = build_example("A.sol").await;
+    // Build B.sol which imports Test from A.sol.
+    // The StructDefinition node (id=4) has nameLocation but no nameLocations.
+    // The IdentifierPath nodes (ids 9, 13) have nameLocations but no nameLocation.
+    //
+    // When we call goto_references_cached with name_location_index=Some(0),
+    // the StructDefinition MUST still resolve via its nameLocation fallback,
+    // not return None.
+    let (build, _) = build_example("B.sol").await;
     let example_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("example");
 
-    // Read A.sol source for byte resolution
-    let a_path = example_dir.join("A.sol");
-    let a_source = std::fs::read(&a_path).expect("read A.sol");
-    let a_uri = Url::from_file_path(&a_path).unwrap();
+    // Read B.sol source for byte resolution
+    let b_path = example_dir.join("B.sol");
+    let b_source = std::fs::read(&b_path).expect("read B.sol");
+    let b_uri = Url::from_file_path(&b_path).unwrap();
 
-    // Position on "BType" in A.sol import line:
-    // `import {..., BType, ...} from "./B.sol";`
-    // zero-based line=3, column≈55
-    let pos = Position::new(3, 56);
+    // Position on "Test" in the import: `import {Test} from "./A.sol";`
+    // B.sol line 3, "Test" starts at column 8
+    let pos = Position::new(3, 9);
 
     // With name_location_index = Some(0), the old code would fail to resolve
     // the definition (StructDefinition has no nameLocations array).
@@ -105,18 +108,19 @@ async fn test_references_namelocations_fallback() {
     // now strips sources after indexing.
     let locations = references::goto_references_cached(
         &build,
-        &a_uri,
+        &b_uri,
         pos,
-        &a_source,
+        &b_source,
         Some(0),
         true, // include declaration
     );
 
-    // We should get locations for at least:
-    // - Definition in B.sol
-    // - Import/use locations in A.sol
+    // We should get locations for:
+    // - The struct definition in A.sol (nameLocation fallback)
+    // - The import identifier in B.sol
+    // - The two usages in Nested and Bar structs in B.sol
     assert!(
-        locations.len() >= 2,
+        locations.len() >= 3,
         "expected >= 3 locations with nameLocations fallback, got {}: {:?}",
         locations.len(),
         locations
@@ -125,11 +129,11 @@ async fn test_references_namelocations_fallback() {
             .collect::<Vec<_>>()
     );
 
-    // The definition in B.sol must be present (this is what was broken)
-    let has_b_sol = locations.iter().any(|l| l.uri.path().ends_with("B.sol"));
+    // The definition in A.sol must be present (this is what was broken)
+    let has_a_sol = locations.iter().any(|l| l.uri.path().ends_with("A.sol"));
     assert!(
-        has_b_sol,
-        "definition in B.sol must be found via nameLocation fallback"
+        has_a_sol,
+        "definition in A.sol must be found via nameLocation fallback"
     );
 }
 
@@ -211,20 +215,20 @@ async fn test_rename_returns_workspace_edit_for_all_files() {
     text_buffers.insert(b_uri.to_string(), b_source.clone());
     text_buffers.insert(a_uri.to_string(), a_source.clone());
 
-    // Rename "BType" from its definition in B.sol (line 4).
-    // Pass build_a as other_builds so cross-file references in A.sol are found.
+    // Rename "Test" from the struct definition in A.sol (line 3, col 7)
+    // We need the A.sol build for this
     let (build_a, _) = build_example("A.sol").await;
-    let b_source_bytes = std::fs::read(&b_path).expect("read B.sol");
-    let pos = Position::new(3, 6); // on "BType" in `type BType is bool;`
+    let a_source_bytes = std::fs::read(&a_path).expect("read A.sol");
+    let pos = Position::new(3, 8); // on "Test" in struct definition
 
     // Pass build_b as other_builds so cross-file references are found
     let result = rename_symbol(
-        &build_b,
-        &b_uri,
+        &build_a,
+        &a_uri,
         pos,
-        &b_source_bytes,
+        &a_source_bytes,
         "Widget".to_string(),
-        &[&build_a],
+        &[&build_b],
         &text_buffers,
     );
 
@@ -243,26 +247,23 @@ async fn test_rename_returns_workspace_edit_for_all_files() {
          this was the bug: other-file edits were applied server-side via fs::write"
     );
 
-    // Verify B.sol has the definition rename
-    let b_edits = &changes[&b_uri];
-    assert!(!b_edits.is_empty(), "B.sol should have edits");
-    for edit in b_edits {
-        assert_eq!(edit.new_text, "Widget");
-    }
-
-    // Verify A.sol has cross-file reference renames
+    // Verify A.sol has the definition rename
     let a_edits = &changes[&a_uri];
     assert!(!a_edits.is_empty(), "A.sol should have edits");
     for edit in a_edits {
         assert_eq!(edit.new_text, "Widget");
     }
 
-    // A.sol should include at least import + one usage.
+    // Verify B.sol has reference renames
+    let b_edits = &changes[&b_uri];
     assert!(
-        a_edits.len() >= 2,
-        "A.sol should have >= 2 reference edits (import + usages), got {}",
-        a_edits.len()
+        b_edits.len() >= 2,
+        "B.sol should have >= 2 reference edits (import + usages), got {}",
+        b_edits.len()
     );
+    for edit in b_edits {
+        assert_eq!(edit.new_text, "Widget");
+    }
 }
 
 // =============================================================================
@@ -280,51 +281,59 @@ async fn test_rename_returns_workspace_edit_for_all_files() {
 
 #[tokio::test]
 async fn test_rename_corrects_stale_ast_ranges_via_line_scan() {
-    let (build, _) = build_example("A.sol").await;
+    let (build, _) = build_example("B.sol").await;
     let example_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("example");
 
-    let a_path = example_dir.join("A.sol");
-    let a_source = std::fs::read(&a_path).expect("read A.sol");
-    let a_uri = Url::from_file_path(&a_path).unwrap();
-
     let b_path = example_dir.join("B.sol");
+    let b_source = std::fs::read(&b_path).expect("read B.sol");
     let b_uri = Url::from_file_path(&b_path).unwrap();
 
-    // Simulate a previous rename: "BType" was already renamed to "FooType" in the
-    // editor buffer, but the AST still thinks it's "Test" at the old positions.
-    // A.sol with "BType" replaced by "FooType":
-    let modified_a = String::from_utf8(a_source.clone())
-        .unwrap()
-        .replace("BType", "FooType");
+    let a_path = example_dir.join("A.sol");
+    let a_uri = Url::from_file_path(&a_path).unwrap();
 
-    // B.sol with "BType" replaced by "FooType":
-    let b_source = std::fs::read(&b_path).expect("read B.sol");
+    // Simulate a previous rename: "Test" was already renamed to "Foo" in the
+    // editor buffer, but the AST still thinks it's "Test" at the old positions.
+    // The import line changes from:
+    //   import {Test} from "./A.sol";
+    // to:
+    //   import {Foo} from "./A.sol";
+    //
+    // B.sol with "Test" replaced by "Foo":
     let modified_b = String::from_utf8(b_source.clone())
         .unwrap()
-        .replace("BType", "FooType");
+        .replace("Test", "Foo");
+
+    // A.sol with "Test" replaced by "Foo":
+    let a_source = std::fs::read(&a_path).expect("read A.sol");
+    let modified_a = String::from_utf8(a_source.clone())
+        .unwrap()
+        .replace("Test", "Foo");
 
     let mut text_buffers: HashMap<String, Vec<u8>> = HashMap::new();
-    text_buffers.insert(a_uri.to_string(), modified_a.as_bytes().to_vec());
     text_buffers.insert(b_uri.to_string(), modified_b.as_bytes().to_vec());
+    text_buffers.insert(a_uri.to_string(), modified_a.as_bytes().to_vec());
 
-    // Cursor is on A.sol import line where AST still sees "BType".
+    // The cursor position is still on the import line, but now "Foo" is at a
+    // different column than where the AST thinks "Test" was.
+    // The AST says "Test" is at byte 72 (col 8), but in the modified buffer
+    // "Foo" is still at col 8 (same position, shorter name).
     //
     // We call rename with the ORIGINAL source bytes (what the AST was built from)
     // for position resolution, but with modified text_buffers for verification.
     // The rename function should use find_identifier_on_line to correct the range.
-    let pos = Position::new(3, 56); // on "BType"/"FooType" in import
-    let ident = get_identifier_at_position(&a_source, pos);
+    let pos = Position::new(3, 9); // on "Test"/"Foo" in import
+    let ident = get_identifier_at_position(&b_source, pos);
     assert_eq!(
         ident.as_deref(),
-        Some("BType"),
-        "AST source should have BType"
+        Some("Test"),
+        "AST source should have Test"
     );
 
     let result = rename_symbol(
         &build,
-        &a_uri,
+        &b_uri,
         pos,
-        &a_source,
+        &b_source,
         "Bar2".to_string(),
         &[],
         &text_buffers,
