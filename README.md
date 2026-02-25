@@ -18,30 +18,13 @@ Or download a pre-built binary from the [latest release](https://github.com/mmsa
 
 ## Benchmarks
 
-| Method | [mmsaki](https://github.com/mmsaki/solidity-language-server) 0.1.25 | [solc](https://docs.soliditylang.org) 0.8.26 | [nomicfoundation](https://github.com/NomicFoundation/hardhat-vscode) 0.8.25 | [juanfranblanco](https://github.com/juanfranblanco/vscode-solidity) 0.0.187 | [qiuxiang](https://github.com/qiuxiang/solidity-ls) 0.5.4 |
-|--------|--------|------|-----------------|----------------|----------|
-| initialize | 9.9ms ⚡ | 311.8ms | 849.8ms | 651.8ms | 184.9ms |
-| diagnostic | 74.3ms | 3.4ms ⚡ | 546.8ms | 812.7ms | 146.1ms |
-| definition | 3.5ms | 2.2ms | 1.6ms ⚡ | 66.2ms | 20.2ms |
-| declaration | 0.2ms ⚡ | - | - | - | - |
-| hover | 1.2ms ⚡ | - | - | 69.4ms | - |
-| references | 0.8ms ⚡ | - | 1.8ms | 75.9ms | 20.7ms |
-| completion | 0.7ms ⚡ | - | - | - | 20.2ms |
-| signatureHelp | 0.9ms ⚡ | - | - | - | - |
-| rename | 1.2ms ⚡ | 2.4ms | 1.9ms | 65.7ms | 20.6ms |
-| documentSymbol | 1.2ms ⚡ | - | 17.4ms | 14.7ms | - |
-| formatting | 14.1ms ⚡ | - | 193.2ms | - | - |
-| inlayHint | 1.5ms ⚡ | - | - | - | - |
-| semanticTokens/full | 1.6ms ⚡ | - | 15.7ms | - | - |
-| semanticTokens/range | 1.1ms ⚡ | - | - | - | - |
-| semanticTokens/delta | 1.5ms ⚡ | - | - | - | - |
-| workspace/symbol | 1.1ms ⚡ | - | - | - | - |
+Latest local runs for `solidity-language-server` (`v0.1.26`, p95 latency):
 
-- Single file benchmark — [Shop.sol results](benchmarks/shop/README.md)
-- Foundry project benchmark — [Pool.sol results](benchmarks/pool/README.md)
-- Foundry test contract benchmark (`.t.sol`) — [PoolManager.t.sol results](benchmarks/poolmanager-t/README.md)
-
-p95 latency. `-` = unsupported, empty, error, or crash.
+| Profile | initialize | diagnostic | definition | references | rename | willRenameFiles |
+|--------|------------|------------|------------|------------|--------|-----------------|
+| [`Shop.sol`](benchmarks/shop/README.md) | 18.7ms | 64.2ms | 2.9ms | 0.5ms | 0.6ms | 4.1ms |
+| [`Pool.sol`](benchmarks/pool/README.md) | 14.9ms | 154.4ms | 2.2ms | 1.7ms | 2.0ms | 82.6ms |
+| [`PoolManager.t.sol`](benchmarks/poolmanager-t/README.md) | 20.7ms | 2.2s | 6.7ms | 4.9ms | 6.5ms | 90.4ms |
 
 ## Docs
 
