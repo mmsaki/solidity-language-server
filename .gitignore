@@ -15,3 +15,8 @@ poolmanager-t-full.json
 
 # VS Code extension build artifacts
 editors/vscode/*.vsix
+
+node_modules
+
+# Local runtime cache/state
+.solidity-language-server/
