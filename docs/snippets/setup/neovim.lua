@@ -46,6 +46,7 @@ return {
   on_attach = function(client, bufnr)
     vim.lsp.inlay_hint.enable(true, { bufnr = bufnr })
 
+    -- autoformat
     vim.api.nvim_create_autocmd("BufWritePost", {
       pattern = { "*.sol" },
       callback = function()
@@ -53,6 +54,7 @@ return {
       end,
     })
 
+    -- completions autotrigger
     vim.lsp.completion.enable(true, client.id, bufnr, {
       autotrigger = true,
       convert = function(item)
@@ -60,6 +62,7 @@ return {
       end,
     })
 
+    -- completion trigger list
     for _, char in ipairs({ "(", ",", "[" }) do
       vim.keymap.set("i", char, function()
         vim.api.nvim_feedkeys(char, "n", false)
