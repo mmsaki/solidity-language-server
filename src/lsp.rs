@@ -694,6 +694,37 @@ fn update_imports_on_delete_enabled(settings: &crate::config::Settings) -> bool 
     settings.file_operations.update_imports_on_delete
 }
 
+fn start_or_mark_project_cache_sync_pending(
+    pending: &std::sync::atomic::AtomicBool,
+    running: &std::sync::atomic::AtomicBool,
+) -> bool {
+    pending.store(true, Ordering::Release);
+    running
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+}
+
+fn take_project_cache_sync_pending(pending: &std::sync::atomic::AtomicBool) -> bool {
+    pending.swap(false, Ordering::AcqRel)
+}
+
+fn stop_project_cache_sync_worker_or_reclaim(
+    pending: &std::sync::atomic::AtomicBool,
+    running: &std::sync::atomic::AtomicBool,
+) -> bool {
+    running.store(false, Ordering::Release);
+    pending.load(Ordering::Acquire)
+        && running
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+}
+
+fn try_claim_project_cache_dirty(dirty: &std::sync::atomic::AtomicBool) -> bool {
+    dirty
+        .compare_exchange(true, false, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+}
+
 #[tower_lsp::async_trait]
 impl LanguageServer for ForgeLsp {
     async fn initialize(
@@ -1488,12 +1519,10 @@ impl LanguageServer for ForgeLsp {
             && self.settings.read().await.project_index.full_project_scan
             && self.project_cache_dirty.load(Ordering::Acquire)
         {
-            self.project_cache_sync_pending.store(true, Ordering::Release);
-            if self
-                .project_cache_sync_running
-                .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-                .is_ok()
-            {
+            if start_or_mark_project_cache_sync_pending(
+                &self.project_cache_sync_pending,
+                &self.project_cache_sync_running,
+            ) {
                 let foundry_config = self.foundry_config.read().await.clone();
                 let root_key = self.root_uri.read().await.as_ref().map(|u| u.to_string());
                 let ast_cache = self.ast_cache.clone();
@@ -1507,30 +1536,20 @@ impl LanguageServer for ForgeLsp {
                         // Debounce save bursts into one trailing sync.
                         tokio::time::sleep(std::time::Duration::from_millis(700)).await;
 
-                        if !pending_flag.swap(false, Ordering::AcqRel) {
+                        if !take_project_cache_sync_pending(&pending_flag) {
                             // No pending work right now; try to stop worker.
-                            running_flag.store(false, Ordering::Release);
                             // If new work arrived concurrently after stop,
                             // reclaim leadership and keep running.
-                            if pending_flag.load(Ordering::Acquire)
-                                && running_flag
-                                    .compare_exchange(
-                                        false,
-                                        true,
-                                        Ordering::AcqRel,
-                                        Ordering::Acquire,
-                                    )
-                                    .is_ok()
-                            {
+                            if stop_project_cache_sync_worker_or_reclaim(
+                                &pending_flag,
+                                &running_flag,
+                            ) {
                                 continue;
                             }
                             break;
                         }
 
-                        if dirty_flag
-                            .compare_exchange(true, false, Ordering::AcqRel, Ordering::Acquire)
-                            .is_err()
-                        {
+                        if !try_claim_project_cache_dirty(&dirty_flag) {
                             continue;
                         }
 
@@ -3951,7 +3970,12 @@ impl LanguageServer for ForgeLsp {
 
 #[cfg(test)]
 mod tests {
-    use super::update_imports_on_delete_enabled;
+    use super::{
+        start_or_mark_project_cache_sync_pending, stop_project_cache_sync_worker_or_reclaim,
+        take_project_cache_sync_pending, try_claim_project_cache_dirty,
+        update_imports_on_delete_enabled,
+    };
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     #[test]
     fn update_imports_on_delete_enabled_defaults_true() {
@@ -3964,5 +3988,64 @@ mod tests {
         let mut s = crate::config::Settings::default();
         s.file_operations.update_imports_on_delete = false;
         assert!(!update_imports_on_delete_enabled(&s));
+    }
+
+    #[test]
+    fn project_cache_sync_burst_only_first_starts_worker() {
+        let pending = AtomicBool::new(false);
+        let running = AtomicBool::new(false);
+
+        assert!(start_or_mark_project_cache_sync_pending(&pending, &running));
+        assert!(pending.load(Ordering::Acquire));
+        assert!(running.load(Ordering::Acquire));
+
+        // Subsequent save while running should only mark pending, not spawn.
+        assert!(!start_or_mark_project_cache_sync_pending(&pending, &running));
+        assert!(pending.load(Ordering::Acquire));
+        assert!(running.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn project_cache_sync_take_pending_is_one_shot() {
+        let pending = AtomicBool::new(true);
+        assert!(take_project_cache_sync_pending(&pending));
+        assert!(!pending.load(Ordering::Acquire));
+        assert!(!take_project_cache_sync_pending(&pending));
+    }
+
+    #[test]
+    fn project_cache_sync_worker_stop_or_reclaim_handles_race() {
+        let pending = AtomicBool::new(false);
+        let running = AtomicBool::new(true);
+
+        // No new pending work: worker stops.
+        assert!(!stop_project_cache_sync_worker_or_reclaim(
+            &pending, &running
+        ));
+        assert!(!running.load(Ordering::Acquire));
+
+        // Simulate a new save arriving right as worker tries to stop.
+        pending.store(true, Ordering::Release);
+        running.store(true, Ordering::Release);
+        assert!(stop_project_cache_sync_worker_or_reclaim(
+            &pending, &running
+        ));
+        assert!(running.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn project_cache_dirty_claim_and_retry_cycle() {
+        let dirty = AtomicBool::new(true);
+
+        assert!(try_claim_project_cache_dirty(&dirty));
+        assert!(!dirty.load(Ordering::Acquire));
+
+        // Second claim without retry mark should fail.
+        assert!(!try_claim_project_cache_dirty(&dirty));
+
+        // Retry path marks dirty again.
+        dirty.store(true, Ordering::Release);
+        assert!(try_claim_project_cache_dirty(&dirty));
+        assert!(!dirty.load(Ordering::Acquire));
     }
 }
