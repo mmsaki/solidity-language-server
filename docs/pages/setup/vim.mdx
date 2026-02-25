@@ -1,0 +1,42 @@
+# Vim
+
+Credit: `leekt/vimsettings` — [vimrc reference](https://github.com/leekt/vimsettings/blob/a0166c68dec7f67c391993a9bbf90668577fb929/.vimrc#L108-L137)
+
+For the full settings schema, see [Setup Overview](/setup).
+
+Minimal `vim-lsp` setup in `.vimrc` (no wrapper):
+
+```vim [.vimrc]
+if executable('solidity-language-server')
+  au User lsp_setup call lsp#register_server({
+      \ 'name': 'solidity-language-server',
+      \ 'cmd': {server_info -> ['solidity-language-server', '--stdio']},
+      \ 'root_uri': {server_info -> lsp#utils#path_to_uri(
+      \   empty(lsp#utils#find_nearest_parent_file_directory(
+      \     lsp#utils#get_buffer_path(), ['foundry.toml', '.git']))
+      \   ? getcwd()
+      \   : lsp#utils#find_nearest_parent_file_directory(
+      \     lsp#utils#get_buffer_path(), ['foundry.toml', '.git']))},
+      \ 'whitelist': ['solidity'],
+      \ })
+endif
+```
+
+Optional per-buffer mappings:
+
+```vim [.vimrc]
+function! s:on_lsp_buffer_enabled() abort
+  setlocal omnifunc=lsp#complete
+  setlocal signcolumn=yes
+  nmap <buffer> gd <plug>(lsp-definition)
+  nmap <buffer> gr <plug>(lsp-references)
+  nmap <buffer> K <plug>(lsp-hover)
+  nmap <buffer> <leader>rn <plug>(lsp-rename)
+  nmap <buffer> [d <plug>(lsp-previous-diagnostic)
+  nmap <buffer> ]d <plug>(lsp-next-diagnostic)
+endfunction
+```
+
+## Lint options reference
+
+Lint options (severity, rule IDs, `only`, `exclude`) are documented in [Setup Overview → Lint values](/setup#lint-values).

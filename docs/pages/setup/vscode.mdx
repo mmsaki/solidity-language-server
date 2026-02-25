@@ -1,0 +1,46 @@
+# VS Code
+
+For the full settings schema, see [Setup Overview](/setup).
+
+## Using Generic LSP Proxy extension
+
+For VS Code (and Cursor), you can run through the Generic LSP Proxy extension:
+
+- Extension: [mjmorales.generic-lsp-proxy](https://marketplace.visualstudio.com/items?itemName=mjmorales.generic-lsp-proxy)
+- This proxy config is **in addition to** the `solidity-language-server.*` settings below (not a replacement).
+
+Config example:
+
+```json [settings.json]
+[
+  {
+    "languageId": "solidity",
+    "command": "forge",
+    "fileExtensions": [
+      ".sol"
+    ],
+    "args": [
+      "lsp"
+    ]
+  }
+]
+```
+
+## Language server settings
+
+Add to `settings.json`:
+
+```json [settings.json]
+// [!include ~/snippets/setup/vscode.json]
+```
+
+## Example filtered lint setup
+
+Lint options (severity, rule IDs, `only`, `exclude`) are documented in [Setup Overview → Lint values](/setup#lint-values).
+
+```json [settings.json]
+{
+  "solidity-language-server.lint.severity": ["high", "med"],
+  "solidity-language-server.lint.exclude": ["pascal-case-struct"]
+}
+```

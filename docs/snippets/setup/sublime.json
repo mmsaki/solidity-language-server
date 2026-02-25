@@ -1,0 +1,27 @@
+{
+  "clients": {
+    "solidity-language-server": {
+      "command": ["solidity-language-server", "--stdio"],
+      "selector": "source.solidity",
+      "settings": {
+        "solidity-language-server": {
+          "inlayHints": {
+            "parameters": true,
+            "gasEstimates": true
+          },
+          "lint": {
+            "enabled": true,
+            "severity": [],
+            "only": [],
+            "exclude": []
+          },
+          "fileOperations": {
+            "templateOnCreate": true,
+            "updateImportsOnRename": true,
+            "updateImportsOnDelete": true
+          }
+        }
+      }
+    }
+  }
+}

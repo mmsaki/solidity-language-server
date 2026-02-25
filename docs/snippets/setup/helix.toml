@@ -1,0 +1,18 @@
+[language-server.solidity-language-server]
+command = "solidity-language-server"
+args = ["--stdio"]
+
+[language-server.solidity-language-server.config.solidity-language-server.inlayHints]
+parameters = true
+gasEstimates = true
+
+[language-server.solidity-language-server.config.solidity-language-server.lint]
+enabled = true
+severity = []
+only = []
+exclude = []
+
+[language-server.solidity-language-server.config.solidity-language-server.fileOperations]
+templateOnCreate = true
+updateImportsOnRename = true
+updateImportsOnDelete = true

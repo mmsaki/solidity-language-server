@@ -1,0 +1,66 @@
+# v0.1.26
+
+Cleaner Auto-Import and Better Bench Coverage
+
+This release focuses on file lifecycle correctness and import reliability in real Solidity workflows.
+
+## What shipped
+
+- Configurable file operations:
+  - `fileOperations.templateOnCreate`: create a new `.sol` file and the server inserts a starter template using the filename for contract naming.
+  - `fileOperations.updateImportsOnRename`: rename a Solidity file and matching import paths are updated.
+  - `fileOperations.updateImportsOnDelete`: delete a Solidity file and imports that point to it are removed.
+- Improved create-file scaffolding lifecycle behavior.
+- Improved auto-import completion behavior for top-level symbols.
+- Expanded benchmark coverage for file operation lifecycle methods.
+
+## Generated file templates
+
+`templateOnCreate` derives names from the file you create:
+
+- `Vault.sol` -> `contract Vault {}`
+- `Vault.t.sol` -> `contract VaultTest is Test {}`
+- `Vault.s.sol` -> `contract VaultScript is Script {}`
+
+`Vault.sol`
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract Vault {
+
+}
+```
+
+`Vault.t.sol`
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import {Test} from "forge-std/Test.sol";
+
+contract VaultTest is Test {
+
+}
+```
+
+`Vault.s.sol`
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import {Script} from "forge-std/Script.sol";
+
+contract VaultScript is Script {
+
+}
+```
+
+## Upgrade
+
+```sh
+cargo install solidity-language-server
+```

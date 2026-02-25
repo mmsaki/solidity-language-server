@@ -1,0 +1,16 @@
+{
+  "name": "solidity-language-server-docs",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "bun@1.2.21",
+  "scripts": {
+    "docs:dev": "vocs dev",
+    "docs:build": "vocs build",
+    "docs:preview": "vocs preview",
+    "docs:publish": "bun run docs:build && wrangler pages deploy docs/dist --project-name solidity-language-server-docs --branch main --commit-dirty=true"
+  },
+  "devDependencies": {
+    "vocs": "^1.0.0",
+    "wrangler": "^4.59.2"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "solidity-language-server.inlayHints.parameters": true,
+  "solidity-language-server.inlayHints.gasEstimates": true,
+  "solidity-language-server.lint.enabled": true,
+  "solidity-language-server.lint.severity": [],
+  "solidity-language-server.lint.only": [],
+  "solidity-language-server.lint.exclude": [],
+  "solidity-language-server.fileOperations.templateOnCreate": true,
+  "solidity-language-server.fileOperations.updateImportsOnRename": true,
+  "solidity-language-server.fileOperations.updateImportsOnDelete": true
+}

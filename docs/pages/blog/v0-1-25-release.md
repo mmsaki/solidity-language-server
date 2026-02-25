@@ -1,24 +1,22 @@
-# v0.1.25: 140 MB Reclaimed, 4x Faster Hover, and Still the Only Server That Passes Everything
+# v0.1.25
 
-The last article covered v0.1.17 -- 6 servers, 13 methods, one winner. Since then, eight releases have shipped. v0.1.25 is a different server than the one I wrote about two months ago. The feature set has doubled, the internals have been rewritten, and I've spent the last few releases doing something most people skip: making it use less memory, not more.
-
-Here's what happened.
+This release focuses on memory reduction and latency improvements in `solidity-language-server`.
 
 ## The memory problem
 
 Between v0.1.17 and v0.1.24, I added a lot: a typed Solidity AST module, a declaration index for cross-file references, NatSpec documentation on hover with `@inheritdoc` resolution, gas estimates, signature help, inlay hints. Every feature added data structures. Every data structure retained memory.
 
-By v0.1.24, RSS on a 95-file project (Uniswap v4-core PoolManager.t.sol) had grown from 230 MB to 394 MB. That's a 71% regression. Unacceptable for a tool that's supposed to be lightweight.
+By v0.1.24, RSS on a 95-file project (`PoolManager.t.sol`) had grown from 230 MB to 394 MB (71% regression).
 
-v0.1.25 is the cleanup release. I profiled the server with DHAT, identified where the allocations were going, and systematically eliminated waste.
+For v0.1.25, I profiled allocations with DHAT and removed avoidable memory retention.
 
 ### What I did
 
-**Removed the raw AST from memory.** After building the typed declaration index, the server was retaining the entire JSON AST (a `serde_json::Value` tree) in the `CachedBuild` struct. Tens of megabytes per project, sitting there doing nothing. Dropped it.
+**Removed the raw AST from memory.** After building the typed declaration index, the server no longer retains the full JSON AST (`serde_json::Value`) in `CachedBuild`.
 
-**Replaced clone-then-strip with build-filtered-map.** The old code cloned every AST node and then stripped fields it didn't need. The new `build_filtered_decl()` and `build_filtered_contract()` functions iterate over borrowed node fields and only copy what passes the filter. This eliminated 234 MB of transient allocations -- from 629 MB total down to 395 MB. A 37% reduction in allocation volume.
+**Replaced clone-then-strip with build-filtered-map.** The old code cloned AST nodes and stripped fields afterward. The new `build_filtered_decl()` and `build_filtered_contract()` paths copy only required fields. This reduced transient allocations from 629 MB to 395 MB (-37%).
 
-**Pre-sized every HashMap.** `cache_ids()`, `extract_decl_nodes()`, `build_completion_cache()`, `build_hint_index()`, `build_constructor_index()` -- all of them now use `with_capacity()` based on the known node count. Small change, measurable impact on fragmentation.
+**Pre-sized HashMaps.** `cache_ids()`, `extract_decl_nodes()`, `build_completion_cache()`, `build_hint_index()`, and `build_constructor_index()` now use `with_capacity()` from known node counts.
 
 ### The numbers
 
@@ -50,9 +48,9 @@ I benchmarked both releases against Shop.sol (272 lines, single file, Foundry pr
 | semanticTokens/full | 3.6ms | 2.8ms | 0.8x |
 | workspace/symbol | 1.2ms | 2.1ms | 1.8x |
 
-v0.1.25 wins 10 of 13 methods. The highlight is hover: 5.0ms down to 1.2ms. Declaration went from 1.9ms to 0.3ms. Rename from 3.6ms to 0.9ms. These aren't micro-optimizations -- they're the result of removing the raw AST from the hot path and using the typed index directly.
+v0.1.25 wins 10 of 13 methods. Highlights: hover 5.0ms -> 1.2ms, declaration 1.9ms -> 0.3ms, rename 3.6ms -> 0.9ms.
 
-The one regression is `semanticTokens/full` (2.8ms to 3.6ms). Tree-sitter parsing overhead increased slightly with the new build pipeline. Worth investigating, but still sub-4ms.
+One regression remains in `semanticTokens/full` (2.8ms -> 3.6ms), likely from additional Tree-sitter overhead in the new pipeline.
 
 ## The competition: 5 servers, 18 methods
 
@@ -68,7 +66,7 @@ The full Shop.sol benchmark runs v0.1.25 against four other servers: solc 0.8.26
 | qiuxiang | 0 | 18 |
 | juanfranblanco | 0 | 18 |
 
-solc wins diagnostics (3.4ms vs 74.3ms) because it's the compiler -- parsing is its job, and it doesn't run `forge lint` on top. nomicfoundation wins `textDocument/definition` at 1.6ms, though it resolves to `Shop.sol:21` (the contract declaration) while my server resolves to `Shop.sol:68` (the actual `PRICE` variable definition). A fast wrong answer.
+`solc` wins diagnostics (3.4ms vs 74.3ms), likely because it parses directly and does not run `forge lint`. `nomicfoundation` is fastest on `textDocument/definition` (1.6ms), but this target resolves to `Shop.sol:21` instead of the `PRICE` definition at `Shop.sol:68`.
 
 ### Method coverage
 
@@ -97,11 +95,11 @@ The `--` entries mean the server doesn't support the method. `empty` means it ac
 
 Eight of 18 methods are only supported by v0.1.25: declaration, prepareRename, signatureHelp, inlayHint, semanticTokens/delta, semanticTokens/range, documentSymbol (sole working response), and workspace/symbol.
 
-solc supports 7 methods (initialize, diagnostics, definition, references, completion, rename, formatting) and errors or crashes on the rest. The JS-based servers support more methods in theory but every response is 15-70x slower.
+`solc` supports 7 methods (`initialize`, diagnostics, definition, references, completion, rename, formatting) and errors or crashes on the rest. The JS-based servers support more methods in theory but were 15-70x slower in this run.
 
 ## What shipped between v0.1.17 and v0.1.25
 
-For anyone following along, here's the condensed release log:
+Condensed release log:
 
 **v0.1.18** -- Context-sensitive `type(X).` completions. SIMD-accelerated position calculation via `lintspec-core`. Fixed a SIMD chunk boundary bug that was sending goto-definition to the wrong file.
 
@@ -119,13 +117,13 @@ For anyone following along, here's the condensed release log:
 
 **v0.1.25** -- The memory release. 140 MB reclaimed. 37% fewer allocations. 4x faster hover.
 
-That's 8 releases, 290 new tests (from 168 to 458), and a server that went from "fast but basic" to "fast and complete."
+Across these 8 releases, tests increased from 168 to 458.
 
 ## What's next
 
-The server still has work ahead. `textDocument/codeAction` (quick fixes), `textDocument/codeLens` (inline "Run Test" for `.t.sol` files), and `window/workDoneProgress` for long-running operations are the next infrastructure targets. `textDocument/documentColor` for hex color literals in NFT contracts is scoped. And there's a VS Code extension in the works -- right now installation is `cargo install` or a pre-built binary, but that's a barrier for anyone who isn't comfortable with the terminal.
+Next targets include `textDocument/codeAction` (quick fixes), `textDocument/codeLens` (test actions for `.t.sol`), and `window/workDoneProgress` for long operations. `textDocument/documentColor` is also scoped. A VS Code extension is in progress.
 
-The bigger architectural question is whether to move diagnostics off `forge build` entirely. The Solar parser integration is in progress -- it already handles lint diagnostics in a stub form. A full Solar backend would mean no Foundry dependency for basic features, faster cold starts, and support for projects that don't use Foundry at all.
+A longer-term question is whether to move diagnostics off `forge build` entirely. Solar parser integration is in progress. A full Solar backend would reduce Foundry dependency for core features and improve cold starts.
 
 ## Try it
 
@@ -133,8 +131,8 @@ The bigger architectural question is whether to move diagnostics off `forge buil
 cargo install solidity-language-server
 ```
 
-Or grab a pre-built binary from the [release page](https://github.com/mmsaki/solidity-language-server/releases). GPG-signed checksums included. Works with Neovim, Helix, Zed, and any LSP-compatible editor.
+Or grab a pre-built binary from the release page.
 
-Benchmark source: [github.com/mmsaki/lsp-bench](https://github.com/mmsaki/lsp-bench)
+Benchmark source: [mmsaki/lsp-bench](https://github.com/mmsaki/lsp-bench)
 
-The server: [github.com/mmsaki/solidity-language-server](https://github.com/mmsaki/solidity-language-server)
+The server: [mmsaki/solidity-language-server](https://github.com/mmsaki/solidity-language-server)

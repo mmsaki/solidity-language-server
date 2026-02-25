@@ -1,0 +1,24 @@
+# Benchmark Overview
+
+All benchmark content below is rendered from markdown in this repository.
+
+## Benchmark reports
+
+- [Shop.sol](/benchmarks/reports/shop)
+- [Pool.sol](/benchmarks/reports/pool)
+- [PoolManager.t.sol](/benchmarks/reports/poolmanager-t)
+
+## Run locally
+
+```sh
+lsp-bench -c benchmarks/shop.yaml -s benchmarks/servers.yaml
+lsp-bench -c benchmarks/pool.yaml -s benchmarks/servers.yaml
+lsp-bench -c benchmarks/poolmanager-t.yaml -s benchmarks/servers.yaml
+```
+
+## Verify mode
+
+```sh
+lsp-bench -c benchmarks/ci-verify.yaml -s benchmarks/servers.ci.yaml --verify
+lsp-bench -c benchmarks/ci-file-ops-verify.yaml -s benchmarks/servers.ci.yaml --verify
+```
