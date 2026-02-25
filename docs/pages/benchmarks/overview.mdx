@@ -1,12 +1,42 @@
 # Benchmark Overview
 
-All benchmark content below is rendered from markdown in this repository.
+This project uses [`lsp-bench`](https://github.com/mmsaki/lsp-bench) to run repeatable JSON-RPC benchmark sessions against Solidity language servers.
+
+`lsp-bench` executes LSP requests (for example: `definition`, `hover`, `references`, `completion`, `rename`, `semanticTokens`, and file operations), captures latency stats, validates response shape, and writes reproducible reports.
+
+All benchmark pages in these docs are rendered from benchmark output checked into this repository.
+
+## What you are looking at
+
+Each benchmark report page summarizes a single config run (for example `shop.yaml`, `pool.yaml`, or `poolmanager-t.yaml`) and includes:
+
+- per-method pass/fail status
+- latency metrics (`mean`, `p50`, `p95`)
+- result snapshots (response summaries)
+- RSS memory values (when available)
+
+Use these pages to compare behavior and performance across methods, and to catch regressions in response correctness.
 
 ## Benchmark reports
 
 - [Shop.sol](/benchmarks/reports/shop)
 - [Pool.sol](/benchmarks/reports/pool)
 - [PoolManager.t.sol](/benchmarks/reports/poolmanager-t)
+
+## Where files live
+
+In the repo:
+
+- benchmark configs: `benchmarks/*.yaml`
+- server definitions: `benchmarks/servers*.yaml`
+- generated report markdown used by docs: `docs/pages/benchmarks/reports/*.md`
+- raw benchmark outputs (JSON/session files): `benchmarks/<name>/`
+
+GitHub links:
+
+- benchmark configs and outputs: [benchmarks/](https://github.com/mmsaki/solidity-language-server/tree/main/benchmarks)
+- docs-rendered report pages: [docs/pages/benchmarks/reports/](https://github.com/mmsaki/solidity-language-server/tree/main/docs/pages/benchmarks/reports)
+- `lsp-bench` tool source: [mmsaki/lsp-bench](https://github.com/mmsaki/lsp-bench)
 
 ## Run locally
 
