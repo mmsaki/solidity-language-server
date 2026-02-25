@@ -20,7 +20,7 @@ Or download a pre-built binary from the [latest release](https://github.com/mmsa
 
 Benchmarked against `v4-core` — `test/PoolManager.t.sol` (`v0.1.26`, p95 latency).
 
-| Method | mmsaki 0.1.26 |
+| Method | [mmsaki v0.1.26](https://github.com/mmsaki/solidity-language-server/releases/tag/v0.1.26) |
 |--------|--------|
 | initialize | 20.7ms ⚡ |
 | textDocument/diagnostic | 2.2s ⚡ |
