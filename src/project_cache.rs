@@ -4,7 +4,9 @@ use crate::types::NodeId;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 use tiny_keccak::{Hasher, Keccak};
 
 const CACHE_SCHEMA_VERSION: u32 = 1;
@@ -35,8 +37,27 @@ struct PersistedReferenceCache {
     id_to_path_map: HashMap<String, String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct CacheLoadReport {
+    pub build: Option<CachedBuild>,
+    pub hit: bool,
+    pub miss_reason: Option<String>,
+    pub file_count_hashed: usize,
+    pub duration_ms: u128,
+}
+
+#[derive(Debug, Clone)]
+pub struct CacheSaveReport {
+    pub file_count_hashed: usize,
+    pub duration_ms: u128,
+}
+
 fn cache_file_path(root: &Path) -> PathBuf {
     root.join(CACHE_DIR).join(CACHE_FILE)
+}
+
+fn tmp_cache_file_path(root: &Path) -> PathBuf {
+    root.join(CACHE_DIR).join(format!("{CACHE_FILE}.tmp"))
 }
 
 fn keccak_hex(bytes: &[u8]) -> String {
@@ -59,19 +80,20 @@ fn relative_to_root(root: &Path, file: &Path) -> String {
         .replace('\\', "/")
 }
 
-fn current_file_hashes(config: &FoundryConfig) -> Option<BTreeMap<String, String>> {
+fn current_file_hashes(config: &FoundryConfig) -> Result<BTreeMap<String, String>, String> {
     let source_files = crate::solc::discover_source_files(config);
     if source_files.is_empty() {
-        return Some(BTreeMap::new());
+        return Ok(BTreeMap::new());
     }
 
     let mut hashes = BTreeMap::new();
     for path in source_files {
         let rel = relative_to_root(&config.root, &path);
-        let hash = file_hash(&path)?;
+        let hash = file_hash(&path)
+            .ok_or_else(|| format!("failed to hash source file {}", path.display()))?;
         hashes.insert(rel, hash);
     }
-    Some(hashes)
+    Ok(hashes)
 }
 
 fn config_fingerprint(config: &FoundryConfig) -> String {
@@ -89,11 +111,20 @@ fn config_fingerprint(config: &FoundryConfig) -> String {
 }
 
 pub fn save_reference_cache(config: &FoundryConfig, build: &CachedBuild) -> Result<(), String> {
+    save_reference_cache_with_report(config, build).map(|_| ())
+}
+
+pub fn save_reference_cache_with_report(
+    config: &FoundryConfig,
+    build: &CachedBuild,
+) -> Result<CacheSaveReport, String> {
+    let started = Instant::now();
     if !config.root.is_dir() {
         return Err(format!("invalid project root: {}", config.root.display()));
     }
 
-    let file_hashes = current_file_hashes(config).ok_or_else(|| "failed to hash files".to_string())?;
+    let file_hashes = current_file_hashes(config)?;
+    let file_count_hashed = file_hashes.len();
     let mut nodes = HashMap::with_capacity(build.nodes.len());
     for (abs_path, file_nodes) in &build.nodes {
         let mut entries = Vec::with_capacity(file_nodes.len());
@@ -132,31 +163,115 @@ pub fn save_reference_cache(config: &FoundryConfig, build: &CachedBuild) -> Resu
             .map_err(|e| format!("failed to create cache dir {}: {e}", parent.display()))?;
     }
     let payload = serde_json::to_vec(&persisted).map_err(|e| format!("serialize cache: {e}"))?;
-    fs::write(&cache_path, payload).map_err(|e| format!("write cache {}: {e}", cache_path.display()))?;
-    Ok(())
+    let tmp_path = tmp_cache_file_path(&config.root);
+
+    // Atomic write: write full payload to a temp file, flush/sync, then rename.
+    // This avoids partially-written cache files if the process is interrupted.
+    {
+        let mut file = fs::File::create(&tmp_path)
+            .map_err(|e| format!("create tmp cache {}: {e}", tmp_path.display()))?;
+        file.write_all(&payload)
+            .map_err(|e| format!("write tmp cache {}: {e}", tmp_path.display()))?;
+        file.flush()
+            .map_err(|e| format!("flush tmp cache {}: {e}", tmp_path.display()))?;
+        file.sync_all()
+            .map_err(|e| format!("sync tmp cache {}: {e}", tmp_path.display()))?;
+    }
+
+    fs::rename(&tmp_path, &cache_path).map_err(|e| {
+        format!(
+            "rename tmp cache {} -> {}: {e}",
+            tmp_path.display(),
+            cache_path.display()
+        )
+    })?;
+    Ok(CacheSaveReport {
+        file_count_hashed,
+        duration_ms: started.elapsed().as_millis(),
+    })
 }
 
 pub fn load_reference_cache(config: &FoundryConfig) -> Option<CachedBuild> {
+    load_reference_cache_with_report(config).build
+}
+
+pub fn load_reference_cache_with_report(config: &FoundryConfig) -> CacheLoadReport {
+    let started = Instant::now();
+    let miss = |reason: String, file_count_hashed: usize, duration_ms: u128| CacheLoadReport {
+        build: None,
+        hit: false,
+        miss_reason: Some(reason),
+        file_count_hashed,
+        duration_ms,
+    };
+
     if !config.root.is_dir() {
-        return None;
+        return miss(
+            format!("invalid project root: {}", config.root.display()),
+            0,
+            started.elapsed().as_millis(),
+        );
     }
     let cache_path = cache_file_path(&config.root);
-    let bytes = fs::read(&cache_path).ok()?;
-    let persisted: PersistedReferenceCache = serde_json::from_slice(&bytes).ok()?;
+    let bytes = match fs::read(&cache_path) {
+        Ok(b) => b,
+        Err(e) => {
+            return miss(
+                format!("cache file read failed: {e}"),
+                0,
+                started.elapsed().as_millis(),
+            );
+        }
+    };
+    let persisted: PersistedReferenceCache = match serde_json::from_slice(&bytes) {
+        Ok(v) => v,
+        Err(e) => {
+            return miss(
+                format!("cache decode failed: {e}"),
+                0,
+                started.elapsed().as_millis(),
+            );
+        }
+    };
 
     if persisted.schema_version != CACHE_SCHEMA_VERSION {
-        return None;
+        return miss(
+            format!(
+                "schema mismatch: cache={}, expected={}",
+                persisted.schema_version, CACHE_SCHEMA_VERSION
+            ),
+            0,
+            started.elapsed().as_millis(),
+        );
     }
     if persisted.project_root != config.root.to_string_lossy() {
-        return None;
+        return miss(
+            "project root mismatch".to_string(),
+            0,
+            started.elapsed().as_millis(),
+        );
     }
     if persisted.config_fingerprint != config_fingerprint(config) {
-        return None;
+        return miss(
+            "config fingerprint mismatch".to_string(),
+            0,
+            started.elapsed().as_millis(),
+        );
     }
 
-    let current_hashes = current_file_hashes(config)?;
+    let current_hashes = match current_file_hashes(config) {
+        Ok(h) => h,
+        Err(e) => {
+            return miss(e, 0, started.elapsed().as_millis());
+        }
+    };
+    let file_count_hashed = current_hashes.len();
     if current_hashes != persisted.file_hashes {
-        return None;
+        return miss(
+            "file hash mismatch".to_string(),
+            file_count_hashed,
+            started.elapsed().as_millis(),
+        );
     }
 
     let mut nodes: HashMap<String, HashMap<NodeId, NodeInfo>> =
@@ -174,11 +289,17 @@ pub fn load_reference_cache(config: &FoundryConfig) -> Option<CachedBuild> {
         external_refs.insert(item.src, NodeId(item.decl_id));
     }
 
-    Some(CachedBuild::from_reference_index(
-        nodes,
-        persisted.path_to_abs,
-        external_refs,
-        persisted.id_to_path_map,
-        0,
-    ))
+    CacheLoadReport {
+        build: Some(CachedBuild::from_reference_index(
+            nodes,
+            persisted.path_to_abs,
+            external_refs,
+            persisted.id_to_path_map,
+            0,
+        )),
+        hit: true,
+        miss_reason: None,
+        file_count_hashed,
+        duration_ms: started.elapsed().as_millis(),
+    }
 }

@@ -427,40 +427,66 @@ impl ForgeLsp {
 
                 // Try persisted reference index first (fast warm start).
                 let cfg_for_load = foundry_config.clone();
-                if let Ok(Some(cached_build)) = tokio::task::spawn_blocking(move || {
-                    crate::project_cache::load_reference_cache(&cfg_for_load)
+                let load_res = tokio::task::spawn_blocking(move || {
+                    crate::project_cache::load_reference_cache_with_report(&cfg_for_load)
                 })
-                .await
-                {
-                    let source_count = cached_build.nodes.len();
-                    ast_cache
-                        .write()
-                        .await
-                        .insert(cache_key, Arc::new(cached_build));
-                    client
-                        .log_message(
-                            MessageType::INFO,
-                            format!(
-                                "project index: loaded {} source files from persisted cache",
-                                source_count
-                            ),
-                        )
-                        .await;
+                .await;
+                match load_res {
+                    Ok(report) => {
+                        if let Some(cached_build) = report.build {
+                            let source_count = cached_build.nodes.len();
+                            ast_cache
+                                .write()
+                                .await
+                                .insert(cache_key, Arc::new(cached_build));
+                            client
+                                .log_message(
+                                    MessageType::INFO,
+                                    format!(
+                                        "project index: cache load hit (sources={}, hashed_files={}, duration={}ms)",
+                                        source_count, report.file_count_hashed, report.duration_ms
+                                    ),
+                                )
+                                .await;
 
-                    client
-                        .send_notification::<notification::Progress>(ProgressParams {
-                            token: token.clone(),
-                            value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(
-                                WorkDoneProgressEnd {
-                                    message: Some(format!(
-                                        "Loaded {} source files from cache",
-                                        source_count
+                            client
+                                .send_notification::<notification::Progress>(ProgressParams {
+                                    token: token.clone(),
+                                    value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(
+                                        WorkDoneProgressEnd {
+                                            message: Some(format!(
+                                                "Loaded {} source files from cache",
+                                                source_count
+                                            )),
+                                        },
                                     )),
-                                },
-                            )),
-                        })
-                        .await;
-                    return;
+                                })
+                                .await;
+                            return;
+                        }
+
+                        client
+                            .log_message(
+                                MessageType::INFO,
+                                format!(
+                                    "project index: cache load miss (reason={}, hashed_files={}, duration={}ms)",
+                                    report
+                                        .miss_reason
+                                        .unwrap_or_else(|| "unknown".to_string()),
+                                    report.file_count_hashed,
+                                    report.duration_ms
+                                ),
+                            )
+                            .await;
+                    }
+                    Err(e) => {
+                        client
+                            .log_message(
+                                MessageType::WARNING,
+                                format!("project index: cache load task failed: {e}"),
+                            )
+                            .await;
+                    }
                 }
 
                 match crate::solc::solc_project_index(&foundry_config, Some(&client), None).await {
@@ -483,18 +509,21 @@ impl ForgeLsp {
                         let client_for_save = client.clone();
                         tokio::spawn(async move {
                             let res = tokio::task::spawn_blocking(move || {
-                                crate::project_cache::save_reference_cache(
+                                crate::project_cache::save_reference_cache_with_report(
                                     &cfg_for_save,
                                     &build_for_save,
                                 )
                             })
                             .await;
                             match res {
-                                Ok(Ok(())) => {
+                                Ok(Ok(report)) => {
                                     client_for_save
                                         .log_message(
                                             MessageType::INFO,
-                                            "project index: persisted reference cache",
+                                            format!(
+                                                "project index: cache save complete (hashed_files={}, duration={}ms)",
+                                                report.file_count_hashed, report.duration_ms
+                                            ),
                                         )
                                         .await;
                                 }
@@ -1034,40 +1063,66 @@ impl LanguageServer for ForgeLsp {
 
                 // Try persisted reference index first (fast warm start).
                 let cfg_for_load = foundry_config.clone();
-                if let Ok(Some(cached_build)) = tokio::task::spawn_blocking(move || {
-                    crate::project_cache::load_reference_cache(&cfg_for_load)
+                let load_res = tokio::task::spawn_blocking(move || {
+                    crate::project_cache::load_reference_cache_with_report(&cfg_for_load)
                 })
-                .await
-                {
-                    let source_count = cached_build.nodes.len();
-                    ast_cache
-                        .write()
-                        .await
-                        .insert(cache_key, Arc::new(cached_build));
-                    client
-                        .log_message(
-                            MessageType::INFO,
-                            format!(
-                                "project index (eager): loaded {} source files from persisted cache",
-                                source_count
-                            ),
-                        )
-                        .await;
+                .await;
+                match load_res {
+                    Ok(report) => {
+                        if let Some(cached_build) = report.build {
+                            let source_count = cached_build.nodes.len();
+                            ast_cache
+                                .write()
+                                .await
+                                .insert(cache_key, Arc::new(cached_build));
+                            client
+                                .log_message(
+                                    MessageType::INFO,
+                                    format!(
+                                        "project index (eager): cache load hit (sources={}, hashed_files={}, duration={}ms)",
+                                        source_count, report.file_count_hashed, report.duration_ms
+                                    ),
+                                )
+                                .await;
 
-                    client
-                        .send_notification::<notification::Progress>(ProgressParams {
-                            token: token.clone(),
-                            value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(
-                                WorkDoneProgressEnd {
-                                    message: Some(format!(
-                                        "Loaded {} source files from cache",
-                                        source_count
+                            client
+                                .send_notification::<notification::Progress>(ProgressParams {
+                                    token: token.clone(),
+                                    value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(
+                                        WorkDoneProgressEnd {
+                                            message: Some(format!(
+                                                "Loaded {} source files from cache",
+                                                source_count
+                                            )),
+                                        },
                                     )),
-                                },
-                            )),
-                        })
-                        .await;
-                    return;
+                                })
+                                .await;
+                            return;
+                        }
+
+                        client
+                            .log_message(
+                                MessageType::INFO,
+                                format!(
+                                    "project index (eager): cache load miss (reason={}, hashed_files={}, duration={}ms)",
+                                    report
+                                        .miss_reason
+                                        .unwrap_or_else(|| "unknown".to_string()),
+                                    report.file_count_hashed,
+                                    report.duration_ms
+                                ),
+                            )
+                            .await;
+                    }
+                    Err(e) => {
+                        client
+                            .log_message(
+                                MessageType::WARNING,
+                                format!("project index (eager): cache load task failed: {e}"),
+                            )
+                            .await;
+                    }
                 }
 
                 match crate::solc::solc_project_index(&foundry_config, Some(&client), None).await {
@@ -1093,18 +1148,21 @@ impl LanguageServer for ForgeLsp {
                         let client_for_save = client.clone();
                         tokio::spawn(async move {
                             let res = tokio::task::spawn_blocking(move || {
-                                crate::project_cache::save_reference_cache(
+                                crate::project_cache::save_reference_cache_with_report(
                                     &cfg_for_save,
                                     &build_for_save,
                                 )
                             })
                             .await;
                             match res {
-                                Ok(Ok(())) => {
+                                Ok(Ok(report)) => {
                                     client_for_save
                                         .log_message(
                                             MessageType::INFO,
-                                            "project index (eager): persisted reference cache",
+                                            format!(
+                                                "project index (eager): cache save complete (hashed_files={}, duration={}ms)",
+                                                report.file_count_hashed, report.duration_ms
+                                            ),
                                         )
                                         .await;
                                 }
