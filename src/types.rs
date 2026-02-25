@@ -1,8 +1,10 @@
+use serde::{Deserialize, Serialize};
+
 /// Type wrapper for AST node IDs.
 ///
 /// Every node in the Solidity compiler's JSON AST has a unique numeric `id`.
 /// Wrapping it prevents accidental mixups with [`FileId`] or plain integers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct NodeId(pub u64);
 
 /// Newtype wrapper for source file IDs.
@@ -10,7 +12,7 @@ pub struct NodeId(pub u64);
 /// The compiler assigns each input file a numeric ID that appears in `src`
 /// strings (`"offset:length:fileId"`). Wrapping it prevents accidental
 /// mixups with [`NodeId`] or plain integers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct FileId(pub u64);
 
 /// A parsed `"offset:length:fileId"` source location from the AST.

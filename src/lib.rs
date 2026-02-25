@@ -11,6 +11,7 @@ pub mod inlay_hints;
 pub mod links;
 pub mod lint;
 pub mod lsp;
+pub mod project_cache;
 pub mod references;
 pub mod rename;
 pub mod runner;

@@ -425,17 +425,101 @@ impl ForgeLsp {
                     })
                     .await;
 
+                // Try persisted reference index first (fast warm start).
+                let cfg_for_load = foundry_config.clone();
+                if let Ok(Some(cached_build)) = tokio::task::spawn_blocking(move || {
+                    crate::project_cache::load_reference_cache(&cfg_for_load)
+                })
+                .await
+                {
+                    let source_count = cached_build.nodes.len();
+                    ast_cache
+                        .write()
+                        .await
+                        .insert(cache_key, Arc::new(cached_build));
+                    client
+                        .log_message(
+                            MessageType::INFO,
+                            format!(
+                                "project index: loaded {} source files from persisted cache",
+                                source_count
+                            ),
+                        )
+                        .await;
+
+                    client
+                        .send_notification::<notification::Progress>(ProgressParams {
+                            token: token.clone(),
+                            value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(
+                                WorkDoneProgressEnd {
+                                    message: Some(format!(
+                                        "Loaded {} source files from cache",
+                                        source_count
+                                    )),
+                                },
+                            )),
+                        })
+                        .await;
+                    return;
+                }
+
                 match crate::solc::solc_project_index(&foundry_config, Some(&client), None).await {
                     Ok(ast_data) => {
                         let cached_build = Arc::new(crate::goto::CachedBuild::new(ast_data, 0));
                         let source_count = cached_build.nodes.len();
-                        ast_cache.write().await.insert(cache_key, cached_build);
+                        let build_for_save = (*cached_build).clone();
+                        ast_cache
+                            .write()
+                            .await
+                            .insert(cache_key.clone(), cached_build);
                         client
                             .log_message(
                                 MessageType::INFO,
                                 format!("project index: cached {} source files", source_count),
                             )
                             .await;
+
+                        let cfg_for_save = foundry_config.clone();
+                        let client_for_save = client.clone();
+                        tokio::spawn(async move {
+                            let res = tokio::task::spawn_blocking(move || {
+                                crate::project_cache::save_reference_cache(
+                                    &cfg_for_save,
+                                    &build_for_save,
+                                )
+                            })
+                            .await;
+                            match res {
+                                Ok(Ok(())) => {
+                                    client_for_save
+                                        .log_message(
+                                            MessageType::INFO,
+                                            "project index: persisted reference cache",
+                                        )
+                                        .await;
+                                }
+                                Ok(Err(e)) => {
+                                    client_for_save
+                                        .log_message(
+                                            MessageType::WARNING,
+                                            format!(
+                                                "project index: failed to persist cache: {e}"
+                                            ),
+                                        )
+                                        .await;
+                                }
+                                Err(e) => {
+                                    client_for_save
+                                        .log_message(
+                                            MessageType::WARNING,
+                                            format!(
+                                                "project index: cache save task failed: {e}"
+                                            ),
+                                        )
+                                        .await;
+                                }
+                            }
+                        });
 
                         // End progress: indexing complete.
                         client
@@ -948,11 +1032,53 @@ impl LanguageServer for ForgeLsp {
                     })
                     .await;
 
+                // Try persisted reference index first (fast warm start).
+                let cfg_for_load = foundry_config.clone();
+                if let Ok(Some(cached_build)) = tokio::task::spawn_blocking(move || {
+                    crate::project_cache::load_reference_cache(&cfg_for_load)
+                })
+                .await
+                {
+                    let source_count = cached_build.nodes.len();
+                    ast_cache
+                        .write()
+                        .await
+                        .insert(cache_key, Arc::new(cached_build));
+                    client
+                        .log_message(
+                            MessageType::INFO,
+                            format!(
+                                "project index (eager): loaded {} source files from persisted cache",
+                                source_count
+                            ),
+                        )
+                        .await;
+
+                    client
+                        .send_notification::<notification::Progress>(ProgressParams {
+                            token: token.clone(),
+                            value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(
+                                WorkDoneProgressEnd {
+                                    message: Some(format!(
+                                        "Loaded {} source files from cache",
+                                        source_count
+                                    )),
+                                },
+                            )),
+                        })
+                        .await;
+                    return;
+                }
+
                 match crate::solc::solc_project_index(&foundry_config, Some(&client), None).await {
                     Ok(ast_data) => {
                         let cached_build = Arc::new(crate::goto::CachedBuild::new(ast_data, 0));
                         let source_count = cached_build.nodes.len();
-                        ast_cache.write().await.insert(cache_key, cached_build);
+                        let build_for_save = (*cached_build).clone();
+                        ast_cache
+                            .write()
+                            .await
+                            .insert(cache_key.clone(), cached_build);
                         client
                             .log_message(
                                 MessageType::INFO,
@@ -962,6 +1088,48 @@ impl LanguageServer for ForgeLsp {
                                 ),
                             )
                             .await;
+
+                        let cfg_for_save = foundry_config.clone();
+                        let client_for_save = client.clone();
+                        tokio::spawn(async move {
+                            let res = tokio::task::spawn_blocking(move || {
+                                crate::project_cache::save_reference_cache(
+                                    &cfg_for_save,
+                                    &build_for_save,
+                                )
+                            })
+                            .await;
+                            match res {
+                                Ok(Ok(())) => {
+                                    client_for_save
+                                        .log_message(
+                                            MessageType::INFO,
+                                            "project index (eager): persisted reference cache",
+                                        )
+                                        .await;
+                                }
+                                Ok(Err(e)) => {
+                                    client_for_save
+                                        .log_message(
+                                            MessageType::WARNING,
+                                            format!(
+                                                "project index (eager): failed to persist cache: {e}"
+                                            ),
+                                        )
+                                        .await;
+                                }
+                                Err(e) => {
+                                    client_for_save
+                                        .log_message(
+                                            MessageType::WARNING,
+                                            format!(
+                                                "project index (eager): cache save task failed: {e}"
+                                            ),
+                                        )
+                                        .await;
+                                }
+                            }
+                        });
 
                         client
                             .send_notification::<notification::Progress>(ProgressParams {

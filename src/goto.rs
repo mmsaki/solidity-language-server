@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use tower_lsp::lsp_types::{Location, Position, Range, Url};
@@ -6,7 +7,7 @@ use tree_sitter::{Node, Parser};
 use crate::types::{NodeId, SourceLoc};
 use crate::utils::push_if_node_or_array;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeInfo {
     pub src: String,
     pub name_location: Option<String>,
@@ -199,6 +200,37 @@ impl CachedBuild {
             gas_index,
             hint_index,
             doc_index,
+            completion_cache,
+            build_version,
+        }
+    }
+
+    /// Construct a minimal cached build from persisted reference/goto indexes.
+    ///
+    /// This is used for fast startup warm-cache restores where we only need
+    /// cross-file node/reference maps (not full gas/doc/hint indexes).
+    pub fn from_reference_index(
+        nodes: HashMap<String, HashMap<NodeId, NodeInfo>>,
+        path_to_abs: HashMap<String, String>,
+        external_refs: ExternalRefs,
+        id_to_path_map: HashMap<String, String>,
+        build_version: i32,
+    ) -> Self {
+        let completion_cache = std::sync::Arc::new(crate::completion::build_completion_cache(
+            &serde_json::Value::Object(Default::default()),
+            None,
+        ));
+
+        Self {
+            nodes,
+            path_to_abs,
+            external_refs,
+            id_to_path_map,
+            decl_index: HashMap::new(),
+            node_id_to_source_path: HashMap::new(),
+            gas_index: HashMap::new(),
+            hint_index: HashMap::new(),
+            doc_index: HashMap::new(),
             completion_cache,
             build_version,
         }
