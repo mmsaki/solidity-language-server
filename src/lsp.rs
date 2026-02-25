@@ -53,10 +53,10 @@ pub struct ForgeLsp {
     /// Whether workspace file operations changed project structure and
     /// the persisted reference cache should be refreshed from disk.
     project_cache_dirty: Arc<std::sync::atomic::AtomicBool>,
-    /// Sequence number for debounced didSave cache sync scheduling.
-    project_cache_sync_seq: Arc<AtomicU64>,
-    /// Active debounced didSave cache sync task (latest-wins).
-    project_cache_sync_task: Arc<tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    /// Whether a didSave cache-sync worker is currently running.
+    project_cache_sync_running: Arc<std::sync::atomic::AtomicBool>,
+    /// Whether a didSave cache-sync pass is pending (set by save bursts).
+    project_cache_sync_pending: Arc<std::sync::atomic::AtomicBool>,
     /// URIs recently scaffolded in willCreateFiles (used to avoid re-applying
     /// edits again in didCreateFiles for the same create operation).
     pending_create_scaffold: Arc<RwLock<HashSet<String>>>,
@@ -92,8 +92,8 @@ impl ForgeLsp {
             root_uri: Arc::new(RwLock::new(None)),
             project_indexed: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             project_cache_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            project_cache_sync_seq: Arc::new(AtomicU64::new(0)),
-            project_cache_sync_task: Arc::new(tokio::sync::Mutex::new(None)),
+            project_cache_sync_running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            project_cache_sync_pending: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             pending_create_scaffold: Arc::new(RwLock::new(HashSet::new())),
         }
     }
@@ -1488,129 +1488,151 @@ impl LanguageServer for ForgeLsp {
             && self.settings.read().await.project_index.full_project_scan
             && self.project_cache_dirty.load(Ordering::Acquire)
         {
-            let seq = self.project_cache_sync_seq.fetch_add(1, Ordering::AcqRel) + 1;
-            let seq_counter = self.project_cache_sync_seq.clone();
-            let task_slot = self.project_cache_sync_task.clone();
-            let foundry_config = self.foundry_config.read().await.clone();
-            let root_key = self.root_uri.read().await.as_ref().map(|u| u.to_string());
-            let ast_cache = self.ast_cache.clone();
-            let client = self.client.clone();
-            let dirty_flag = self.project_cache_dirty.clone();
-
-            // Abort older scheduled sync (if any); only keep newest.
+            self.project_cache_sync_pending.store(true, Ordering::Release);
+            if self
+                .project_cache_sync_running
+                .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
             {
-                let mut slot = task_slot.lock().await;
-                if let Some(handle) = slot.take() {
-                    handle.abort();
-                }
-            }
+                let foundry_config = self.foundry_config.read().await.clone();
+                let root_key = self.root_uri.read().await.as_ref().map(|u| u.to_string());
+                let ast_cache = self.ast_cache.clone();
+                let client = self.client.clone();
+                let dirty_flag = self.project_cache_dirty.clone();
+                let running_flag = self.project_cache_sync_running.clone();
+                let pending_flag = self.project_cache_sync_pending.clone();
 
-            let task_slot_for_cleanup = task_slot.clone();
-            let handle = tokio::spawn(async move {
-                tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+                tokio::spawn(async move {
+                    loop {
+                        // Debounce save bursts into one trailing sync.
+                        tokio::time::sleep(std::time::Duration::from_millis(700)).await;
 
-                if seq != seq_counter.load(Ordering::Acquire) {
-                    return;
-                }
-                if dirty_flag
-                    .compare_exchange(true, false, Ordering::AcqRel, Ordering::Acquire)
-                    .is_err()
-                {
-                    return;
-                }
-
-                let Some(cache_key) = root_key else {
-                    dirty_flag.store(true, Ordering::Release);
-                    return;
-                };
-                if !foundry_config.root.is_dir() {
-                    dirty_flag.store(true, Ordering::Release);
-                    client
-                        .log_message(
-                            MessageType::WARNING,
-                            format!(
-                                "didSave cache sync: invalid project root {}, deferring",
-                                foundry_config.root.display()
-                            ),
-                        )
-                        .await;
-                    return;
-                }
-
-                client
-                    .log_message(
-                        MessageType::INFO,
-                        "didSave cache sync: rebuilding project index from disk",
-                    )
-                    .await;
-
-                match crate::solc::solc_project_index(&foundry_config, Some(&client), None).await {
-                    Ok(ast_data) => {
-                        let cached_build = Arc::new(crate::goto::CachedBuild::new(ast_data, 0));
-                        let source_count = cached_build.nodes.len();
-                        let build_for_save = (*cached_build).clone();
-                        ast_cache.write().await.insert(cache_key, cached_build);
-
-                        let cfg_for_save = foundry_config.clone();
-                        let save_res = tokio::task::spawn_blocking(move || {
-                            crate::project_cache::save_reference_cache_with_report(
-                                &cfg_for_save,
-                                &build_for_save,
-                            )
-                        })
-                        .await;
-
-                        match save_res {
-                            Ok(Ok(report)) => {
-                                client
-                                    .log_message(
-                                        MessageType::INFO,
-                                        format!(
-                                            "didSave cache sync: persisted cache (sources={}, hashed_files={}, duration={}ms)",
-                                            source_count, report.file_count_hashed, report.duration_ms
-                                        ),
+                        if !pending_flag.swap(false, Ordering::AcqRel) {
+                            // No pending work right now; try to stop worker.
+                            running_flag.store(false, Ordering::Release);
+                            // If new work arrived concurrently after stop,
+                            // reclaim leadership and keep running.
+                            if pending_flag.load(Ordering::Acquire)
+                                && running_flag
+                                    .compare_exchange(
+                                        false,
+                                        true,
+                                        Ordering::AcqRel,
+                                        Ordering::Acquire,
                                     )
-                                    .await;
+                                    .is_ok()
+                            {
+                                continue;
                             }
-                            Ok(Err(e)) => {
-                                dirty_flag.store(true, Ordering::Release);
-                                client
-                                    .log_message(
-                                        MessageType::WARNING,
-                                        format!("didSave cache sync: persist failed, will retry: {e}"),
+                            break;
+                        }
+
+                        if dirty_flag
+                            .compare_exchange(true, false, Ordering::AcqRel, Ordering::Acquire)
+                            .is_err()
+                        {
+                            continue;
+                        }
+
+                        let Some(cache_key) = &root_key else {
+                            dirty_flag.store(true, Ordering::Release);
+                            continue;
+                        };
+                        if !foundry_config.root.is_dir() {
+                            dirty_flag.store(true, Ordering::Release);
+                            client
+                                .log_message(
+                                    MessageType::WARNING,
+                                    format!(
+                                        "didSave cache sync: invalid project root {}, deferring",
+                                        foundry_config.root.display()
+                                    ),
+                                )
+                                .await;
+                            continue;
+                        }
+
+                        client
+                            .log_message(
+                                MessageType::INFO,
+                                "didSave cache sync: rebuilding project index from disk",
+                            )
+                            .await;
+
+                        match crate::solc::solc_project_index(
+                            &foundry_config,
+                            Some(&client),
+                            None,
+                        )
+                        .await
+                        {
+                            Ok(ast_data) => {
+                                let cached_build =
+                                    Arc::new(crate::goto::CachedBuild::new(ast_data, 0));
+                                let source_count = cached_build.nodes.len();
+                                let build_for_save = (*cached_build).clone();
+                                ast_cache.write().await.insert(cache_key.clone(), cached_build);
+
+                                let cfg_for_save = foundry_config.clone();
+                                let save_res = tokio::task::spawn_blocking(move || {
+                                    crate::project_cache::save_reference_cache_with_report(
+                                        &cfg_for_save,
+                                        &build_for_save,
                                     )
-                                    .await;
+                                })
+                                .await;
+
+                                match save_res {
+                                    Ok(Ok(report)) => {
+                                        client
+                                            .log_message(
+                                                MessageType::INFO,
+                                                format!(
+                                                    "didSave cache sync: persisted cache (sources={}, hashed_files={}, duration={}ms)",
+                                                    source_count, report.file_count_hashed, report.duration_ms
+                                                ),
+                                            )
+                                            .await;
+                                    }
+                                    Ok(Err(e)) => {
+                                        dirty_flag.store(true, Ordering::Release);
+                                        client
+                                            .log_message(
+                                                MessageType::WARNING,
+                                                format!(
+                                                    "didSave cache sync: persist failed, will retry: {e}"
+                                                ),
+                                            )
+                                            .await;
+                                    }
+                                    Err(e) => {
+                                        dirty_flag.store(true, Ordering::Release);
+                                        client
+                                            .log_message(
+                                                MessageType::WARNING,
+                                                format!(
+                                                    "didSave cache sync: save task failed, will retry: {e}"
+                                                ),
+                                            )
+                                            .await;
+                                    }
+                                }
                             }
                             Err(e) => {
                                 dirty_flag.store(true, Ordering::Release);
                                 client
                                     .log_message(
                                         MessageType::WARNING,
-                                        format!("didSave cache sync: save task failed, will retry: {e}"),
+                                        format!(
+                                            "didSave cache sync: re-index failed, will retry: {e}"
+                                        ),
                                     )
                                     .await;
                             }
                         }
                     }
-                    Err(e) => {
-                        dirty_flag.store(true, Ordering::Release);
-                        client
-                            .log_message(
-                                MessageType::WARNING,
-                                format!("didSave cache sync: re-index failed, will retry: {e}"),
-                            )
-                            .await;
-                    }
-                }
-
-                if seq == seq_counter.load(Ordering::Acquire) {
-                    let mut slot = task_slot_for_cleanup.lock().await;
-                    let _ = slot.take();
-                }
-            });
-
-            let mut slot = task_slot.lock().await;
-            *slot = Some(handle);
+                });
+            }
         }
     }
 
