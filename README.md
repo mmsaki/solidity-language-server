@@ -6,7 +6,7 @@
 [![GitHub Release](https://img.shields.io/github/v/release/mmsaki/solidity-language-server)](https://github.com/mmsaki/solidity-language-server/releases/latest)
 [![Telegram](https://img.shields.io/badge/Telegram-Join%20Chat-blue?logo=telegram)](https://t.me/+R1lW7xWJ55tlYzcx)
 
-The fastest Solidity language server — instant, accurate go-to-definition/declaration first, then references, hover, completions, and file operations. See [benchmarks](https://github.com/mmsaki/lsp-bench).
+The fastest Solidity language server — optimized for low-latency go-to-definition/declaration, references, hover, completions, and file operations. See [benchmarks](https://github.com/mmsaki/lsp-bench).
 
 ## Install
 
@@ -62,106 +62,21 @@ Benchmarked against `v4-core` — `test/PoolManager.t.sol` (`v0.1.26`, p95 laten
 - [CONTRIBUTING.md](CONTRIBUTING.md) — development setup, project structure, and how to contribute
 - [CHANGELOG.md](CHANGELOG.md) — release history
 
-## Neovim
+## Editor Setup
 
-```lua
-return {
-  name = "Solidity Language Server",
-  cmd = { "solidity-language-server" },
-  filetypes = { "solidity" },
-  root_markers = { "foundry.toml", ".git" },
-  on_attach = function(_, _)
-    vim.api.nvim_create_autocmd("BufWritePost", {
-      pattern = { "*.sol" },
-      callback = function()
-        vim.lsp.buf.format()
-      end,
-    })
-  end,
-  settings = {
-    -- Settings are passed via `initializationOptions` or `didChangeConfiguration`. All settings are optional — defaults are shown below.
-    ["solidity-language-server"] = {
-      inlayHints = {
-        -- Show parameter name hints on function/event/struct calls.
-        parameters = true,
-        -- Show gas cost hints on functions annotated with
-        -- `/// @custom:lsp-enable gas-estimates`.
-        gasEstimates = true,
-      },
-      lint = {
-        -- Master toggle for forge lint diagnostics.
-        enabled = true,
-        -- Filter lints by severity. Empty = all severities.
-        -- Values: "high", "med", "low", "info", "gas", "code-size"
-        severity = {},
-        -- Run only specific lint rules by ID. Empty = all rules.
-        -- Values: "incorrect-shift", "unchecked-call", "erc20-unchecked-transfer",
-        --   "divide-before-multiply", "unsafe-typecast", "pascal-case-struct",
-        --   "mixed-case-function", "mixed-case-variable", "screaming-snake-case-const",
-        --   "screaming-snake-case-immutable", "unused-import", "unaliased-plain-import",
-        --   "named-struct-fields", "unsafe-cheatcode", "asm-keccak256", "custom-errors",
-        --   "unwrapped-modifier-logic"
-        only = {},
-        -- Suppress specific lint rule IDs from diagnostics.
-        exclude = {},
-      },
-      fileOperations = {
-        -- Auto-generate scaffold for new .sol files.
-        templateOnCreate = true,
-        -- Auto-update imports via workspace/willRenameFiles.
-        updateImportsOnRename = true,
-        -- Auto-remove imports via workspace/willDeleteFiles.
-        updateImportsOnDelete = true,
-      },
-    },
-  },
-}
-```
+Use the docs for complete editor-specific setup and config examples:
 
-### Helix
+- [Neovim](https://solidity-language-server-docs.pages.dev/setup/neovim)
+- [Helix](https://solidity-language-server-docs.pages.dev/setup/helix)
+- [Zed](https://solidity-language-server-docs.pages.dev/setup/zed)
+- [VS Code / Cursor](https://solidity-language-server-docs.pages.dev/setup/vscode)
+- [Vim](https://solidity-language-server-docs.pages.dev/setup/vim)
+- [Emacs](https://solidity-language-server-docs.pages.dev/setup/emacs)
 
-```toml
-# languages.toml
-[language-server.solidity-language-server.config]
-inlayHints.parameters = true
-inlayHints.gasEstimates = true
-lint.enabled = true
-lint.severity = ["high", "med"]
-lint.exclude = ["pascal-case-struct"]
-fileOperations.templateOnCreate = true
-fileOperations.updateImportsOnRename = true
-fileOperations.updateImportsOnDelete = true
-```
+Minimal LSP command:
 
-## AI Integrations
-
-### OpenCode
-
-Add to `~/.config/opencode/config.json`:
-
-```json
-{
-  "lsp": {
-    "solidity-language-server": {
-      "command": ["solidity-language-server", "--stdio"],
-      "extensions": [".sol"],
-      "initialization": {
-        "inlayHints": {
-          "parameters": true,
-          "gasEstimates": true
-        },
-        "lint": {
-          "enabled": true
-        },
-        "fileOperations": {
-          "templateOnCreate": true,
-          "updateImportsOnRename": true,
-          "updateImportsOnDelete": true
-        }
-      }
-    }
-  }
-}
+```sh
+solidity-language-server --stdio
 ```
 
 ## Verify Release Binaries

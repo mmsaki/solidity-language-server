@@ -134,7 +134,7 @@ Benchmarked against `v4-core` — `test/PoolManager.t.sol`.
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki** | 7.6ms ⚡ | **254.5 MB** | [{"kind":2,"range":{"end":{"character":1... |
+| **mmsaki** | 7.6ms ⚡ | **254.5 MB** | `[{ "kind": 2, "range": { ... } }]` |
 
 ### textDocument/documentLink
 
@@ -152,13 +152,13 @@ Benchmarked against `v4-core` — `test/PoolManager.t.sol`.
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki** | 7.3ms ⚡ | **253.7 MB** | [{"endCharacter":1,"endLine":1261,"start... |
+| **mmsaki** | 7.3ms ⚡ | **253.7 MB** | `[{ "endCharacter": 1, "endLine": 1261, ... }]` |
 
 ### textDocument/selectionRange
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki** | 6.0ms ⚡ | **254.3 MB** | [{"parent":{"parent":{"parent":{"parent"... |
+| **mmsaki** | 6.0ms ⚡ | **254.3 MB** | `[{ "parent": { "parent": { ... } } }]` |
 
 ### textDocument/inlayHint
 
@@ -200,7 +200,7 @@ Benchmarked against `v4-core` — `test/PoolManager.t.sol`.
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki** | 81.8ms ⚡ | **255.0 MB** | {"changes":{"file:///Users/meek/develope... |
+| **mmsaki** | 81.8ms ⚡ | **255.0 MB** | `{ "changes": { "file://...": [ ... ] } }` |
 
 ---
 

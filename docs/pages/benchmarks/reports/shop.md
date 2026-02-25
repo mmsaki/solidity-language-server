@@ -134,7 +134,7 @@ Benchmarked against `example` — `Shop.sol`.
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki** | 1.2ms ⚡ | **14.4 MB** | [{"kind":3,"range":{"end":{"character":2... |
+| **mmsaki** | 1.2ms ⚡ | **14.4 MB** | `[{ "kind": 3, "range": { ... } }]` |
 
 ### textDocument/documentLink
 
@@ -152,13 +152,13 @@ Benchmarked against `example` — `Shop.sol`.
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki** | 1.2ms ⚡ | **14.3 MB** | [{"endCharacter":1,"endLine":54,"startCh... |
+| **mmsaki** | 1.2ms ⚡ | **14.3 MB** | `[{ "endCharacter": 1, "endLine": 54, ... }]` |
 
 ### textDocument/selectionRange
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki** | 0.9ms ⚡ | **14.0 MB** | [{"parent":{"parent":{"parent":{"parent"... |
+| **mmsaki** | 0.9ms ⚡ | **14.0 MB** | `[{ "parent": { "parent": { ... } } }]` |
 
 ### textDocument/inlayHint
 
@@ -200,7 +200,7 @@ Benchmarked against `example` — `Shop.sol`.
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki** | 1.6ms ⚡ | **14.4 MB** | {"changes":{"file:///Users/meek/develope... |
+| **mmsaki** | 1.6ms ⚡ | **14.4 MB** | `{ "changes": { "file://...": [ ... ] } }` |
 
 ---
 
