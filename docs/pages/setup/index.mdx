@@ -25,7 +25,8 @@ All editor configs support the same server settings.
     "projectIndex": {
       "fullProjectScan": false,
       "cacheMode": "auto",
-      "incrementalEditReindex": false
+      "incrementalEditReindex": false,
+      "incrementalEditReindexThreshold": 0.4
     }
   }
 }
@@ -66,6 +67,9 @@ Foundry lint config reference (lint_on_build): [Foundry linter config docs](http
   - `"v2"`: force per-file shard cache.
 - `projectIndex.incrementalEditReindex` enables an aggressive dependency-closure
   scoped reindex path on dirty sync (falls back to full reindex on failure).
+- `projectIndex.incrementalEditReindexThreshold` (default `0.4`) controls when
+  scoped reindex is allowed: if `affected_sources / total_sources` exceeds this
+  ratio, the server skips scoped reindex and runs full reindex.
 - `projectIndex.fullProjectScan` is available only in versions newer than `v0.1.26` (`v0.1.27+`).
 - In `v0.1.27+`, on-disk project cache uses a single-flight `didSave` sync after file operations (`didCreateFiles` / `didRenameFiles` / `didDeleteFiles`) to avoid overlapping re-index jobs during save bursts.
 - For file rename workflows, editors may require explicit save-all to persist buffer edits to disk.

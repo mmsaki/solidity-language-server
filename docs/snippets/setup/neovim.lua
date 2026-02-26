@@ -45,6 +45,8 @@ return {
         -- Aggressive scoped dirty-sync: reindex only reverse-import affected files.
         -- Falls back to full reindex if scoped compile fails.
         incrementalEditReindex = false,
+        -- Max affected/total source ratio allowed for scoped reindex.
+        incrementalEditReindexThreshold = 0.4,
       },
     },
   },

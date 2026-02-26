@@ -877,6 +877,166 @@ fn compute_reverse_import_closure(
         .collect()
 }
 
+fn src_file_id(src: &str) -> Option<&str> {
+    src.rsplit(':').next().filter(|id| !id.is_empty())
+}
+
+fn remap_src_file_id(src: &str, id_remap: &HashMap<String, String>) -> String {
+    let Some(old_id) = src_file_id(src) else {
+        return src.to_string();
+    };
+    let Some(new_id) = id_remap.get(old_id) else {
+        return src.to_string();
+    };
+    if new_id == old_id {
+        return src.to_string();
+    }
+    let prefix_len = src.len().saturating_sub(old_id.len());
+    format!("{}{}", &src[..prefix_len], new_id)
+}
+
+fn remap_node_info_file_ids(info: &mut goto::NodeInfo, id_remap: &HashMap<String, String>) {
+    info.src = remap_src_file_id(&info.src, id_remap);
+    if let Some(loc) = info.name_location.as_mut() {
+        *loc = remap_src_file_id(loc, id_remap);
+    }
+    for loc in &mut info.name_locations {
+        *loc = remap_src_file_id(loc, id_remap);
+    }
+    if let Some(loc) = info.member_location.as_mut() {
+        *loc = remap_src_file_id(loc, id_remap);
+    }
+}
+
+fn doc_key_path(key: &hover::DocKey) -> Option<&str> {
+    match key {
+        hover::DocKey::Contract(k) | hover::DocKey::StateVar(k) | hover::DocKey::Method(k) => {
+            k.split_once(':').map(|(path, _)| path)
+        }
+        hover::DocKey::Func(_) | hover::DocKey::Event(_) => None,
+    }
+}
+
+fn merge_scoped_cached_build(
+    existing: &mut goto::CachedBuild,
+    mut scoped: goto::CachedBuild,
+) -> Result<usize, String> {
+    let affected_paths: HashSet<String> = scoped.nodes.keys().cloned().collect();
+    if affected_paths.is_empty() {
+        return Ok(0);
+    }
+    let affected_abs_paths: HashSet<String> = scoped.path_to_abs.values().cloned().collect();
+
+    // Safety guard: reject scoped merge when declaration IDs collide with
+    // unaffected files in the existing cache.
+    for scoped_id in scoped.decl_index.keys() {
+        if existing.decl_index.contains_key(scoped_id)
+            && let Some(path) = existing.node_id_to_source_path.get(scoped_id)
+            && !affected_abs_paths.contains(path)
+        {
+            return Err(format!(
+                "decl id collision for id={} in unaffected path {}",
+                scoped_id, path
+            ));
+        }
+    }
+
+    // Remap scoped local source IDs to existing/canonical IDs.
+    let mut path_to_existing_id: HashMap<String, String> = HashMap::new();
+    for (id, path) in &existing.id_to_path_map {
+        path_to_existing_id
+            .entry(path.clone())
+            .or_insert_with(|| id.clone());
+    }
+    let mut used_ids: HashSet<String> = existing.id_to_path_map.keys().cloned().collect();
+    let mut next_id = used_ids
+        .iter()
+        .filter_map(|k| k.parse::<u64>().ok())
+        .max()
+        .unwrap_or(0)
+        .saturating_add(1);
+
+    let mut id_remap: HashMap<String, String> = HashMap::new();
+    for (scoped_id, path) in &scoped.id_to_path_map {
+        let canonical = if let Some(id) = path_to_existing_id.get(path) {
+            id.clone()
+        } else {
+            let id = loop {
+                let candidate = next_id.to_string();
+                next_id = next_id.saturating_add(1);
+                if used_ids.insert(candidate.clone()) {
+                    break candidate;
+                }
+            };
+            path_to_existing_id.insert(path.clone(), id.clone());
+            id
+        };
+        id_remap.insert(scoped_id.clone(), canonical);
+    }
+
+    for file_nodes in scoped.nodes.values_mut() {
+        for info in file_nodes.values_mut() {
+            remap_node_info_file_ids(info, &id_remap);
+        }
+    }
+    let scoped_external_refs: HashMap<String, crate::types::NodeId> = scoped
+        .external_refs
+        .into_iter()
+        .map(|(src, decl_id)| (remap_src_file_id(&src, &id_remap), decl_id))
+        .collect();
+
+    let old_id_to_path = existing.id_to_path_map.clone();
+    existing.external_refs.retain(|src, _| {
+        src_file_id(src)
+            .and_then(|fid| old_id_to_path.get(fid))
+            .map(|path| !affected_paths.contains(path))
+            .unwrap_or(true)
+    });
+    existing.nodes.retain(|path, _| !affected_paths.contains(path));
+    existing.path_to_abs.retain(|path, _| !affected_paths.contains(path));
+    existing
+        .id_to_path_map
+        .retain(|_, path| !affected_paths.contains(path));
+
+    existing
+        .node_id_to_source_path
+        .retain(|_, path| !affected_abs_paths.contains(path));
+    existing
+        .decl_index
+        .retain(|id, _| match existing.node_id_to_source_path.get(id) {
+            Some(path) => !affected_abs_paths.contains(path),
+            None => true,
+        });
+    existing
+        .hint_index
+        .retain(|abs_path, _| !affected_abs_paths.contains(abs_path));
+    existing.gas_index.retain(|k, _| {
+        k.split_once(':')
+            .map(|(path, _)| !affected_paths.contains(path))
+            .unwrap_or(true)
+    });
+    existing
+        .doc_index
+        .retain(|k, _| doc_key_path(k).map(|p| !affected_paths.contains(p)).unwrap_or(true));
+
+    existing.nodes.extend(scoped.nodes);
+    existing.path_to_abs.extend(scoped.path_to_abs);
+    existing.external_refs.extend(scoped_external_refs);
+    for (old_id, path) in scoped.id_to_path_map {
+        let canonical = id_remap.get(&old_id).cloned().unwrap_or(old_id);
+        existing.id_to_path_map.insert(canonical, path);
+    }
+    existing.decl_index.extend(scoped.decl_index);
+    existing
+        .node_id_to_source_path
+        .extend(scoped.node_id_to_source_path);
+    existing.gas_index.extend(scoped.gas_index);
+    existing.hint_index.extend(scoped.hint_index);
+    existing.doc_index.extend(scoped.doc_index);
+
+    Ok(affected_paths.len())
+}
+
 #[tower_lsp::async_trait]
 impl LanguageServer for ForgeLsp {
     async fn initialize(
@@ -896,8 +1056,8 @@ impl LanguageServer for ForgeLsp {
                 .log_message(
                     MessageType::INFO,
                     format!(
-                        "settings: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.templateOnCreate={}, fileOperations.updateImportsOnRename={}, fileOperations.updateImportsOnDelete={}, projectIndex.fullProjectScan={}, projectIndex.cacheMode={:?}, projectIndex.incrementalEditReindex={}",
-                        s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.template_on_create, s.file_operations.update_imports_on_rename, s.file_operations.update_imports_on_delete, s.project_index.full_project_scan, s.project_index.cache_mode, s.project_index.incremental_edit_reindex,
+                        "settings: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.templateOnCreate={}, fileOperations.updateImportsOnRename={}, fileOperations.updateImportsOnDelete={}, projectIndex.fullProjectScan={}, projectIndex.cacheMode={:?}, projectIndex.incrementalEditReindex={}, projectIndex.incrementalEditReindexThreshold={}",
+                        s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.template_on_create, s.file_operations.update_imports_on_rename, s.file_operations.update_imports_on_delete, s.project_index.full_project_scan, s.project_index.cache_mode, s.project_index.incremental_edit_reindex, s.project_index.incremental_edit_reindex_threshold,
                     ),
                 )
                 .await;
@@ -1835,6 +1995,9 @@ impl LanguageServer for ForgeLsp {
                 let pending_flag = self.project_cache_sync_pending.clone();
                 let changed_files = self.project_cache_changed_files.clone();
                 let aggressive_scoped = settings_snapshot.project_index.incremental_edit_reindex;
+                let aggressive_scoped_threshold = settings_snapshot
+                    .project_index
+                    .incremental_edit_reindex_threshold;
 
                 tokio::spawn(async move {
                     loop {
@@ -1910,15 +2073,26 @@ impl LanguageServer for ForgeLsp {
                                 let total_sources =
                                     crate::solc::discover_source_files(&foundry_config).len();
 
-                                if !affected_files.is_empty() && affected_files.len() < total_sources
+                                let threshold = aggressive_scoped_threshold.clamp(0.0, 1.0);
+                                let ratio = if total_sources > 0 {
+                                    affected_files.len() as f64 / total_sources as f64
+                                } else {
+                                    1.0
+                                };
+
+                                if !affected_files.is_empty()
+                                    && affected_files.len() < total_sources
+                                    && ratio <= threshold
                                 {
                                     client
                                         .log_message(
                                             MessageType::INFO,
                                             format!(
-                                                "didSave cache sync: aggressive scoped reindex (affected={}/{})",
+                                                "didSave cache sync: aggressive scoped reindex (affected={}/{}, ratio={:.3}, threshold={:.3})",
                                                 affected_files.len(),
-                                                total_sources
+                                                total_sources,
+                                                ratio,
+                                                threshold
                                             ),
                                         )
                                         .await;
@@ -1933,23 +2107,73 @@ impl LanguageServer for ForgeLsp {
                                     .await
                                     {
                                         Ok(ast_data) => {
-                                            let cached_build =
+                                            let scoped_build =
                                                 Arc::new(crate::goto::CachedBuild::new(ast_data, 0));
-                                            let source_count = cached_build.nodes.len();
-                                            ast_cache
-                                                .write()
-                                                .await
-                                                .insert(cache_key.clone(), cached_build);
-                                            client
-                                                .log_message(
-                                                    MessageType::INFO,
-                                                    format!(
-                                                        "didSave cache sync: scoped reindex applied (sources={})",
-                                                        source_count
-                                                    ),
-                                                )
-                                                .await;
-                                            scoped_ok = true;
+                                            let source_count = scoped_build.nodes.len();
+                                            enum ScopedApply {
+                                                Merged { affected_count: usize },
+                                                Stored,
+                                                Failed(String),
+                                            }
+                                            let apply_outcome = {
+                                                let mut cache = ast_cache.write().await;
+                                                if let Some(existing) = cache.get(cache_key).cloned() {
+                                                    let mut merged = (*existing).clone();
+                                                    match merge_scoped_cached_build(
+                                                        &mut merged,
+                                                        (*scoped_build).clone(),
+                                                    ) {
+                                                        Ok(affected_count) => {
+                                                            cache.insert(
+                                                                cache_key.clone(),
+                                                                Arc::new(merged),
+                                                            );
+                                                            ScopedApply::Merged { affected_count }
+                                                        }
+                                                        Err(e) => ScopedApply::Failed(e),
+                                                    }
+                                                } else {
+                                                    cache.insert(cache_key.clone(), scoped_build);
+                                                    ScopedApply::Stored
+                                                }
+                                            };
+
+                                            match apply_outcome {
+                                                ScopedApply::Merged { affected_count } => {
+                                                    client
+                                                        .log_message(
+                                                            MessageType::INFO,
+                                                            format!(
+                                                                "didSave cache sync: scoped merge applied (scoped_sources={}, affected_paths={})",
+                                                                source_count, affected_count
+                                                            ),
+                                                        )
+                                                        .await;
+                                                    scoped_ok = true;
+                                                }
+                                                ScopedApply::Stored => {
+                                                    client
+                                                        .log_message(
+                                                            MessageType::INFO,
+                                                            format!(
+                                                                "didSave cache sync: scoped cache stored (scoped_sources={})",
+                                                                source_count
+                                                            ),
+                                                        )
+                                                        .await;
+                                                    scoped_ok = true;
+                                                }
+                                                ScopedApply::Failed(e) => {
+                                                client
+                                                    .log_message(
+                                                        MessageType::WARNING,
+                                                        format!(
+                                                            "didSave cache sync: scoped merge rejected, falling back to full: {e}"
+                                                        ),
+                                                    )
+                                                    .await;
+                                                }
+                                            }
                                         }
                                         Err(e) => {
                                             client
@@ -1962,6 +2186,19 @@ impl LanguageServer for ForgeLsp {
                                                 .await;
                                         }
                                     }
+                                } else if !affected_files.is_empty() {
+                                    client
+                                        .log_message(
+                                            MessageType::INFO,
+                                            format!(
+                                                "didSave cache sync: scoped reindex skipped by threshold/full-coverage (affected={}/{}, ratio={:.3}, threshold={:.3})",
+                                                affected_files.len(),
+                                                total_sources,
+                                                ratio,
+                                                threshold
+                                            ),
+                                        )
+                                        .await;
                                 }
                             }
                         }
@@ -2175,8 +2412,8 @@ impl LanguageServer for ForgeLsp {
                 .log_message(
                     MessageType::INFO,
                     format!(
-                    "settings updated: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.templateOnCreate={}, fileOperations.updateImportsOnRename={}, fileOperations.updateImportsOnDelete={}, projectIndex.fullProjectScan={}, projectIndex.cacheMode={:?}, projectIndex.incrementalEditReindex={}",
-                    s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.template_on_create, s.file_operations.update_imports_on_rename, s.file_operations.update_imports_on_delete, s.project_index.full_project_scan, s.project_index.cache_mode, s.project_index.incremental_edit_reindex,
+                        "settings updated: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.templateOnCreate={}, fileOperations.updateImportsOnRename={}, fileOperations.updateImportsOnDelete={}, projectIndex.fullProjectScan={}, projectIndex.cacheMode={:?}, projectIndex.incrementalEditReindex={}, projectIndex.incrementalEditReindexThreshold={}",
+                    s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.template_on_create, s.file_operations.update_imports_on_rename, s.file_operations.update_imports_on_delete, s.project_index.full_project_scan, s.project_index.cache_mode, s.project_index.incremental_edit_reindex, s.project_index.incremental_edit_reindex_threshold,
                 ),
             )
             .await;
