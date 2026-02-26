@@ -144,6 +144,63 @@ impl ForgeLsp {
         Url::from_directory_path(root).ok().map(|u| u.to_string())
     }
 
+    /// Ensure project-wide cached build is available for cross-file features.
+    ///
+    /// Fast path: return in-memory root build if present.
+    /// Slow path: load persisted cache from disk and insert it under project key.
+    async fn ensure_project_cached_build(&self) -> Option<Arc<goto::CachedBuild>> {
+        let root_key = self.project_cache_key().await?;
+        if let Some(existing) = self.ast_cache.read().await.get(&root_key).cloned() {
+            return Some(existing);
+        }
+
+        let settings = self.settings.read().await.clone();
+        if !self.use_solc || !settings.project_index.full_project_scan {
+            return None;
+        }
+
+        let foundry_config = self.foundry_config.read().await.clone();
+        if !foundry_config.root.is_dir() {
+            return None;
+        }
+
+        let cache_mode = settings.project_index.cache_mode.clone();
+        let load_res = tokio::task::spawn_blocking(move || {
+            crate::project_cache::load_reference_cache_with_report(&foundry_config, cache_mode)
+        })
+        .await;
+
+        let Ok(report) = load_res else {
+            return None;
+        };
+        let Some(build) = report.build else {
+            return None;
+        };
+
+        let source_count = build.nodes.len();
+        let complete = report.complete;
+        let duration_ms = report.duration_ms;
+        let reused = report.file_count_reused;
+        let hashed = report.file_count_hashed;
+        let arc = Arc::new(build);
+        self.ast_cache
+            .write()
+            .await
+            .insert(root_key.clone(), arc.clone());
+        self.project_indexed
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.client
+            .log_message(
+                MessageType::INFO,
+                format!(
+                    "references warm-load: project cache loaded (sources={}, reused_files={}/{}, complete={}, duration={}ms)",
+                    source_count, reused, hashed, complete, duration_ms
+                ),
+            )
+            .await;
+        Some(arc)
+    }
+
     async fn on_change(&self, params: TextDocumentItem) {
         let uri = params.uri.clone();
         let version = params.version;
@@ -2884,13 +2941,17 @@ impl LanguageServer for ForgeLsp {
             Some(bytes) => bytes,
             None => return Ok(None),
         };
-        let cached_build = self.get_or_fetch_build(&uri, &file_path, true).await;
-        let cached_build = match cached_build {
+        let file_build = self.get_or_fetch_build(&uri, &file_path, true).await;
+        let file_build = match file_build {
             Some(cb) => cb,
             None => return Ok(None),
         };
+        let cached_build = self
+            .ensure_project_cached_build()
+            .await
+            .unwrap_or_else(|| file_build.clone());
 
-        // Get references from the current file's AST — uses pre-built indices
+        // Get references from the active build (project build preferred).
         let mut locations = references::goto_references_cached(
             &cached_build,
             &uri,
