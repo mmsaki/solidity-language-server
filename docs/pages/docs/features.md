@@ -12,8 +12,8 @@
 - **Signature Help** — parameter info on function calls, event emits, and mapping access
 - **Inlay Hints** — parameter names and gas estimates
 - **File Operations** — `workspace/willCreateFiles` scaffolding + `workspace/willRenameFiles`/`workspace/willDeleteFiles` import edits + `workspace/didCreateFiles`/`workspace/didRenameFiles`/`workspace/didDeleteFiles` cache migration/re-index (`fileOperations.templateOnCreate`, `fileOperations.updateImportsOnRename`, `fileOperations.updateImportsOnDelete`)
-- **Project Indexing Mode** — optional full-project indexing via `projectIndex.fullProjectScan` (available in versions newer than `v0.1.26`)
-- **Persistent Project Cache** — on-disk warm-start cache for reference/goto data, with atomic writes and single-flight save-sync after file operations
+- **Project Indexing Mode** — optional full-project indexing via `projectIndex.fullProjectScan`, persistent cache selection via `projectIndex.cacheMode` (`auto` / `v1` / `v2`), and aggressive dependency-closure dirty-sync via `projectIndex.incrementalEditReindex`
+- **Persistent Project Cache** — on-disk warm-start cache for reference/goto data, with atomic writes, immediate per-save v2 upserts, and warm-load changed-file reconcile
 
 ### LSP Methods
 

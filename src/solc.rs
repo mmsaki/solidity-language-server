@@ -896,6 +896,40 @@ pub async fn solc_project_index(
         )));
     }
 
+    solc_project_index_from_files(config, client, text_cache, &source_files).await
+}
+
+/// Run a scoped project-index compile over a selected file list.
+///
+/// This is intended for aggressive incremental reindex strategies where only
+/// a dependency-closure subset should be recompiled.
+pub async fn solc_project_index_scoped(
+    config: &FoundryConfig,
+    client: Option<&tower_lsp::Client>,
+    text_cache: Option<&HashMap<String, (i32, String)>>,
+    source_files: &[PathBuf],
+) -> Result<Value, RunnerError> {
+    if source_files.is_empty() {
+        return Err(RunnerError::CommandError(std::io::Error::other(
+            "no source files provided for scoped project index",
+        )));
+    }
+
+    solc_project_index_from_files(config, client, text_cache, source_files).await
+}
+
+async fn solc_project_index_from_files(
+    config: &FoundryConfig,
+    client: Option<&tower_lsp::Client>,
+    text_cache: Option<&HashMap<String, (i32, String)>>,
+    source_files: &[PathBuf],
+) -> Result<Value, RunnerError> {
+    if source_files.is_empty() {
+        return Err(RunnerError::CommandError(std::io::Error::other(
+            "no source files found for project index",
+        )));
+    }
+
     if let Some(c) = client {
         c.log_message(
             tower_lsp::lsp_types::MessageType::INFO,
