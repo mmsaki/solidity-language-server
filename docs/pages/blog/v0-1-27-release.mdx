@@ -1,0 +1,28 @@
+# v0.1.27
+
+Incremental Reindex Safety and Faster Cache Reuse
+
+This release improves project-index reliability for large codebases by making incremental reindexing safer and cache reuse more predictable.
+
+## What shipped
+
+- New `projectIndex.incrementalEditReindexThreshold` setting (default `0.4`) to gate scoped reindex by affected-file ratio.
+- Safer scoped reindex behavior:
+  - scoped results are merged into the root cached build instead of replacing it,
+  - declaration-id collision guardrails trigger full reindex fallback when unsafe.
+- Project cache v2 lifecycle improvements:
+  - warm-load reconcile for changed/affected files,
+  - immediate per-save v2 upsert for touched files,
+  - debounced single-flight sync during save bursts.
+
+## Why this matters
+
+- Reduces stale reference/goto windows after edits.
+- Improves cache correctness under heavy save/refactor activity.
+- Keeps startup behavior more predictable for large projects.
+
+## Upgrade
+
+```sh
+cargo install solidity-language-server
+```

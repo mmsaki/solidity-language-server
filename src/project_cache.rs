@@ -16,6 +16,8 @@ const CACHE_DIR: &str = ".solidity-language-server";
 const CACHE_FILE_V1: &str = "solidity-lsp-schema-v1.json";
 const CACHE_FILE_V2: &str = "solidity-lsp-schema-v2.json";
 const CACHE_SHARDS_DIR_V2: &str = "reference-index-v2";
+const CACHE_GITIGNORE_FILE: &str = ".gitignore";
+const CACHE_GITIGNORE_CONTENTS: &str = "*\n!.gitignore\n";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PersistedNodeEntry {
@@ -89,6 +91,29 @@ fn cache_file_path_v2(root: &Path) -> PathBuf {
 
 fn cache_shards_dir_v2(root: &Path) -> PathBuf {
     root.join(CACHE_DIR).join(CACHE_SHARDS_DIR_V2)
+}
+
+fn ensure_cache_dir_layout(root: &Path) -> Result<(PathBuf, PathBuf), String> {
+    let cache_root = root.join(CACHE_DIR);
+    fs::create_dir_all(&cache_root)
+        .map_err(|e| format!("failed to create cache dir {}: {e}", cache_root.display()))?;
+
+    // Ensure cache artifacts are ignored by Git in consumer projects.
+    let gitignore_path = cache_root.join(CACHE_GITIGNORE_FILE);
+    if !gitignore_path.exists() {
+        fs::write(&gitignore_path, CACHE_GITIGNORE_CONTENTS).map_err(|e| {
+            format!(
+                "failed to write cache gitignore {}: {e}",
+                gitignore_path.display()
+            )
+        })?;
+    }
+
+    let shards_dir = cache_shards_dir_v2(root);
+    fs::create_dir_all(&shards_dir)
+        .map_err(|e| format!("failed to create shards dir {}: {e}", shards_dir.display()))?;
+
+    Ok((cache_root, shards_dir))
 }
 
 fn shard_file_name_for_rel_path(rel_path: &str) -> String {
@@ -202,12 +227,7 @@ pub fn upsert_reference_cache_v2_with_report(
         return Err(format!("invalid project root: {}", config.root.display()));
     }
 
-    let cache_root = config.root.join(CACHE_DIR);
-    fs::create_dir_all(&cache_root)
-        .map_err(|e| format!("failed to create cache dir {}: {e}", cache_root.display()))?;
-    let shards_dir = cache_shards_dir_v2(&config.root);
-    fs::create_dir_all(&shards_dir)
-        .map_err(|e| format!("failed to create shards dir {}: {e}", shards_dir.display()))?;
+    let (_cache_root, shards_dir) = ensure_cache_dir_layout(&config.root)?;
 
     let meta_path = cache_file_path_v2(&config.root);
     let mut meta = if let Ok(bytes) = fs::read(&meta_path) {
@@ -320,12 +340,7 @@ pub fn save_reference_cache_with_report(
         })
         .collect::<Vec<_>>();
 
-    let cache_root = config.root.join(CACHE_DIR);
-    fs::create_dir_all(&cache_root)
-        .map_err(|e| format!("failed to create cache dir {}: {e}", cache_root.display()))?;
-    let shards_dir = cache_shards_dir_v2(&config.root);
-    fs::create_dir_all(&shards_dir)
-        .map_err(|e| format!("failed to create shards dir {}: {e}", shards_dir.display()))?;
+    let (_cache_root, shards_dir) = ensure_cache_dir_layout(&config.root)?;
 
     let mut node_shards: BTreeMap<String, String> = BTreeMap::new();
     let mut live_shards = std::collections::HashSet::new();
