@@ -10,10 +10,8 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 use tiny_keccak::{Hasher, Keccak};
 
-const CACHE_SCHEMA_VERSION_V1: u32 = 1;
 const CACHE_SCHEMA_VERSION_V2: u32 = 2;
 const CACHE_DIR: &str = ".solidity-language-server";
-const CACHE_FILE_V1: &str = "solidity-lsp-schema-v1.json";
 const CACHE_FILE_V2: &str = "solidity-lsp-schema-v2.json";
 const CACHE_SHARDS_DIR_V2: &str = "reference-index-v2";
 const CACHE_GITIGNORE_FILE: &str = ".gitignore";
@@ -29,18 +27,6 @@ struct PersistedNodeEntry {
 struct PersistedExternalRef {
     src: String,
     decl_id: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct PersistedReferenceCache {
-    schema_version: u32,
-    project_root: String,
-    config_fingerprint: String,
-    file_hashes: BTreeMap<String, String>,
-    nodes: HashMap<String, Vec<PersistedNodeEntry>>,
-    path_to_abs: HashMap<String, String>,
-    external_refs: Vec<PersistedExternalRef>,
-    id_to_path_map: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,10 +65,6 @@ pub struct CacheLoadReport {
 pub struct CacheSaveReport {
     pub file_count_hashed: usize,
     pub duration_ms: u128,
-}
-
-fn cache_file_path_v1(root: &Path) -> PathBuf {
-    root.join(CACHE_DIR).join(CACHE_FILE_V1)
 }
 
 fn cache_file_path_v2(root: &Path) -> PathBuf {
@@ -399,9 +381,6 @@ pub fn save_reference_cache_with_report(
         serde_json::to_vec(&persisted_v2).map_err(|e| format!("serialize v2 cache: {e}"))?;
     write_atomic_json(&cache_file_path_v2(&config.root), &payload_v2)?;
 
-    // Intentionally bypass v1 writes: v2 is now the only persisted write path.
-    // v1 read fallback remains available for older on-disk caches.
-
     Ok(CacheSaveReport {
         file_count_hashed,
         duration_ms: started.elapsed().as_millis(),
@@ -479,14 +458,7 @@ pub fn load_reference_cache_with_report(
     };
     let file_count_hashed = current_hashes.len();
 
-    let should_try_v2 = matches!(
-        cache_mode,
-        ProjectIndexCacheMode::Auto | ProjectIndexCacheMode::V2
-    );
-    let should_try_v1 = matches!(
-        cache_mode,
-        ProjectIndexCacheMode::Auto | ProjectIndexCacheMode::V1
-    );
+    let should_try_v2 = matches!(cache_mode, ProjectIndexCacheMode::Auto | ProjectIndexCacheMode::V2);
 
     // Try v2 first (partial warm-start capable).
     let cache_path_v2 = cache_file_path_v2(&config.root);
@@ -592,95 +564,9 @@ pub fn load_reference_cache_with_report(
         };
     }
 
-    if !should_try_v1 {
-        return miss(
-            "cache mode v2: no usable v2 cache".to_string(),
-            file_count_hashed,
-            started.elapsed().as_millis(),
-        );
-    }
-
-    // Fallback to v1 (all-or-nothing).
-    let cache_path_v1 = cache_file_path_v1(&config.root);
-    let bytes = match fs::read(&cache_path_v1) {
-        Ok(b) => b,
-        Err(e) => {
-            return miss(
-                format!("cache file read failed: {e}"),
-                file_count_hashed,
-                started.elapsed().as_millis(),
-            );
-        }
-    };
-    let persisted: PersistedReferenceCache = match serde_json::from_slice(&bytes) {
-        Ok(v) => v,
-        Err(e) => {
-            return miss(
-                format!("cache decode failed: {e}"),
-                file_count_hashed,
-                started.elapsed().as_millis(),
-            );
-        }
-    };
-    if persisted.schema_version != CACHE_SCHEMA_VERSION_V1 {
-        return miss(
-            format!(
-                "schema mismatch: cache={}, expected={}",
-                persisted.schema_version, CACHE_SCHEMA_VERSION_V1
-            ),
-            file_count_hashed,
-            started.elapsed().as_millis(),
-        );
-    }
-    if persisted.project_root != config.root.to_string_lossy() {
-        return miss(
-            "project root mismatch".to_string(),
-            file_count_hashed,
-            started.elapsed().as_millis(),
-        );
-    }
-    if persisted.config_fingerprint != config_fingerprint(config) {
-        return miss(
-            "config fingerprint mismatch".to_string(),
-            file_count_hashed,
-            started.elapsed().as_millis(),
-        );
-    }
-    if current_hashes != persisted.file_hashes {
-        return miss(
-            "file hash mismatch".to_string(),
-            file_count_hashed,
-            started.elapsed().as_millis(),
-        );
-    }
-
-    let mut nodes: HashMap<String, HashMap<NodeId, NodeInfo>> =
-        HashMap::with_capacity(persisted.nodes.len());
-    for (abs_path, entries) in persisted.nodes {
-        let mut file_nodes = HashMap::with_capacity(entries.len());
-        for entry in entries {
-            file_nodes.insert(NodeId(entry.id), entry.info);
-        }
-        nodes.insert(abs_path, file_nodes);
-    }
-    let mut external_refs = HashMap::new();
-    for item in persisted.external_refs {
-        external_refs.insert(item.src, NodeId(item.decl_id));
-    }
-
-    CacheLoadReport {
-        build: Some(CachedBuild::from_reference_index(
-            nodes,
-            persisted.path_to_abs,
-            external_refs,
-            persisted.id_to_path_map,
-            0,
-        )),
-        hit: true,
-        miss_reason: None,
+    miss(
+        "cache mode v2: no usable v2 cache".to_string(),
         file_count_hashed,
-        file_count_reused: file_count_hashed,
-        complete: true,
-        duration_ms: started.elapsed().as_millis(),
-    }
+        started.elapsed().as_millis(),
+    )
 }

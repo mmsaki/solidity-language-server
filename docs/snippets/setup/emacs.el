@@ -19,5 +19,5 @@
       :updateImportsOnDelete t)
      :projectIndex
      (:fullProjectScan t
-      :cacheMode "auto"
+      :cacheMode "v2"
       :incrementalEditReindex :json-false)))))

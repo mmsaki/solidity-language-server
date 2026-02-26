@@ -117,13 +117,12 @@ impl Default for FileOperationsSettings {
 #[serde(rename_all = "camelCase")]
 pub struct ProjectIndexSettings {
     /// If true, run a full-project index scan at startup / first successful build.
-    /// If false (default), skip eager full-project scanning for faster startup.
+    /// If false, skip eager full-project scanning for faster startup.
     #[serde(default)]
     pub full_project_scan: bool,
     /// Persistent reference cache mode:
-    /// - `auto` (default): prefer v2, fallback to v1
-    /// - `v1`: force legacy all-or-nothing cache
-    /// - `v2`: force per-file shard cache
+    /// - `v2` (default): per-file shard cache
+    /// - `auto`: alias to v2 for compatibility
     #[serde(default)]
     pub cache_mode: ProjectIndexCacheMode,
     /// If true, use an aggressive scoped reindex strategy on dirty sync:
@@ -136,17 +135,16 @@ pub struct ProjectIndexSettings {
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ProjectIndexCacheMode {
-    #[default]
     Auto,
-    V1,
+    #[default]
     V2,
 }
 
 impl Default for ProjectIndexSettings {
     fn default() -> Self {
         Self {
-            full_project_scan: false,
-            cache_mode: ProjectIndexCacheMode::Auto,
+            full_project_scan: true,
+            cache_mode: ProjectIndexCacheMode::V2,
             incremental_edit_reindex: false,
         }
     }
@@ -965,8 +963,8 @@ src = "src"
         assert!(s.file_operations.template_on_create);
         assert!(s.file_operations.update_imports_on_rename);
         assert!(s.file_operations.update_imports_on_delete);
-        assert!(!s.project_index.full_project_scan);
-        assert_eq!(s.project_index.cache_mode, ProjectIndexCacheMode::Auto);
+        assert!(s.project_index.full_project_scan);
+        assert_eq!(s.project_index.cache_mode, ProjectIndexCacheMode::V2);
         assert!(!s.project_index.incremental_edit_reindex);
         assert!(s.lint.severity.is_empty());
         assert!(s.lint.only.is_empty());
@@ -1026,7 +1024,7 @@ src = "src"
             },
             "projectIndex": {
                 "fullProjectScan": true,
-                "cacheMode": "v1",
+                "cacheMode": "v2",
                 "incrementalEditReindex": true
             }
         });
@@ -1037,7 +1035,7 @@ src = "src"
         assert!(!s.file_operations.update_imports_on_rename);
         assert!(!s.file_operations.update_imports_on_delete);
         assert!(s.project_index.full_project_scan);
-        assert_eq!(s.project_index.cache_mode, ProjectIndexCacheMode::V1);
+        assert_eq!(s.project_index.cache_mode, ProjectIndexCacheMode::V2);
         assert!(s.project_index.incremental_edit_reindex);
     }
 
@@ -1057,8 +1055,8 @@ src = "src"
         assert!(s.file_operations.template_on_create);
         assert!(s.file_operations.update_imports_on_rename);
         assert!(s.file_operations.update_imports_on_delete);
-        assert!(!s.project_index.full_project_scan);
-        assert_eq!(s.project_index.cache_mode, ProjectIndexCacheMode::Auto);
+        assert!(s.project_index.full_project_scan);
+        assert_eq!(s.project_index.cache_mode, ProjectIndexCacheMode::V2);
         assert!(!s.project_index.incremental_edit_reindex);
         assert!(s.lint.severity.is_empty());
         assert!(s.lint.only.is_empty());
@@ -1077,8 +1075,8 @@ src = "src"
         assert!(s.file_operations.template_on_create);
         assert!(s.file_operations.update_imports_on_rename);
         assert!(s.file_operations.update_imports_on_delete);
-        assert!(!s.project_index.full_project_scan);
-        assert_eq!(s.project_index.cache_mode, ProjectIndexCacheMode::Auto);
+        assert!(s.project_index.full_project_scan);
+        assert_eq!(s.project_index.cache_mode, ProjectIndexCacheMode::V2);
         assert!(!s.project_index.incremental_edit_reindex);
         assert!(s.lint.severity.is_empty());
         assert!(s.lint.only.is_empty());
@@ -1095,7 +1093,7 @@ src = "src"
             }
         });
         let s = parse_settings(&value);
-        assert_eq!(s.project_index.cache_mode, ProjectIndexCacheMode::Auto);
+        assert_eq!(s.project_index.cache_mode, ProjectIndexCacheMode::V2);
         assert!(!s.project_index.incremental_edit_reindex);
     }
 

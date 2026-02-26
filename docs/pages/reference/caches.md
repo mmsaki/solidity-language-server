@@ -16,10 +16,6 @@ Current primary schema is v2:
 - `.solidity-language-server/solidity-lsp-schema-v2.json` (metadata)
 - `.solidity-language-server/reference-index-v2/*.json` (per-file shards)
 
-Legacy v1 read fallback still exists for older cache files:
-
-- `.solidity-language-server/solidity-lsp-schema-v1.json`
-
 The cache directory now auto-generates:
 
 - `.solidity-language-server/.gitignore`
@@ -68,10 +64,9 @@ This keeps reference/goto data fresh without full-project recompiles on every sa
 
 Under `projectIndex`:
 
-- `cacheMode`: `auto` | `v1` | `v2`
+- `cacheMode`: `v2`
 - `incrementalEditReindex`: enable scoped affected-file reindex path
 - `incrementalEditReindexThreshold`: ratio gate for scoped vs full reindex
 - `fullProjectScan`: optional broader startup indexing mode
 
 See setup schema in [Setup Overview](/setup).
-

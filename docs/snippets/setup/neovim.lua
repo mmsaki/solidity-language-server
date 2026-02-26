@@ -40,8 +40,8 @@ return {
       },
       projectIndex = {
         fullProjectScan = true,
-        -- Persistent cache mode: "auto" | "v1" | "v2"
-        cacheMode = "auto",
+        -- Persistent cache mode: "v2"
+        cacheMode = "v2",
         -- Aggressive scoped dirty-sync: reindex only reverse-import affected files.
         -- Falls back to full reindex if scoped compile fails.
         incrementalEditReindex = false,

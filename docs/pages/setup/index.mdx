@@ -24,7 +24,7 @@ All editor configs support the same server settings.
     },
     "projectIndex": {
       "fullProjectScan": true,
-      "cacheMode": "auto",
+      "cacheMode": "v2",
       "incrementalEditReindex": false
     }
   }
@@ -60,10 +60,7 @@ Foundry lint config reference (lint_on_build): [Foundry linter config docs](http
 - Empty arrays for `severity`, `only`, `exclude` mean "no filter".
 - Defaults are all enabled (`true`) with empty lint arrays.
 - `projectIndex.fullProjectScan` defaults to `true` to prioritize complete project references/definitions at startup.
-- `projectIndex.cacheMode` controls persistent cache strategy:
-  - `"auto"` (default): try cache v2 first, fallback to v1.
-  - `"v1"`: force legacy all-or-nothing cache.
-  - `"v2"`: force per-file shard cache.
+- `projectIndex.cacheMode` uses `"v2"` by default and should remain `"v2"` for normal use.
 - `projectIndex.incrementalEditReindex` enables an aggressive dependency-closure
   scoped reindex path on dirty sync.
 - `projectIndex.fullProjectScan` is available only in versions newer than `v0.1.26` (`v0.1.27+`).

@@ -17,7 +17,7 @@
     },
     "projectIndex": {
       "fullProjectScan": true,
-      "cacheMode": "auto",
+      "cacheMode": "v2",
       "incrementalEditReindex": false
     }
   }

@@ -9,6 +9,6 @@
   "solidity-language-server.fileOperations.updateImportsOnRename": true,
   "solidity-language-server.fileOperations.updateImportsOnDelete": true,
   "solidity-language-server.projectIndex.fullProjectScan": true,
-  "solidity-language-server.projectIndex.cacheMode": "auto",
+  "solidity-language-server.projectIndex.cacheMode": "v2",
   "solidity-language-server.projectIndex.incrementalEditReindex": false
 }
