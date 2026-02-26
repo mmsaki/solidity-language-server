@@ -131,11 +131,6 @@ pub struct ProjectIndexSettings {
     /// Falls back to full-project reindex on failure.
     #[serde(default)]
     pub incremental_edit_reindex: bool,
-    /// Threshold ratio for incremental scoped reindex.
-    /// If affected/total exceeds this value, the server skips scoped reindex
-    /// and falls back to full-project reindex directly.
-    #[serde(default = "default_incremental_reindex_threshold")]
-    pub incremental_edit_reindex_threshold: f64,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
@@ -153,17 +148,12 @@ impl Default for ProjectIndexSettings {
             full_project_scan: false,
             cache_mode: ProjectIndexCacheMode::Auto,
             incremental_edit_reindex: false,
-            incremental_edit_reindex_threshold: default_incremental_reindex_threshold(),
         }
     }
 }
 
 fn default_true() -> bool {
     true
-}
-
-fn default_incremental_reindex_threshold() -> f64 {
-    0.4
 }
 
 /// Try to parse `Settings` from a `serde_json::Value`.
@@ -978,7 +968,6 @@ src = "src"
         assert!(!s.project_index.full_project_scan);
         assert_eq!(s.project_index.cache_mode, ProjectIndexCacheMode::Auto);
         assert!(!s.project_index.incremental_edit_reindex);
-        assert_eq!(s.project_index.incremental_edit_reindex_threshold, 0.4);
         assert!(s.lint.severity.is_empty());
         assert!(s.lint.only.is_empty());
         assert!(s.lint.exclude.is_empty());
@@ -1003,8 +992,7 @@ src = "src"
                 "projectIndex": {
                     "fullProjectScan": true,
                     "cacheMode": "v2",
-                    "incrementalEditReindex": true,
-                    "incrementalEditReindexThreshold": 0.25
+                    "incrementalEditReindex": true
                 },
             }
         });
@@ -1018,7 +1006,6 @@ src = "src"
         assert!(s.project_index.full_project_scan);
         assert_eq!(s.project_index.cache_mode, ProjectIndexCacheMode::V2);
         assert!(s.project_index.incremental_edit_reindex);
-        assert_eq!(s.project_index.incremental_edit_reindex_threshold, 0.25);
         assert_eq!(s.lint.severity, vec!["high", "med"]);
         assert_eq!(s.lint.only, vec!["incorrect-shift"]);
         assert_eq!(
@@ -1040,8 +1027,7 @@ src = "src"
             "projectIndex": {
                 "fullProjectScan": true,
                 "cacheMode": "v1",
-                "incrementalEditReindex": true,
-                "incrementalEditReindexThreshold": 0.6
+                "incrementalEditReindex": true
             }
         });
         let s = parse_settings(&value);
@@ -1053,7 +1039,6 @@ src = "src"
         assert!(s.project_index.full_project_scan);
         assert_eq!(s.project_index.cache_mode, ProjectIndexCacheMode::V1);
         assert!(s.project_index.incremental_edit_reindex);
-        assert_eq!(s.project_index.incremental_edit_reindex_threshold, 0.6);
     }
 
     #[test]
@@ -1075,7 +1060,6 @@ src = "src"
         assert!(!s.project_index.full_project_scan);
         assert_eq!(s.project_index.cache_mode, ProjectIndexCacheMode::Auto);
         assert!(!s.project_index.incremental_edit_reindex);
-        assert_eq!(s.project_index.incremental_edit_reindex_threshold, 0.4);
         assert!(s.lint.severity.is_empty());
         assert!(s.lint.only.is_empty());
         assert_eq!(s.lint.exclude, vec!["unused-import"]);

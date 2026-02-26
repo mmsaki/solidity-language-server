@@ -1133,8 +1133,8 @@ impl LanguageServer for ForgeLsp {
                 .log_message(
                     MessageType::INFO,
                     format!(
-                        "settings: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.templateOnCreate={}, fileOperations.updateImportsOnRename={}, fileOperations.updateImportsOnDelete={}, projectIndex.fullProjectScan={}, projectIndex.cacheMode={:?}, projectIndex.incrementalEditReindex={}, projectIndex.incrementalEditReindexThreshold={}",
-                        s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.template_on_create, s.file_operations.update_imports_on_rename, s.file_operations.update_imports_on_delete, s.project_index.full_project_scan, s.project_index.cache_mode, s.project_index.incremental_edit_reindex, s.project_index.incremental_edit_reindex_threshold,
+                        "settings: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.templateOnCreate={}, fileOperations.updateImportsOnRename={}, fileOperations.updateImportsOnDelete={}, projectIndex.fullProjectScan={}, projectIndex.cacheMode={:?}, projectIndex.incrementalEditReindex={}",
+                        s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.template_on_create, s.file_operations.update_imports_on_rename, s.file_operations.update_imports_on_delete, s.project_index.full_project_scan, s.project_index.cache_mode, s.project_index.incremental_edit_reindex,
                     ),
                 )
                 .await;
@@ -2071,9 +2071,6 @@ impl LanguageServer for ForgeLsp {
                 let pending_flag = self.project_cache_sync_pending.clone();
                 let changed_files = self.project_cache_changed_files.clone();
                 let aggressive_scoped = settings_snapshot.project_index.incremental_edit_reindex;
-                let aggressive_scoped_threshold = settings_snapshot
-                    .project_index
-                    .incremental_edit_reindex_threshold;
 
                 tokio::spawn(async move {
                     loop {
@@ -2115,7 +2112,6 @@ impl LanguageServer for ForgeLsp {
                             continue;
                         }
 
-                        let mut used_scoped_path = false;
                         let mut scoped_ok = false;
 
                         if aggressive_scoped {
@@ -2128,7 +2124,6 @@ impl LanguageServer for ForgeLsp {
                                 drained
                             };
                             if !changed_abs.is_empty() {
-                                used_scoped_path = true;
                                 let remappings = crate::solc::resolve_remappings(&foundry_config).await;
                                 let cfg_for_plan = foundry_config.clone();
                                 let changed_for_plan = changed_abs.clone();
@@ -2146,29 +2141,13 @@ impl LanguageServer for ForgeLsp {
                                     Ok(set) => set.into_iter().collect::<Vec<PathBuf>>(),
                                     Err(_) => Vec::new(),
                                 };
-                                let total_sources =
-                                    crate::solc::discover_source_files(&foundry_config).len();
-
-                                let threshold = aggressive_scoped_threshold.clamp(0.0, 1.0);
-                                let ratio = if total_sources > 0 {
-                                    affected_files.len() as f64 / total_sources as f64
-                                } else {
-                                    1.0
-                                };
-
-                                if !affected_files.is_empty()
-                                    && affected_files.len() < total_sources
-                                    && ratio <= threshold
-                                {
+                                if !affected_files.is_empty() {
                                     client
                                         .log_message(
                                             MessageType::INFO,
                                             format!(
-                                                "didSave cache sync: aggressive scoped reindex (affected={}/{}, ratio={:.3}, threshold={:.3})",
+                                                "didSave cache sync: aggressive scoped reindex (affected={})",
                                                 affected_files.len(),
-                                                total_sources,
-                                                ratio,
-                                                threshold
                                             ),
                                         )
                                         .await;
@@ -2244,10 +2223,11 @@ impl LanguageServer for ForgeLsp {
                                                     .log_message(
                                                         MessageType::WARNING,
                                                         format!(
-                                                            "didSave cache sync: scoped merge rejected, falling back to full: {e}"
+                                                            "didSave cache sync: scoped merge rejected, will retry scoped on next save: {e}"
                                                         ),
                                                     )
                                                     .await;
+                                                dirty_flag.store(true, Ordering::Release);
                                                 }
                                             }
                                         }
@@ -2256,23 +2236,18 @@ impl LanguageServer for ForgeLsp {
                                                 .log_message(
                                                     MessageType::WARNING,
                                                     format!(
-                                                        "didSave cache sync: scoped reindex failed, falling back to full: {e}"
+                                                        "didSave cache sync: scoped reindex failed, will retry scoped on next save: {e}"
                                                     ),
                                                 )
                                                 .await;
+                                            dirty_flag.store(true, Ordering::Release);
                                         }
                                     }
-                                } else if !affected_files.is_empty() {
+                                } else {
                                     client
                                         .log_message(
                                             MessageType::INFO,
-                                            format!(
-                                                "didSave cache sync: scoped reindex skipped by threshold/full-coverage (affected={}/{}, ratio={:.3}, threshold={:.3})",
-                                                affected_files.len(),
-                                                total_sources,
-                                                ratio,
-                                                threshold
-                                            ),
+                                            "didSave cache sync: no affected files from scoped planner",
                                         )
                                         .await;
                                 }
@@ -2282,24 +2257,16 @@ impl LanguageServer for ForgeLsp {
                         if scoped_ok {
                             continue;
                         }
-
-                        if used_scoped_path {
-                            // Scoped plan was attempted but could not complete safely.
-                            // Fall through to full re-index + persist as authoritative.
-                            client
-                                .log_message(
-                                    MessageType::INFO,
-                                    "didSave cache sync: falling back to full project reindex",
-                                )
-                                .await;
-                        } else {
-                            client
-                                .log_message(
-                                    MessageType::INFO,
-                                    "didSave cache sync: rebuilding project index from disk",
-                                )
-                                .await;
+                        if aggressive_scoped {
+                            continue;
                         }
+
+                        client
+                            .log_message(
+                                MessageType::INFO,
+                                "didSave cache sync: rebuilding project index from disk",
+                            )
+                            .await;
 
                         match crate::solc::solc_project_index(&foundry_config, Some(&client), None)
                             .await
@@ -2488,8 +2455,8 @@ impl LanguageServer for ForgeLsp {
                 .log_message(
                     MessageType::INFO,
                     format!(
-                        "settings updated: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.templateOnCreate={}, fileOperations.updateImportsOnRename={}, fileOperations.updateImportsOnDelete={}, projectIndex.fullProjectScan={}, projectIndex.cacheMode={:?}, projectIndex.incrementalEditReindex={}, projectIndex.incrementalEditReindexThreshold={}",
-                    s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.template_on_create, s.file_operations.update_imports_on_rename, s.file_operations.update_imports_on_delete, s.project_index.full_project_scan, s.project_index.cache_mode, s.project_index.incremental_edit_reindex, s.project_index.incremental_edit_reindex_threshold,
+                        "settings updated: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.templateOnCreate={}, fileOperations.updateImportsOnRename={}, fileOperations.updateImportsOnDelete={}, projectIndex.fullProjectScan={}, projectIndex.cacheMode={:?}, projectIndex.incrementalEditReindex={}",
+                    s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.template_on_create, s.file_operations.update_imports_on_rename, s.file_operations.update_imports_on_delete, s.project_index.full_project_scan, s.project_index.cache_mode, s.project_index.incremental_edit_reindex,
                 ),
             )
             .await;
@@ -2946,14 +2913,85 @@ impl LanguageServer for ForgeLsp {
             Some(cb) => cb,
             None => return Ok(None),
         };
-        let cached_build = self
-            .ensure_project_cached_build()
+        let mut project_build = self.ensure_project_cached_build().await;
+        let current_abs = file_path.to_string_lossy().to_string();
+        if self.use_solc
+            && self.settings.read().await.project_index.full_project_scan
+            && project_build
+                .as_ref()
+                .is_some_and(|b| !b.nodes.contains_key(&current_abs))
+        {
+            let foundry_config = self.foundry_config_for_file(&file_path).await;
+            let remappings = crate::solc::resolve_remappings(&foundry_config).await;
+            let changed = vec![PathBuf::from(&current_abs)];
+            let cfg_for_plan = foundry_config.clone();
+            let remappings_for_plan = remappings.clone();
+            let affected_set = tokio::task::spawn_blocking(move || {
+                compute_reverse_import_closure(&cfg_for_plan, &changed, &remappings_for_plan)
+            })
             .await
-            .unwrap_or_else(|| file_build.clone());
+            .ok()
+            .unwrap_or_default();
+            let mut affected_files: Vec<PathBuf> = affected_set.into_iter().collect();
+            if affected_files.is_empty() {
+                affected_files.push(PathBuf::from(&current_abs));
+            }
+            let text_cache_snapshot = self.text_cache.read().await.clone();
+            match crate::solc::solc_project_index_scoped(
+                &foundry_config,
+                Some(&self.client),
+                Some(&text_cache_snapshot),
+                &affected_files,
+            )
+            .await
+            {
+                Ok(ast_data) => {
+                    let scoped_build = Arc::new(crate::goto::CachedBuild::new(ast_data, 0));
+                    if let Some(root_key) = self.project_cache_key().await {
+                        let merged = {
+                            let mut cache = self.ast_cache.write().await;
+                            let merged = if let Some(existing) = cache.get(&root_key).cloned() {
+                                let mut merged = (*existing).clone();
+                                match merge_scoped_cached_build(&mut merged, (*scoped_build).clone())
+                                {
+                                    Ok(_) => Arc::new(merged),
+                                    Err(_) => scoped_build.clone(),
+                                }
+                            } else {
+                                scoped_build.clone()
+                            };
+                            cache.insert(root_key, merged.clone());
+                            merged
+                        };
+                        project_build = Some(merged);
+                    } else {
+                        project_build = Some(scoped_build);
+                    }
+                    self.client
+                        .log_message(
+                            MessageType::INFO,
+                            format!(
+                                "references warm-refresh: scoped reindex applied (affected={})",
+                                affected_files.len()
+                            ),
+                        )
+                        .await;
+                }
+                Err(e) => {
+                    self.client
+                        .log_message(
+                            MessageType::WARNING,
+                            format!("references warm-refresh: scoped reindex failed: {e}"),
+                        )
+                        .await;
+                }
+            }
+        }
 
-        // Get references from the active build (project build preferred).
+        // Always resolve target/local references from the current file build.
+        // This avoids stale/partial project-cache misses immediately after edits.
         let mut locations = references::goto_references_cached(
-            &cached_build,
+            &file_build,
             &uri,
             position,
             &source_bytes,
@@ -2961,17 +2999,13 @@ impl LanguageServer for ForgeLsp {
             params.context.include_declaration,
         );
 
-        // Cross-file: resolve target definition location, then scan other cached ASTs
+        // Cross-file: resolve target from current file, then expand in project cache.
         if let Some((def_abs_path, def_byte_offset)) =
-            references::resolve_target_location(&cached_build, &uri, position, &source_bytes)
+            references::resolve_target_location(&file_build, &uri, position, &source_bytes)
         {
-            let cache = self.ast_cache.read().await;
-            for (cached_uri, other_build) in cache.iter() {
-                if *cached_uri == uri.to_string() {
-                    continue;
-                }
+            if let Some(project_build) = project_build {
                 let other_locations = references::goto_references_for_target(
-                    other_build,
+                    &project_build,
                     &def_abs_path,
                     def_byte_offset,
                     None,

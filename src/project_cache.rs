@@ -53,6 +53,8 @@ struct PersistedReferenceCacheV2 {
     project_root: String,
     config_fingerprint: String,
     file_hashes: BTreeMap<String, String>,
+    #[serde(default)]
+    file_hash_history: BTreeMap<String, Vec<String>>,
     path_to_abs: HashMap<String, String>,
     id_to_path_map: HashMap<String, String>,
     external_refs: Vec<PersistedExternalRef>,
@@ -169,6 +171,19 @@ fn config_fingerprint(config: &FoundryConfig) -> String {
     keccak_hex(payload.to_string().as_bytes())
 }
 
+fn push_hash_history(meta: &mut PersistedReferenceCacheV2, rel: &str, hash: &str) {
+    const MAX_HISTORY: usize = 8;
+    let history = meta.file_hash_history.entry(rel.to_string()).or_default();
+    if history.last().is_some_and(|h| h == hash) {
+        return;
+    }
+    history.push(hash.to_string());
+    if history.len() > MAX_HISTORY {
+        let drop_count = history.len() - MAX_HISTORY;
+        history.drain(0..drop_count);
+    }
+}
+
 pub fn save_reference_cache(config: &FoundryConfig, build: &CachedBuild) -> Result<(), String> {
     save_reference_cache_with_report(config, build).map(|_| ())
 }
@@ -201,6 +216,7 @@ pub fn upsert_reference_cache_v2_with_report(
             project_root: config.root.to_string_lossy().to_string(),
             config_fingerprint: config_fingerprint(config),
             file_hashes: BTreeMap::new(),
+            file_hash_history: BTreeMap::new(),
             path_to_abs: HashMap::new(),
             id_to_path_map: HashMap::new(),
             external_refs: Vec::new(),
@@ -212,6 +228,7 @@ pub fn upsert_reference_cache_v2_with_report(
             project_root: config.root.to_string_lossy().to_string(),
             config_fingerprint: config_fingerprint(config),
             file_hashes: BTreeMap::new(),
+            file_hash_history: BTreeMap::new(),
             path_to_abs: HashMap::new(),
             id_to_path_map: HashMap::new(),
             external_refs: Vec::new(),
@@ -228,6 +245,7 @@ pub fn upsert_reference_cache_v2_with_report(
             project_root: config.root.to_string_lossy().to_string(),
             config_fingerprint: config_fingerprint(config),
             file_hashes: BTreeMap::new(),
+            file_hash_history: BTreeMap::new(),
             path_to_abs: HashMap::new(),
             id_to_path_map: HashMap::new(),
             external_refs: Vec::new(),
@@ -259,6 +277,9 @@ pub fn upsert_reference_cache_v2_with_report(
 
         if let Some(hash) = file_hash(abs) {
             meta.file_hashes.insert(rel.clone(), hash);
+            if let Some(current) = meta.file_hashes.get(&rel).cloned() {
+                push_hash_history(&mut meta, &rel, &current);
+            }
             meta.node_shards.insert(rel, shard_name);
             touched += 1;
         }
@@ -347,6 +368,13 @@ pub fn save_reference_cache_with_report(
         project_root: config.root.to_string_lossy().to_string(),
         config_fingerprint: config_fingerprint(config),
         file_hashes: file_hashes.clone(),
+        file_hash_history: {
+            let mut h = BTreeMap::new();
+            for (rel, hash) in &file_hashes {
+                h.insert(rel.clone(), vec![hash.clone()]);
+            }
+            h
+        },
         path_to_abs: build.path_to_abs.clone(),
         external_refs: external_refs.clone(),
         id_to_path_map: build.id_to_path_map.clone(),
