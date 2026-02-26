@@ -16,4 +16,8 @@
      :fileOperations
      (:templateOnCreate t
       :updateImportsOnRename t
-      :updateImportsOnDelete t)))))
+      :updateImportsOnDelete t)
+     :projectIndex
+     (:fullProjectScan t
+      :cacheMode "auto"
+      :incrementalEditReindex :json-false)))))

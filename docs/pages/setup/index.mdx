@@ -23,7 +23,7 @@ All editor configs support the same server settings.
       "updateImportsOnDelete": true
     },
     "projectIndex": {
-      "fullProjectScan": false,
+      "fullProjectScan": true,
       "cacheMode": "auto",
       "incrementalEditReindex": false
     }
@@ -59,7 +59,7 @@ Foundry lint config reference (lint_on_build): [Foundry linter config docs](http
 
 - Empty arrays for `severity`, `only`, `exclude` mean "no filter".
 - Defaults are all enabled (`true`) with empty lint arrays.
-- `projectIndex.fullProjectScan` defaults to `false` to keep startup latency low.
+- `projectIndex.fullProjectScan` defaults to `true` to prioritize complete project references/definitions at startup.
 - `projectIndex.cacheMode` controls persistent cache strategy:
   - `"auto"` (default): try cache v2 first, fallback to v1.
   - `"v1"`: force legacy all-or-nothing cache.

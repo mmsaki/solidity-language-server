@@ -47,6 +47,7 @@ export default defineConfig({
         { text: "Signature Help", link: "/reference/signature-help" },
         { text: "Will Rename Files", link: "/reference/will-rename-files" },
         { text: "Imports and References", link: "/reference/imports-references" },
+        { text: "Caches", link: "/reference/caches" },
         { text: "Project Cache", link: "/reference/project-cache" },
         { text: "Profiling", link: "/reference/profiling" }
       ]

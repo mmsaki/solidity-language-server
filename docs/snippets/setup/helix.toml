@@ -16,3 +16,8 @@ exclude = []
 templateOnCreate = true
 updateImportsOnRename = true
 updateImportsOnDelete = true
+
+[language-server.solidity-language-server.config.solidity-language-server.projectIndex]
+fullProjectScan = true
+cacheMode = "auto"
+incrementalEditReindex = false

@@ -25,6 +25,24 @@ If you are looking for import-string navigation (for example `import "./Pool.sol
 
 At request time, the server uses this snapshot to resolve references quickly, then merges results from other cached builds to get cross-file coverage.
 
+## Caches and freshness
+
+References use two cache layers:
+
+- in-memory `ast_cache`/`CachedBuild` entries for fast request-time lookups,
+- on-disk project cache (`.solidity-language-server/solidity-lsp-schema-v2.json` + shard files) for warm starts.
+
+In `v0.1.27`, cache behavior is:
+
+- Warm-load reconcile: if source hashes changed, affected files are recompiled and merged before cache write-back.
+- Per-save upsert: after successful save/build, touched files are upserted into cache v2 quickly.
+- Single-flight/debounced sync: bursty save events do not spawn overlapping cache jobs.
+- Scoped incremental reindex is gated by `projectIndex.incrementalEditReindexThreshold`; when the affected ratio is too high, the server falls back to full reindex for correctness.
+
+Practical result: references can be partial right at startup, then become complete as reconcile finishes, while later saves keep cache freshness without full-project recompiles on every edit.
+
+For full cache architecture details, see [Caches](/reference/caches).
+
 ## Request flow in practice
 
 In `src/lsp.rs`, the `references` handler does the following:

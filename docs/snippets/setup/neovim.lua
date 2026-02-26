@@ -39,7 +39,7 @@ return {
         updateImportsOnDelete = true,
       },
       projectIndex = {
-        fullProjectScan = false,
+        fullProjectScan = true,
         -- Persistent cache mode: "auto" | "v1" | "v2"
         cacheMode = "auto",
         -- Aggressive scoped dirty-sync: reindex only reverse-import affected files.

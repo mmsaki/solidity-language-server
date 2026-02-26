@@ -21,6 +21,11 @@
             "templateOnCreate": true,
             "updateImportsOnRename": true,
             "updateImportsOnDelete": true
+          },
+          "projectIndex": {
+            "fullProjectScan": true,
+            "cacheMode": "auto",
+            "incrementalEditReindex": false
           }
         }
       }

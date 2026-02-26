@@ -7,5 +7,8 @@
   "solidity-language-server.lint.exclude": [],
   "solidity-language-server.fileOperations.templateOnCreate": true,
   "solidity-language-server.fileOperations.updateImportsOnRename": true,
-  "solidity-language-server.fileOperations.updateImportsOnDelete": true
+  "solidity-language-server.fileOperations.updateImportsOnDelete": true,
+  "solidity-language-server.projectIndex.fullProjectScan": true,
+  "solidity-language-server.projectIndex.cacheMode": "auto",
+  "solidity-language-server.projectIndex.incrementalEditReindex": false
 }
