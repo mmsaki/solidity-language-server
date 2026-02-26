@@ -15,6 +15,7 @@ use crate::semantic_tokens;
 use crate::symbols;
 use crate::utils;
 use std::collections::{HashMap, HashSet};
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::RwLock;
@@ -57,6 +58,15 @@ pub struct ForgeLsp {
     project_cache_sync_running: Arc<std::sync::atomic::AtomicBool>,
     /// Whether a didSave cache-sync pass is pending (set by save bursts).
     project_cache_sync_pending: Arc<std::sync::atomic::AtomicBool>,
+    /// Whether a didSave v2-upsert worker is currently running.
+    project_cache_upsert_running: Arc<std::sync::atomic::AtomicBool>,
+    /// Whether a didSave v2-upsert pass is pending (set by save bursts).
+    project_cache_upsert_pending: Arc<std::sync::atomic::AtomicBool>,
+    /// Absolute file paths changed during the session and awaiting dirty-sync
+    /// planning for aggressive affected-closure reindex.
+    project_cache_changed_files: Arc<RwLock<HashSet<String>>>,
+    /// Absolute file paths queued for debounced v2 shard upserts.
+    project_cache_upsert_files: Arc<RwLock<HashSet<String>>>,
     /// URIs recently scaffolded in willCreateFiles (used to avoid re-applying
     /// edits again in didCreateFiles for the same create operation).
     pending_create_scaffold: Arc<RwLock<HashSet<String>>>,
@@ -94,6 +104,10 @@ impl ForgeLsp {
             project_cache_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             project_cache_sync_running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             project_cache_sync_pending: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            project_cache_upsert_running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            project_cache_upsert_pending: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            project_cache_changed_files: Arc::new(RwLock::new(HashSet::new())),
+            project_cache_upsert_files: Arc::new(RwLock::new(HashSet::new())),
             pending_create_scaffold: Arc::new(RwLock::new(HashSet::new())),
         }
     }
@@ -387,6 +401,7 @@ impl ForgeLsp {
                 .project_indexed
                 .load(std::sync::atomic::Ordering::Relaxed)
         {
+            let cache_mode = self.settings.read().await.project_index.cache_mode.clone();
             self.project_indexed
                 .store(true, std::sync::atomic::Ordering::Relaxed);
             let foundry_config = self.foundry_config.read().await.clone();
@@ -437,8 +452,12 @@ impl ForgeLsp {
 
                 // Try persisted reference index first (fast warm start).
                 let cfg_for_load = foundry_config.clone();
+                let cache_mode_for_load = cache_mode.clone();
                 let load_res = tokio::task::spawn_blocking(move || {
-                    crate::project_cache::load_reference_cache_with_report(&cfg_for_load)
+                    crate::project_cache::load_reference_cache_with_report(
+                        &cfg_for_load,
+                        cache_mode_for_load,
+                    )
                 })
                 .await;
                 match load_res {
@@ -448,41 +467,47 @@ impl ForgeLsp {
                             ast_cache
                                 .write()
                                 .await
-                                .insert(cache_key, Arc::new(cached_build));
+                                .insert(cache_key.clone(), Arc::new(cached_build));
                             client
                                 .log_message(
                                     MessageType::INFO,
                                     format!(
-                                        "project index: cache load hit (sources={}, hashed_files={}, duration={}ms)",
-                                        source_count, report.file_count_hashed, report.duration_ms
+                                        "project index: cache load hit (sources={}, reused_files={}/{}, complete={}, duration={}ms)",
+                                        source_count,
+                                        report.file_count_reused,
+                                        report.file_count_hashed,
+                                        report.complete,
+                                        report.duration_ms
                                     ),
                                 )
                                 .await;
-
-                            client
-                                .send_notification::<notification::Progress>(ProgressParams {
-                                    token: token.clone(),
-                                    value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(
-                                        WorkDoneProgressEnd {
-                                            message: Some(format!(
-                                                "Loaded {} source files from cache",
-                                                source_count
-                                            )),
-                                        },
-                                    )),
-                                })
-                                .await;
-                            return;
+                            if report.complete {
+                                client
+                                    .send_notification::<notification::Progress>(ProgressParams {
+                                        token: token.clone(),
+                                        value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(
+                                            WorkDoneProgressEnd {
+                                                message: Some(format!(
+                                                    "Loaded {} source files from cache",
+                                                    source_count
+                                                )),
+                                            },
+                                        )),
+                                    })
+                                    .await;
+                                return;
+                            }
                         }
 
                         client
                             .log_message(
                                 MessageType::INFO,
                                 format!(
-                                    "project index: cache load miss (reason={}, hashed_files={}, duration={}ms)",
+                                    "project index: cache load miss/partial (reason={}, reused_files={}/{}, duration={}ms)",
                                     report
                                         .miss_reason
                                         .unwrap_or_else(|| "unknown".to_string()),
+                                    report.file_count_reused,
                                     report.file_count_hashed,
                                     report.duration_ms
                                 ),
@@ -725,6 +750,133 @@ fn try_claim_project_cache_dirty(dirty: &std::sync::atomic::AtomicBool) -> bool 
         .is_ok()
 }
 
+fn start_or_mark_project_cache_upsert_pending(
+    pending: &std::sync::atomic::AtomicBool,
+    running: &std::sync::atomic::AtomicBool,
+) -> bool {
+    pending.store(true, Ordering::Release);
+    running
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+}
+
+fn take_project_cache_upsert_pending(pending: &std::sync::atomic::AtomicBool) -> bool {
+    pending.swap(false, Ordering::AcqRel)
+}
+
+fn stop_project_cache_upsert_worker_or_reclaim(
+    pending: &std::sync::atomic::AtomicBool,
+    running: &std::sync::atomic::AtomicBool,
+) -> bool {
+    running.store(false, Ordering::Release);
+    pending.load(Ordering::Acquire)
+        && running
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+}
+
+fn lexical_normalize(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for comp in path.components() {
+        match comp {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
+            }
+            Component::RootDir => out.push(comp.as_os_str()),
+            Component::Prefix(_) => out.push(comp.as_os_str()),
+            Component::Normal(seg) => out.push(seg),
+        }
+    }
+    out
+}
+
+fn resolve_import_spec_to_abs(
+    project_root: &Path,
+    importer_abs: &Path,
+    import_path: &str,
+    remappings: &[String],
+) -> Option<PathBuf> {
+    if import_path.starts_with("./") || import_path.starts_with("../") {
+        let base = importer_abs.parent()?;
+        return Some(lexical_normalize(&base.join(import_path)));
+    }
+
+    for remap in remappings {
+        let mut it = remap.splitn(2, '=');
+        let prefix = it.next().unwrap_or_default();
+        let target = it.next().unwrap_or_default();
+        if prefix.is_empty() || target.is_empty() {
+            continue;
+        }
+        if import_path.starts_with(prefix) {
+            let suffix = import_path.strip_prefix(prefix).unwrap_or_default();
+            return Some(lexical_normalize(&project_root.join(format!("{target}{suffix}"))));
+        }
+    }
+
+    Some(lexical_normalize(&project_root.join(import_path)))
+}
+
+fn compute_reverse_import_closure(
+    config: &FoundryConfig,
+    changed_abs: &[PathBuf],
+    remappings: &[String],
+) -> HashSet<PathBuf> {
+    let source_files = crate::solc::discover_source_files(config);
+    let mut reverse_edges: HashMap<PathBuf, HashSet<PathBuf>> = HashMap::new();
+
+    for importer in &source_files {
+        let Ok(bytes) = std::fs::read(importer) else {
+            continue;
+        };
+        for imp in links::ts_find_imports(&bytes) {
+            let Some(imported_abs) =
+                resolve_import_spec_to_abs(&config.root, importer, &imp.path, remappings)
+            else {
+                continue;
+            };
+            if !imported_abs.starts_with(&config.root) {
+                continue;
+            }
+            reverse_edges
+                .entry(imported_abs)
+                .or_default()
+                .insert(importer.clone());
+        }
+    }
+
+    let mut affected: HashSet<PathBuf> = HashSet::new();
+    let mut queue: std::collections::VecDeque<PathBuf> = std::collections::VecDeque::new();
+
+    for path in changed_abs {
+        if !path.starts_with(&config.root) {
+            continue;
+        }
+        let normalized = lexical_normalize(path);
+        if affected.insert(normalized.clone()) {
+            queue.push_back(normalized);
+        }
+    }
+
+    while let Some(current) = queue.pop_front() {
+        if let Some(importers) = reverse_edges.get(&current) {
+            for importer in importers {
+                if affected.insert(importer.clone()) {
+                    queue.push_back(importer.clone());
+                }
+            }
+        }
+    }
+
+    // Keep only files that currently exist and are source files known to the project.
+    let source_set: HashSet<PathBuf> = source_files.into_iter().collect();
+    affected
+        .into_iter()
+        .filter(|p| source_set.contains(p) && p.is_file())
+        .collect()
+}
+
 #[tower_lsp::async_trait]
 impl LanguageServer for ForgeLsp {
     async fn initialize(
@@ -744,8 +896,8 @@ impl LanguageServer for ForgeLsp {
                 .log_message(
                     MessageType::INFO,
                     format!(
-                        "settings: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.templateOnCreate={}, fileOperations.updateImportsOnRename={}, fileOperations.updateImportsOnDelete={}, projectIndex.fullProjectScan={}",
-                        s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.template_on_create, s.file_operations.update_imports_on_rename, s.file_operations.update_imports_on_delete, s.project_index.full_project_scan,
+                        "settings: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.templateOnCreate={}, fileOperations.updateImportsOnRename={}, fileOperations.updateImportsOnDelete={}, projectIndex.fullProjectScan={}, projectIndex.cacheMode={:?}, projectIndex.incrementalEditReindex={}",
+                        s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.template_on_create, s.file_operations.update_imports_on_rename, s.file_operations.update_imports_on_delete, s.project_index.full_project_scan, s.project_index.cache_mode, s.project_index.incremental_edit_reindex,
                     ),
                 )
                 .await;
@@ -1056,6 +1208,7 @@ impl LanguageServer for ForgeLsp {
         // (willRenameFiles, references, goto) work immediately — even before
         // the user opens any .sol file.
         if self.use_solc && self.settings.read().await.project_index.full_project_scan {
+            let cache_mode = self.settings.read().await.project_index.cache_mode.clone();
             self.project_indexed
                 .store(true, std::sync::atomic::Ordering::Relaxed);
             let foundry_config = self.foundry_config.read().await.clone();
@@ -1104,8 +1257,12 @@ impl LanguageServer for ForgeLsp {
 
                 // Try persisted reference index first (fast warm start).
                 let cfg_for_load = foundry_config.clone();
+                let cache_mode_for_load = cache_mode.clone();
                 let load_res = tokio::task::spawn_blocking(move || {
-                    crate::project_cache::load_reference_cache_with_report(&cfg_for_load)
+                    crate::project_cache::load_reference_cache_with_report(
+                        &cfg_for_load,
+                        cache_mode_for_load,
+                    )
                 })
                 .await;
                 match load_res {
@@ -1115,41 +1272,47 @@ impl LanguageServer for ForgeLsp {
                             ast_cache
                                 .write()
                                 .await
-                                .insert(cache_key, Arc::new(cached_build));
+                                .insert(cache_key.clone(), Arc::new(cached_build));
                             client
                                 .log_message(
                                     MessageType::INFO,
                                     format!(
-                                        "project index (eager): cache load hit (sources={}, hashed_files={}, duration={}ms)",
-                                        source_count, report.file_count_hashed, report.duration_ms
+                                        "project index (eager): cache load hit (sources={}, reused_files={}/{}, complete={}, duration={}ms)",
+                                        source_count,
+                                        report.file_count_reused,
+                                        report.file_count_hashed,
+                                        report.complete,
+                                        report.duration_ms
                                     ),
                                 )
                                 .await;
-
-                            client
-                                .send_notification::<notification::Progress>(ProgressParams {
-                                    token: token.clone(),
-                                    value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(
-                                        WorkDoneProgressEnd {
-                                            message: Some(format!(
-                                                "Loaded {} source files from cache",
-                                                source_count
-                                            )),
-                                        },
-                                    )),
-                                })
-                                .await;
-                            return;
+                            if report.complete {
+                                client
+                                    .send_notification::<notification::Progress>(ProgressParams {
+                                        token: token.clone(),
+                                        value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(
+                                            WorkDoneProgressEnd {
+                                                message: Some(format!(
+                                                    "Loaded {} source files from cache",
+                                                    source_count
+                                                )),
+                                            },
+                                        )),
+                                    })
+                                    .await;
+                                return;
+                            }
                         }
 
                         client
                             .log_message(
                                 MessageType::INFO,
                                 format!(
-                                    "project index (eager): cache load miss (reason={}, hashed_files={}, duration={}ms)",
+                                    "project index (eager): cache load miss/partial (reason={}, reused_files={}/{}, duration={}ms)",
                                     report
                                         .miss_reason
                                         .unwrap_or_else(|| "unknown".to_string()),
+                                    report.file_count_reused,
                                     report.file_count_hashed,
                                     report.duration_ms
                                 ),
@@ -1505,18 +1668,157 @@ impl LanguageServer for ForgeLsp {
             .map(|(version, _)| *version)
             .unwrap_or_default();
 
+        let saved_uri = params.text_document.uri.clone();
+        if let Ok(saved_file_path) = saved_uri.to_file_path() {
+            let saved_abs = saved_file_path.to_string_lossy().to_string();
+            self.project_cache_changed_files
+                .write()
+                .await
+                .insert(saved_abs.clone());
+            self.project_cache_upsert_files
+                .write()
+                .await
+                .insert(saved_abs);
+        }
         self.on_change(TextDocumentItem {
-            uri: params.text_document.uri,
+            uri: saved_uri.clone(),
             text: text_content,
             version,
             language_id: "".to_string(),
         })
         .await;
 
+        // Fast-path incremental v2 cache upsert on save (debounced single-flight):
+        // update shards for recently saved file builds from memory.
+        // Full-project reconcile still runs separately when marked dirty.
+        let settings_snapshot = self.settings.read().await.clone();
+        if self.use_solc
+            && settings_snapshot.project_index.full_project_scan
+            && matches!(
+                settings_snapshot.project_index.cache_mode,
+                crate::config::ProjectIndexCacheMode::V2 | crate::config::ProjectIndexCacheMode::Auto
+            )
+        {
+            if start_or_mark_project_cache_upsert_pending(
+                &self.project_cache_upsert_pending,
+                &self.project_cache_upsert_running,
+            ) {
+                let upsert_files = self.project_cache_upsert_files.clone();
+                let ast_cache = self.ast_cache.clone();
+                let client = self.client.clone();
+                let running_flag = self.project_cache_upsert_running.clone();
+                let pending_flag = self.project_cache_upsert_pending.clone();
+
+                tokio::spawn(async move {
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_millis(350)).await;
+
+                        if !take_project_cache_upsert_pending(&pending_flag) {
+                            if stop_project_cache_upsert_worker_or_reclaim(
+                                &pending_flag,
+                                &running_flag,
+                            ) {
+                                continue;
+                            }
+                            break;
+                        }
+
+                        let changed_paths: Vec<String> = {
+                            let mut paths = upsert_files.write().await;
+                            paths.drain().collect()
+                        };
+                        if changed_paths.is_empty() {
+                            continue;
+                        }
+
+                        let mut work_items: Vec<(crate::config::FoundryConfig, crate::goto::CachedBuild)> =
+                            Vec::new();
+                        {
+                            let cache = ast_cache.read().await;
+                            for abs_str in changed_paths {
+                                let path = PathBuf::from(&abs_str);
+                                let Ok(uri) = Url::from_file_path(&path) else {
+                                    continue;
+                                };
+                                let uri_key = uri.to_string();
+                                let Some(build) = cache.get(&uri_key).cloned() else {
+                                    continue;
+                                };
+                                // Only upsert if this build contains the saved file itself.
+                                if !build.nodes.contains_key(&abs_str) {
+                                    continue;
+                                }
+                                let cfg = crate::config::load_foundry_config(&path);
+                                work_items.push((cfg, (*build).clone()));
+                            }
+                        }
+
+                        if work_items.is_empty() {
+                            continue;
+                        }
+
+                        let res = tokio::task::spawn_blocking(move || {
+                            let mut total_files = 0usize;
+                            let mut total_ms = 0u128;
+                            let mut failures: Vec<String> = Vec::new();
+                            for (cfg, build) in work_items {
+                                match crate::project_cache::upsert_reference_cache_v2_with_report(
+                                    &cfg, &build,
+                                ) {
+                                    Ok(report) => {
+                                        total_files += report.file_count_hashed;
+                                        total_ms += report.duration_ms;
+                                    }
+                                    Err(e) => failures.push(e),
+                                }
+                            }
+                            (total_files, total_ms, failures)
+                        })
+                        .await;
+
+                        match res {
+                            Ok((total_files, total_ms, failures)) => {
+                                if !failures.is_empty() {
+                                    client
+                                        .log_message(
+                                            MessageType::WARNING,
+                                            format!(
+                                                "project cache v2 upsert: {} failure(s), first={}",
+                                                failures.len(),
+                                                failures[0]
+                                            ),
+                                        )
+                                        .await;
+                                } else {
+                                    client
+                                        .log_message(
+                                            MessageType::INFO,
+                                            format!(
+                                                "project cache v2 upsert (debounced): touched_files={}, duration={}ms",
+                                                total_files, total_ms
+                                            ),
+                                        )
+                                        .await;
+                                }
+                            }
+                            Err(e) => {
+                                client
+                                    .log_message(
+                                        MessageType::WARNING,
+                                        format!("project cache v2 upsert task failed: {e}"),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
         // If workspace file-ops changed project structure, schedule a
         // debounced latest-wins sync of on-disk reference cache.
         if self.use_solc
-            && self.settings.read().await.project_index.full_project_scan
+            && settings_snapshot.project_index.full_project_scan
             && self.project_cache_dirty.load(Ordering::Acquire)
         {
             if start_or_mark_project_cache_sync_pending(
@@ -1526,10 +1828,13 @@ impl LanguageServer for ForgeLsp {
                 let foundry_config = self.foundry_config.read().await.clone();
                 let root_key = self.root_uri.read().await.as_ref().map(|u| u.to_string());
                 let ast_cache = self.ast_cache.clone();
+                let text_cache = self.text_cache.clone();
                 let client = self.client.clone();
                 let dirty_flag = self.project_cache_dirty.clone();
                 let running_flag = self.project_cache_sync_running.clone();
                 let pending_flag = self.project_cache_sync_pending.clone();
+                let changed_files = self.project_cache_changed_files.clone();
+                let aggressive_scoped = settings_snapshot.project_index.incremental_edit_reindex;
 
                 tokio::spawn(async move {
                     loop {
@@ -1571,19 +1876,120 @@ impl LanguageServer for ForgeLsp {
                             continue;
                         }
 
-                        client
-                            .log_message(
-                                MessageType::INFO,
-                                "didSave cache sync: rebuilding project index from disk",
-                            )
-                            .await;
+                        let mut used_scoped_path = false;
+                        let mut scoped_ok = false;
 
-                        match crate::solc::solc_project_index(
-                            &foundry_config,
-                            Some(&client),
-                            None,
-                        )
-                        .await
+                        if aggressive_scoped {
+                            let changed_abs: Vec<PathBuf> = {
+                                let mut changed = changed_files.write().await;
+                                let drained = changed
+                                    .drain()
+                                    .map(PathBuf::from)
+                                    .collect::<Vec<PathBuf>>();
+                                drained
+                            };
+                            if !changed_abs.is_empty() {
+                                used_scoped_path = true;
+                                let remappings = crate::solc::resolve_remappings(&foundry_config).await;
+                                let cfg_for_plan = foundry_config.clone();
+                                let changed_for_plan = changed_abs.clone();
+                                let remappings_for_plan = remappings.clone();
+                                let plan_res = tokio::task::spawn_blocking(move || {
+                                    compute_reverse_import_closure(
+                                        &cfg_for_plan,
+                                        &changed_for_plan,
+                                        &remappings_for_plan,
+                                    )
+                                })
+                                .await;
+
+                                let affected_files = match plan_res {
+                                    Ok(set) => set.into_iter().collect::<Vec<PathBuf>>(),
+                                    Err(_) => Vec::new(),
+                                };
+                                let total_sources =
+                                    crate::solc::discover_source_files(&foundry_config).len();
+
+                                if !affected_files.is_empty() && affected_files.len() < total_sources
+                                {
+                                    client
+                                        .log_message(
+                                            MessageType::INFO,
+                                            format!(
+                                                "didSave cache sync: aggressive scoped reindex (affected={}/{})",
+                                                affected_files.len(),
+                                                total_sources
+                                            ),
+                                        )
+                                        .await;
+
+                                    let text_cache_snapshot = text_cache.read().await.clone();
+                                    match crate::solc::solc_project_index_scoped(
+                                        &foundry_config,
+                                        Some(&client),
+                                        Some(&text_cache_snapshot),
+                                        &affected_files,
+                                    )
+                                    .await
+                                    {
+                                        Ok(ast_data) => {
+                                            let cached_build =
+                                                Arc::new(crate::goto::CachedBuild::new(ast_data, 0));
+                                            let source_count = cached_build.nodes.len();
+                                            ast_cache
+                                                .write()
+                                                .await
+                                                .insert(cache_key.clone(), cached_build);
+                                            client
+                                                .log_message(
+                                                    MessageType::INFO,
+                                                    format!(
+                                                        "didSave cache sync: scoped reindex applied (sources={})",
+                                                        source_count
+                                                    ),
+                                                )
+                                                .await;
+                                            scoped_ok = true;
+                                        }
+                                        Err(e) => {
+                                            client
+                                                .log_message(
+                                                    MessageType::WARNING,
+                                                    format!(
+                                                        "didSave cache sync: scoped reindex failed, falling back to full: {e}"
+                                                    ),
+                                                )
+                                                .await;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if scoped_ok {
+                            continue;
+                        }
+
+                        if used_scoped_path {
+                            // Scoped plan was attempted but could not complete safely.
+                            // Fall through to full re-index + persist as authoritative.
+                            client
+                                .log_message(
+                                    MessageType::INFO,
+                                    "didSave cache sync: falling back to full project reindex",
+                                )
+                                .await;
+                        } else {
+                            client
+                                .log_message(
+                                    MessageType::INFO,
+                                    "didSave cache sync: rebuilding project index from disk",
+                                )
+                                .await;
+                        }
+
+                        match crate::solc::solc_project_index(&foundry_config, Some(&client), None)
+                            .await
                         {
                             Ok(ast_data) => {
                                 let cached_build =
@@ -1603,6 +2009,7 @@ impl LanguageServer for ForgeLsp {
 
                                 match save_res {
                                     Ok(Ok(report)) => {
+                                        changed_files.write().await.clear();
                                         client
                                             .log_message(
                                                 MessageType::INFO,
@@ -1768,8 +2175,8 @@ impl LanguageServer for ForgeLsp {
                 .log_message(
                     MessageType::INFO,
                     format!(
-                    "settings updated: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.templateOnCreate={}, fileOperations.updateImportsOnRename={}, fileOperations.updateImportsOnDelete={}, projectIndex.fullProjectScan={}",
-                    s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.template_on_create, s.file_operations.update_imports_on_rename, s.file_operations.update_imports_on_delete, s.project_index.full_project_scan,
+                    "settings updated: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.templateOnCreate={}, fileOperations.updateImportsOnRename={}, fileOperations.updateImportsOnDelete={}, projectIndex.fullProjectScan={}, projectIndex.cacheMode={:?}, projectIndex.incrementalEditReindex={}",
+                    s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.template_on_create, s.file_operations.update_imports_on_rename, s.file_operations.update_imports_on_delete, s.project_index.full_project_scan, s.project_index.cache_mode, s.project_index.incremental_edit_reindex,
                 ),
             )
             .await;
@@ -3239,6 +3646,21 @@ impl LanguageServer for ForgeLsp {
             )
             .await;
         self.project_cache_dirty.store(true, Ordering::Release);
+        {
+            let mut changed = self.project_cache_changed_files.write().await;
+            for file in &params.files {
+                if let Ok(old_uri) = Url::parse(&file.old_uri)
+                    && let Ok(old_path) = old_uri.to_file_path()
+                {
+                    changed.insert(old_path.to_string_lossy().to_string());
+                }
+                if let Ok(new_uri) = Url::parse(&file.new_uri)
+                    && let Ok(new_path) = new_uri.to_file_path()
+                {
+                    changed.insert(new_path.to_string_lossy().to_string());
+                }
+            }
+        }
 
         // ── Phase 1: parse params & expand folder renames ──────────────
         let raw_uri_pairs: Vec<(Url, Url)> = params
@@ -3542,6 +3964,16 @@ impl LanguageServer for ForgeLsp {
             )
             .await;
         self.project_cache_dirty.store(true, Ordering::Release);
+        {
+            let mut changed = self.project_cache_changed_files.write().await;
+            for file in &params.files {
+                if let Ok(uri) = Url::parse(&file.uri)
+                    && let Ok(path) = uri.to_file_path()
+                {
+                    changed.insert(path.to_string_lossy().to_string());
+                }
+            }
+        }
 
         let raw_delete_uris: Vec<Url> = params
             .files
@@ -3744,6 +4176,16 @@ impl LanguageServer for ForgeLsp {
             )
             .await;
         self.project_cache_dirty.store(true, Ordering::Release);
+        {
+            let mut changed = self.project_cache_changed_files.write().await;
+            for file in &params.files {
+                if let Ok(uri) = Url::parse(&file.uri)
+                    && let Ok(path) = uri.to_file_path()
+                {
+                    changed.insert(path.to_string_lossy().to_string());
+                }
+            }
+        }
         if !self
             .settings
             .read()

@@ -120,12 +120,34 @@ pub struct ProjectIndexSettings {
     /// If false (default), skip eager full-project scanning for faster startup.
     #[serde(default)]
     pub full_project_scan: bool,
+    /// Persistent reference cache mode:
+    /// - `auto` (default): prefer v2, fallback to v1
+    /// - `v1`: force legacy all-or-nothing cache
+    /// - `v2`: force per-file shard cache
+    #[serde(default)]
+    pub cache_mode: ProjectIndexCacheMode,
+    /// If true, use an aggressive scoped reindex strategy on dirty sync:
+    /// recompile only reverse-import affected files from recent changes.
+    /// Falls back to full-project reindex on failure.
+    #[serde(default)]
+    pub incremental_edit_reindex: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ProjectIndexCacheMode {
+    #[default]
+    Auto,
+    V1,
+    V2,
 }
 
 impl Default for ProjectIndexSettings {
     fn default() -> Self {
         Self {
             full_project_scan: false,
+            cache_mode: ProjectIndexCacheMode::Auto,
+            incremental_edit_reindex: false,
         }
     }
 }
@@ -944,6 +966,8 @@ src = "src"
         assert!(s.file_operations.update_imports_on_rename);
         assert!(s.file_operations.update_imports_on_delete);
         assert!(!s.project_index.full_project_scan);
+        assert_eq!(s.project_index.cache_mode, ProjectIndexCacheMode::Auto);
+        assert!(!s.project_index.incremental_edit_reindex);
         assert!(s.lint.severity.is_empty());
         assert!(s.lint.only.is_empty());
         assert!(s.lint.exclude.is_empty());
@@ -966,7 +990,9 @@ src = "src"
                     "updateImportsOnDelete": false
                 },
                 "projectIndex": {
-                    "fullProjectScan": true
+                    "fullProjectScan": true,
+                    "cacheMode": "v2",
+                    "incrementalEditReindex": true
                 },
             }
         });
@@ -978,6 +1004,8 @@ src = "src"
         assert!(!s.file_operations.update_imports_on_rename);
         assert!(!s.file_operations.update_imports_on_delete);
         assert!(s.project_index.full_project_scan);
+        assert_eq!(s.project_index.cache_mode, ProjectIndexCacheMode::V2);
+        assert!(s.project_index.incremental_edit_reindex);
         assert_eq!(s.lint.severity, vec!["high", "med"]);
         assert_eq!(s.lint.only, vec!["incorrect-shift"]);
         assert_eq!(
@@ -997,7 +1025,9 @@ src = "src"
                 "updateImportsOnDelete": false
             },
             "projectIndex": {
-                "fullProjectScan": true
+                "fullProjectScan": true,
+                "cacheMode": "v1",
+                "incrementalEditReindex": true
             }
         });
         let s = parse_settings(&value);
@@ -1007,6 +1037,8 @@ src = "src"
         assert!(!s.file_operations.update_imports_on_rename);
         assert!(!s.file_operations.update_imports_on_delete);
         assert!(s.project_index.full_project_scan);
+        assert_eq!(s.project_index.cache_mode, ProjectIndexCacheMode::V1);
+        assert!(s.project_index.incremental_edit_reindex);
     }
 
     #[test]
@@ -1026,6 +1058,8 @@ src = "src"
         assert!(s.file_operations.update_imports_on_rename);
         assert!(s.file_operations.update_imports_on_delete);
         assert!(!s.project_index.full_project_scan);
+        assert_eq!(s.project_index.cache_mode, ProjectIndexCacheMode::Auto);
+        assert!(!s.project_index.incremental_edit_reindex);
         assert!(s.lint.severity.is_empty());
         assert!(s.lint.only.is_empty());
         assert_eq!(s.lint.exclude, vec!["unused-import"]);
@@ -1044,9 +1078,25 @@ src = "src"
         assert!(s.file_operations.update_imports_on_rename);
         assert!(s.file_operations.update_imports_on_delete);
         assert!(!s.project_index.full_project_scan);
+        assert_eq!(s.project_index.cache_mode, ProjectIndexCacheMode::Auto);
+        assert!(!s.project_index.incremental_edit_reindex);
         assert!(s.lint.severity.is_empty());
         assert!(s.lint.only.is_empty());
         assert!(s.lint.exclude.is_empty());
+    }
+
+    #[test]
+    fn test_parse_settings_project_index_cache_mode_defaults_on_invalid() {
+        let value = serde_json::json!({
+            "solidity-language-server": {
+                "projectIndex": {
+                    "cacheMode": "bad-mode"
+                }
+            }
+        });
+        let s = parse_settings(&value);
+        assert_eq!(s.project_index.cache_mode, ProjectIndexCacheMode::Auto);
+        assert!(!s.project_index.incremental_edit_reindex);
     }
 
     #[test]
