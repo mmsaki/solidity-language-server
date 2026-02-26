@@ -165,8 +165,9 @@ impl ForgeLsp {
         }
 
         let cache_mode = settings.project_index.cache_mode.clone();
+        let cfg_for_load = foundry_config.clone();
         let load_res = tokio::task::spawn_blocking(move || {
-            crate::project_cache::load_reference_cache_with_report(&foundry_config, cache_mode)
+            crate::project_cache::load_reference_cache_with_report(&cfg_for_load, cache_mode)
         })
         .await;
 
@@ -198,7 +199,172 @@ impl ForgeLsp {
                 ),
             )
             .await;
-        Some(arc)
+
+        if complete {
+            return Some(arc);
+        }
+
+        // Partial warm load: immediately reconcile changed files only, merge,
+        // and persist back to disk so subsequent opens are fast and complete.
+        let cfg_for_diff = foundry_config.clone();
+        let changed = tokio::task::spawn_blocking(move || {
+            crate::project_cache::changed_files_since_v2_cache(&cfg_for_diff)
+        })
+        .await
+        .ok()
+        .and_then(Result::ok)
+        .unwrap_or_default();
+
+        if changed.is_empty() {
+            return Some(arc);
+        }
+
+        let remappings = crate::solc::resolve_remappings(&foundry_config).await;
+        let cfg_for_plan = foundry_config.clone();
+        let changed_for_plan = changed.clone();
+        let remappings_for_plan = remappings.clone();
+        let affected_set = tokio::task::spawn_blocking(move || {
+            compute_reverse_import_closure(&cfg_for_plan, &changed_for_plan, &remappings_for_plan)
+        })
+        .await
+        .ok()
+        .unwrap_or_default();
+        let mut affected_files: Vec<PathBuf> = affected_set.into_iter().collect();
+        if affected_files.is_empty() {
+            affected_files = changed;
+        }
+
+        let text_cache_snapshot = self.text_cache.read().await.clone();
+        match crate::solc::solc_project_index_scoped(
+            &foundry_config,
+            Some(&self.client),
+            Some(&text_cache_snapshot),
+            &affected_files,
+        )
+        .await
+        {
+            Ok(ast_data) => {
+                let scoped_build = Arc::new(crate::goto::CachedBuild::new(ast_data, 0));
+                let mut merge_error: Option<String> = None;
+                let merged = {
+                    let mut cache = self.ast_cache.write().await;
+                    let merged = if let Some(existing) = cache.get(&root_key).cloned() {
+                        let mut merged = (*existing).clone();
+                        match merge_scoped_cached_build(&mut merged, (*scoped_build).clone()) {
+                            Ok(_) => Arc::new(merged),
+                            Err(e) => {
+                                merge_error = Some(e);
+                                scoped_build.clone()
+                            }
+                        }
+                    } else {
+                        scoped_build.clone()
+                    };
+                    cache.insert(root_key.clone(), merged.clone());
+                    merged
+                };
+                if let Some(e) = merge_error {
+                    self.client
+                        .log_message(
+                            MessageType::WARNING,
+                            format!(
+                                "references warm-load reconcile: merge failed, using scoped build: {}",
+                                e
+                            ),
+                        )
+                        .await;
+                }
+
+                let cfg_for_save = foundry_config.clone();
+                let build_for_save = (*merged).clone();
+                let save_res = tokio::task::spawn_blocking(move || {
+                    crate::project_cache::save_reference_cache_with_report(
+                        &cfg_for_save,
+                        &build_for_save,
+                    )
+                })
+                .await;
+                if let Ok(Ok(report)) = save_res {
+                    self.client
+                        .log_message(
+                            MessageType::INFO,
+                            format!(
+                                "references warm-load reconcile: saved cache (affected={}, hashed_files={}, duration={}ms)",
+                                affected_files.len(),
+                                report.file_count_hashed,
+                                report.duration_ms
+                            ),
+                        )
+                        .await;
+                }
+                Some(merged)
+            }
+            Err(e) => {
+                self.client
+                    .log_message(
+                        MessageType::WARNING,
+                        format!("references warm-load reconcile: scoped reindex failed: {}", e),
+                    )
+                    .await;
+                Some(arc)
+            }
+        }
+    }
+
+    /// Best-effort persistence of the current in-memory project index.
+    ///
+    /// This writes the root project CachedBuild to disk if available.
+    async fn flush_project_cache_to_disk(&self, reason: &str) {
+        if !self.use_solc || !self.settings.read().await.project_index.full_project_scan {
+            return;
+        }
+        let Some(root_key) = self.project_cache_key().await else {
+            return;
+        };
+        let build = {
+            let cache = self.ast_cache.read().await;
+            cache.get(&root_key).cloned()
+        };
+        let Some(build) = build else {
+            return;
+        };
+
+        let foundry_config = self.foundry_config.read().await.clone();
+        let build_for_save = (*build).clone();
+        let res = tokio::task::spawn_blocking(move || {
+            crate::project_cache::save_reference_cache_with_report(&foundry_config, &build_for_save)
+        })
+        .await;
+
+        match res {
+            Ok(Ok(report)) => {
+                self.client
+                    .log_message(
+                        MessageType::INFO,
+                        format!(
+                            "project cache flush ({}): saved hashed_files={}, duration={}ms",
+                            reason, report.file_count_hashed, report.duration_ms
+                        ),
+                    )
+                    .await;
+            }
+            Ok(Err(e)) => {
+                self.client
+                    .log_message(
+                        MessageType::WARNING,
+                        format!("project cache flush ({}) failed: {}", reason, e),
+                    )
+                    .await;
+            }
+            Err(e) => {
+                self.client
+                    .log_message(
+                        MessageType::WARNING,
+                        format!("project cache flush ({}) task failed: {}", reason, e),
+                    )
+                    .await;
+            }
+        }
     }
 
     async fn on_change(&self, params: TextDocumentItem) {
@@ -1668,6 +1834,7 @@ impl LanguageServer for ForgeLsp {
     }
 
     async fn shutdown(&self) -> tower_lsp::jsonrpc::Result<()> {
+        self.flush_project_cache_to_disk("shutdown").await;
         self.client
             .log_message(MessageType::INFO, "lsp server shutting down.")
             .await;
@@ -1924,10 +2091,78 @@ impl LanguageServer for ForgeLsp {
         })
         .await;
 
+        let settings_snapshot = self.settings.read().await.clone();
+
+        // Immediate v2 upsert on successful save/build path for the current file.
+        // This keeps on-disk cache fresh every save without waiting for debounce.
+        if self.use_solc
+            && settings_snapshot.project_index.full_project_scan
+            && matches!(
+                settings_snapshot.project_index.cache_mode,
+                crate::config::ProjectIndexCacheMode::V2 | crate::config::ProjectIndexCacheMode::Auto
+            )
+            && let Ok(saved_file_path) = saved_uri.to_file_path()
+        {
+            let saved_abs = saved_file_path.to_string_lossy().to_string();
+            let uri_key = saved_uri.to_string();
+            let build_opt = { self.ast_cache.read().await.get(&uri_key).cloned() };
+            if let Some(build) = build_opt {
+                if build.nodes.contains_key(&saved_abs) {
+                    let cfg = crate::config::load_foundry_config(&saved_file_path);
+                    let build_for_upsert = (*build).clone();
+                    let upsert_res = tokio::task::spawn_blocking(move || {
+                        crate::project_cache::upsert_reference_cache_v2_with_report(
+                            &cfg,
+                            &build_for_upsert,
+                        )
+                    })
+                    .await;
+                    match upsert_res {
+                        Ok(Ok(report)) => {
+                            self.project_cache_upsert_files
+                                .write()
+                                .await
+                                .remove(&saved_abs);
+                            self.client
+                                .log_message(
+                                    MessageType::INFO,
+                                    format!(
+                                        "project cache v2 upsert (immediate): touched_files={}, duration={}ms",
+                                        report.file_count_hashed, report.duration_ms
+                                    ),
+                                )
+                                .await;
+                        }
+                        Ok(Err(e)) => {
+                            self.client
+                                .log_message(
+                                    MessageType::WARNING,
+                                    format!(
+                                        "project cache v2 upsert (immediate) failed: {}",
+                                        e
+                                    ),
+                                )
+                                .await;
+                        }
+                        Err(e) => {
+                            self.client
+                                .log_message(
+                                    MessageType::WARNING,
+                                    format!(
+                                        "project cache v2 upsert (immediate) task failed: {}",
+                                        e
+                                    ),
+                                )
+                                .await;
+                        }
+                    }
+                }
+            }
+        }
+
         // Fast-path incremental v2 cache upsert on save (debounced single-flight):
         // update shards for recently saved file builds from memory.
         // Full-project reconcile still runs separately when marked dirty.
-        let settings_snapshot = self.settings.read().await.clone();
         if self.use_solc
             && settings_snapshot.project_index.full_project_scan
             && matches!(
@@ -2440,6 +2675,7 @@ impl LanguageServer for ForgeLsp {
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
+        self.flush_project_cache_to_disk("didClose").await;
         let uri = params.text_document.uri.to_string();
         self.ast_cache.write().await.remove(&uri);
         self.text_cache.write().await.remove(&uri);

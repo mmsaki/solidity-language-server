@@ -397,6 +397,43 @@ pub fn load_reference_cache(config: &FoundryConfig) -> Option<CachedBuild> {
     load_reference_cache_with_report(config, ProjectIndexCacheMode::Auto).build
 }
 
+/// Return absolute paths of source files whose current hash differs from v2
+/// cache metadata (including newly-added files missing from metadata).
+pub fn changed_files_since_v2_cache(config: &FoundryConfig) -> Result<Vec<PathBuf>, String> {
+    if !config.root.is_dir() {
+        return Err(format!("invalid project root: {}", config.root.display()));
+    }
+
+    let cache_path_v2 = cache_file_path_v2(&config.root);
+    let bytes =
+        fs::read(&cache_path_v2).map_err(|e| format!("cache file read failed: {e}"))?;
+    let persisted: PersistedReferenceCacheV2 =
+        serde_json::from_slice(&bytes).map_err(|e| format!("cache decode failed: {e}"))?;
+
+    if persisted.schema_version != CACHE_SCHEMA_VERSION_V2 {
+        return Err(format!(
+            "schema mismatch: cache={}, expected={}",
+            persisted.schema_version, CACHE_SCHEMA_VERSION_V2
+        ));
+    }
+    if persisted.project_root != config.root.to_string_lossy() {
+        return Err("project root mismatch".to_string());
+    }
+    if persisted.config_fingerprint != config_fingerprint(config) {
+        return Err("config fingerprint mismatch".to_string());
+    }
+
+    let current_hashes = current_file_hashes(config)?;
+    let mut changed = Vec::new();
+    for (rel, current_hash) in current_hashes {
+        match persisted.file_hashes.get(&rel) {
+            Some(prev) if prev == &current_hash => {}
+            _ => changed.push(config.root.join(rel)),
+        }
+    }
+    Ok(changed)
+}
+
 pub fn load_reference_cache_with_report(
     config: &FoundryConfig,
     cache_mode: ProjectIndexCacheMode,
