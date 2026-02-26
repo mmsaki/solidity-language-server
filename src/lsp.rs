@@ -123,6 +123,27 @@ impl ForgeLsp {
         config::load_foundry_config(file_path)
     }
 
+    /// Canonical project cache key for project-wide index entries.
+    ///
+    /// Prefer workspace root URI when available. If not provided by the
+    /// client, derive a file URI from detected foundry root.
+    async fn project_cache_key(&self) -> Option<String> {
+        if let Some(uri) = self.root_uri.read().await.as_ref() {
+            return Some(uri.to_string());
+        }
+
+        let mut root = self.foundry_config.read().await.root.clone();
+        if !root.is_absolute()
+            && let Ok(cwd) = std::env::current_dir()
+        {
+            root = cwd.join(root);
+        }
+        if !root.is_dir() {
+            root = root.parent()?.to_path_buf();
+        }
+        Url::from_directory_path(root).ok().map(|u| u.to_string())
+    }
+
     async fn on_change(&self, params: TextDocumentItem) {
         let uri = params.uri.clone();
         let version = params.version;
@@ -405,8 +426,7 @@ impl ForgeLsp {
             self.project_indexed
                 .store(true, std::sync::atomic::Ordering::Relaxed);
             let foundry_config = self.foundry_config.read().await.clone();
-            let root_uri = self.root_uri.read().await.clone();
-            let cache_key = root_uri.as_ref().map(|u| u.to_string());
+            let cache_key = self.project_cache_key().await;
             let ast_cache = self.ast_cache.clone();
             let client = self.client.clone();
 
@@ -1372,8 +1392,7 @@ impl LanguageServer for ForgeLsp {
             self.project_indexed
                 .store(true, std::sync::atomic::Ordering::Relaxed);
             let foundry_config = self.foundry_config.read().await.clone();
-            let root_uri = self.root_uri.read().await.clone();
-            let cache_key = root_uri.as_ref().map(|u| u.to_string());
+            let cache_key = self.project_cache_key().await;
             let ast_cache = self.ast_cache.clone();
             let client = self.client.clone();
 
@@ -1986,7 +2005,7 @@ impl LanguageServer for ForgeLsp {
                 &self.project_cache_sync_running,
             ) {
                 let foundry_config = self.foundry_config.read().await.clone();
-                let root_key = self.root_uri.read().await.as_ref().map(|u| u.to_string());
+                let root_key = self.project_cache_key().await;
                 let ast_cache = self.ast_cache.clone();
                 let text_cache = self.text_cache.clone();
                 let client = self.client.clone();
@@ -2531,7 +2550,7 @@ impl LanguageServer for ForgeLsp {
 
         // Project-wide cache for global top-level symbol tail candidates.
         let root_cached: Option<Arc<completion::CompletionCache>> = {
-            let root_key = self.root_uri.read().await.as_ref().map(|u| u.to_string());
+            let root_key = self.project_cache_key().await;
             match root_key {
                 Some(root_key) => {
                     let ast_cache = self.ast_cache.read().await;
@@ -3970,7 +3989,7 @@ impl LanguageServer for ForgeLsp {
 
         // Invalidate the project index cache and rebuild so subsequent
         // willRenameFiles requests see the updated file layout.
-        let root_key = self.root_uri.read().await.as_ref().map(|u| u.to_string());
+        let root_key = self.project_cache_key().await;
         if let Some(ref key) = root_key {
             self.ast_cache.write().await.remove(key);
         }
@@ -4327,7 +4346,7 @@ impl LanguageServer for ForgeLsp {
             )
             .await;
 
-        let root_key = self.root_uri.read().await.as_ref().map(|u| u.to_string());
+        let root_key = self.project_cache_key().await;
         if let Some(ref key) = root_key {
             self.ast_cache.write().await.remove(key);
         }
@@ -4602,7 +4621,7 @@ impl LanguageServer for ForgeLsp {
         }
 
         // Trigger background re-index so new symbols become discoverable.
-        let root_key = self.root_uri.read().await.as_ref().map(|u| u.to_string());
+        let root_key = self.project_cache_key().await;
         if let Some(ref key) = root_key {
             self.ast_cache.write().await.remove(key);
         }
