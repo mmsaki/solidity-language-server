@@ -273,111 +273,10 @@ pub fn load_foundry_config_from_toml(toml_path: &Path) -> FoundryConfig {
         }
     };
 
+    // Foundry profile selection semantics:
+    // https://www.getfoundry.sh/config/profiles#selecting-a-profile
     let profile_name = std::env::var("FOUNDRY_PROFILE").unwrap_or_else(|_| "default".to_string());
-
-    let profile = table
-        .get("profile")
-        .and_then(|p| p.as_table())
-        .and_then(|p| p.get(&profile_name))
-        .and_then(|p| p.as_table());
-
-    let profile = match profile {
-        Some(p) => p,
-        None => {
-            return FoundryConfig {
-                root,
-                ..Default::default()
-            };
-        }
-    };
-
-    // Parse solc version: `solc = "0.8.26"` or `solc_version = "0.8.26"`
-    let solc_version = profile
-        .get("solc")
-        .or_else(|| profile.get("solc_version"))
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-
-    // Parse remappings: `remappings = ["ds-test/=lib/...", ...]`
-    let remappings = profile
-        .get("remappings")
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str())
-                .map(|s| s.to_string())
-                .collect()
-        })
-        .unwrap_or_default();
-
-    // Parse via_ir: `via_ir = true`
-    let via_ir = profile
-        .get("via_ir")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-
-    // Parse optimizer: `optimizer = true`
-    let optimizer = profile
-        .get("optimizer")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-
-    // Parse optimizer_runs: `optimizer_runs = 200`
-    let optimizer_runs = profile
-        .get("optimizer_runs")
-        .and_then(|v| v.as_integer())
-        .map(|v| v as u64)
-        .unwrap_or(200);
-
-    // Parse evm_version: `evm_version = "cancun"` or `evm_version = "osaka"`
-    let evm_version = profile
-        .get("evm_version")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-
-    // Parse src: `src = "contracts"` (default: "src")
-    let sources_dir = profile
-        .get("src")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| "src".to_string());
-
-    // Parse libs: `libs = ["lib", "node_modules"]` (default: ["lib"])
-    let libs = profile
-        .get("libs")
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str())
-                .map(|s| s.to_string())
-                .collect()
-        })
-        .unwrap_or_else(|| vec!["lib".to_string()]);
-
-    // Parse ignored_error_codes: `ignored_error_codes = [2394, 6321, 3860, 5574]`
-    let ignored_error_codes = profile
-        .get("ignored_error_codes")
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_integer())
-                .map(|v| v as u64)
-                .collect()
-        })
-        .unwrap_or_default();
-
-    FoundryConfig {
-        root,
-        solc_version,
-        remappings,
-        via_ir,
-        optimizer,
-        optimizer_runs,
-        evm_version,
-        ignored_error_codes,
-        sources_dir,
-        libs,
-    }
+    parse_foundry_config(root, &table, &profile_name)
 }
 
 /// Lint-related configuration extracted from `foundry.toml`.
@@ -483,74 +382,7 @@ pub fn load_lint_config(file_path: &Path) -> LintConfig {
         Some(p) => p,
         None => return LintConfig::default(),
     };
-
-    let root = toml_path.parent().unwrap_or(Path::new("")).to_path_buf();
-
-    let content = match std::fs::read_to_string(&toml_path) {
-        Ok(c) => c,
-        Err(_) => {
-            return LintConfig {
-                root,
-                ..Default::default()
-            };
-        }
-    };
-
-    let table: toml::Table = match content.parse() {
-        Ok(t) => t,
-        Err(_) => {
-            return LintConfig {
-                root,
-                ..Default::default()
-            };
-        }
-    };
-
-    // Determine the active profile (default: "default").
-    let profile_name = std::env::var("FOUNDRY_PROFILE").unwrap_or_else(|_| "default".to_string());
-
-    // Look up [profile.<name>.lint]
-    let lint_table = table
-        .get("profile")
-        .and_then(|p| p.as_table())
-        .and_then(|p| p.get(&profile_name))
-        .and_then(|p| p.as_table())
-        .and_then(|p| p.get("lint"))
-        .and_then(|l| l.as_table());
-
-    let lint_table = match lint_table {
-        Some(t) => t,
-        None => {
-            return LintConfig {
-                root,
-                ..Default::default()
-            };
-        }
-    };
-
-    // Parse lint_on_build (default: true)
-    let lint_on_build = lint_table
-        .get("lint_on_build")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(true);
-
-    // Parse ignore patterns
-    let ignore_patterns = lint_table
-        .get("ignore")
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str())
-                .filter_map(|s| glob::Pattern::new(s).ok())
-                .collect()
-        })
-        .unwrap_or_default();
-
-    LintConfig {
-        root,
-        lint_on_build,
-        ignore_patterns,
-    }
+    load_lint_config_from_toml(&toml_path)
 }
 
 /// Load lint config from a known `foundry.toml` path (used when reloading
@@ -578,15 +410,113 @@ pub fn load_lint_config_from_toml(toml_path: &Path) -> LintConfig {
         }
     };
 
+    // Foundry profile selection semantics:
+    // https://www.getfoundry.sh/config/profiles#selecting-a-profile
     let profile_name = std::env::var("FOUNDRY_PROFILE").unwrap_or_else(|_| "default".to_string());
+    parse_lint_config(root, &table, &profile_name)
+}
 
-    let lint_table = table
-        .get("profile")
+fn profiles_table(table: &toml::Table) -> Option<&toml::value::Table> {
+    table.get("profile").and_then(|p| p.as_table())
+}
+
+fn profile_table<'a>(table: &'a toml::Table, profile_name: &str) -> Option<&'a toml::value::Table> {
+    profiles_table(table)?
+        .get(profile_name)
         .and_then(|p| p.as_table())
-        .and_then(|p| p.get(&profile_name))
-        .and_then(|p| p.as_table())
+}
+
+fn profile_value<'a>(
+    table: &'a toml::Table,
+    profile_name: &str,
+    key: &str,
+) -> Option<&'a toml::Value> {
+    profile_table(table, profile_name)
+        .and_then(|p| p.get(key))
+        .or_else(|| profile_table(table, "default").and_then(|p| p.get(key)))
+}
+
+fn parse_foundry_config(root: PathBuf, table: &toml::Table, profile_name: &str) -> FoundryConfig {
+    let solc_version = profile_value(table, profile_name, "solc")
+        .or_else(|| profile_value(table, profile_name, "solc_version"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    let remappings = profile_value(table, profile_name, "remappings")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str())
+                .map(|s| s.to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let via_ir = profile_value(table, profile_name, "via_ir")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let optimizer = profile_value(table, profile_name, "optimizer")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let optimizer_runs = profile_value(table, profile_name, "optimizer_runs")
+        .and_then(|v| v.as_integer())
+        .map(|v| v as u64)
+        .unwrap_or(200);
+
+    let evm_version = profile_value(table, profile_name, "evm_version")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    let sources_dir = profile_value(table, profile_name, "src")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "src".to_string());
+
+    let libs = profile_value(table, profile_name, "libs")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str())
+                .map(|s| s.to_string())
+                .collect()
+        })
+        .unwrap_or_else(|| vec!["lib".to_string()]);
+
+    let ignored_error_codes = profile_value(table, profile_name, "ignored_error_codes")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_integer())
+                .map(|v| v as u64)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    FoundryConfig {
+        root,
+        solc_version,
+        remappings,
+        via_ir,
+        optimizer,
+        optimizer_runs,
+        evm_version,
+        ignored_error_codes,
+        sources_dir,
+        libs,
+    }
+}
+
+fn parse_lint_config(root: PathBuf, table: &toml::Table, profile_name: &str) -> LintConfig {
+    let lint_table = profile_table(table, profile_name)
         .and_then(|p| p.get("lint"))
-        .and_then(|l| l.as_table());
+        .and_then(|l| l.as_table())
+        .or_else(|| {
+            profile_table(table, "default")
+                .and_then(|p| p.get("lint"))
+                .and_then(|l| l.as_table())
+        });
 
     let lint_table = match lint_table {
         Some(t) => t,
@@ -949,6 +879,87 @@ src = "src"
 
         let config = load_foundry_config_from_toml(&toml_path);
         assert_eq!(config.libs, vec!["lib".to_string()]);
+    }
+
+    #[test]
+    fn test_parse_lint_config_inherits_from_default_profile() {
+        let root = PathBuf::from("/tmp/project");
+        let table: toml::Table = r#"
+[profile.default.lint]
+ignore = ["test/**/*"]
+lint_on_build = true
+
+[profile.local]
+src = "src"
+"#
+        .parse()
+        .unwrap();
+
+        let cfg = parse_lint_config(root, &table, "local");
+        assert!(cfg.lint_on_build);
+        assert_eq!(cfg.ignore_patterns.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_lint_config_prefers_active_profile_override() {
+        let root = PathBuf::from("/tmp/project");
+        let table: toml::Table = r#"
+[profile.default.lint]
+ignore = ["test/**/*"]
+lint_on_build = true
+
+[profile.local.lint]
+ignore = ["script/**/*"]
+lint_on_build = false
+"#
+        .parse()
+        .unwrap();
+
+        let cfg = parse_lint_config(root, &table, "local");
+        assert!(!cfg.lint_on_build);
+        assert_eq!(cfg.ignore_patterns.len(), 1);
+        assert!(cfg.ignore_patterns[0].matches("script/Deploy.s.sol"));
+    }
+
+    #[test]
+    fn test_parse_foundry_config_inherits_from_default_profile() {
+        let root = PathBuf::from("/tmp/project");
+        let table: toml::Table = r#"
+[profile.default]
+solc = "0.8.26"
+optimizer = true
+optimizer_runs = 777
+
+[profile.local]
+src = "src"
+"#
+        .parse()
+        .unwrap();
+
+        let cfg = parse_foundry_config(root, &table, "local");
+        assert_eq!(cfg.solc_version, Some("0.8.26".to_string()));
+        assert!(cfg.optimizer);
+        assert_eq!(cfg.optimizer_runs, 777);
+    }
+
+    #[test]
+    fn test_parse_foundry_config_prefers_active_profile_override() {
+        let root = PathBuf::from("/tmp/project");
+        let table: toml::Table = r#"
+[profile.default]
+solc = "0.8.26"
+optimizer = false
+
+[profile.local]
+solc = "0.8.30"
+optimizer = true
+"#
+        .parse()
+        .unwrap();
+
+        let cfg = parse_foundry_config(root, &table, "local");
+        assert_eq!(cfg.solc_version, Some("0.8.30".to_string()));
+        assert!(cfg.optimizer);
     }
 
     // ── Settings parsing ──────────────────────────────────────────────
