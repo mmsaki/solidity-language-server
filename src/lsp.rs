@@ -179,6 +179,15 @@ impl ForgeLsp {
         };
 
         let source_count = build.nodes.len();
+        if source_count == 0 {
+            self.client
+                .log_message(
+                    MessageType::WARNING,
+                    "project cache was present but had 0 indexed files; ignoring cache",
+                )
+                .await;
+            return None;
+        }
         let complete = report.complete;
         let duration_ms = report.duration_ms;
         let reused = report.file_count_reused;
@@ -194,7 +203,7 @@ impl ForgeLsp {
             .log_message(
                 MessageType::INFO,
                 format!(
-                    "references warm-load: project cache loaded (sources={}, reused_files={}/{}, complete={}, duration={}ms)",
+                    "project cache loaded (indexed_files={}, reused_files={}/{}, complete={}, load={}ms)",
                     source_count, reused, hashed, complete, duration_ms
                 ),
             )
@@ -204,111 +213,115 @@ impl ForgeLsp {
             return Some(arc);
         }
 
-        // Partial warm load: immediately reconcile changed files only, merge,
-        // and persist back to disk so subsequent opens are fast and complete.
-        let cfg_for_diff = foundry_config.clone();
-        let changed = tokio::task::spawn_blocking(move || {
-            crate::project_cache::changed_files_since_v2_cache(&cfg_for_diff)
-        })
-        .await
-        .ok()
-        .and_then(Result::ok)
-        .unwrap_or_default();
+        // Partial warm load: return immediately and reconcile in background to
+        // avoid blocking interactive requests.
+        let client = self.client.clone();
+        let ast_cache = self.ast_cache.clone();
+        let text_cache = self.text_cache.clone();
+        let root_key_bg = root_key.clone();
+        let foundry_config_bg = foundry_config.clone();
+        tokio::spawn(async move {
+            let cfg_for_diff = foundry_config_bg.clone();
+            let changed = tokio::task::spawn_blocking(move || {
+                crate::project_cache::changed_files_since_v2_cache(&cfg_for_diff)
+            })
+            .await
+            .ok()
+            .and_then(Result::ok)
+            .unwrap_or_default();
 
-        if changed.is_empty() {
-            return Some(arc);
-        }
+            if changed.is_empty() {
+                return;
+            }
 
-        let remappings = crate::solc::resolve_remappings(&foundry_config).await;
-        let cfg_for_plan = foundry_config.clone();
-        let changed_for_plan = changed.clone();
-        let remappings_for_plan = remappings.clone();
-        let affected_set = tokio::task::spawn_blocking(move || {
-            compute_reverse_import_closure(&cfg_for_plan, &changed_for_plan, &remappings_for_plan)
-        })
-        .await
-        .ok()
-        .unwrap_or_default();
-        let mut affected_files: Vec<PathBuf> = affected_set.into_iter().collect();
-        if affected_files.is_empty() {
-            affected_files = changed;
-        }
+            let remappings = crate::solc::resolve_remappings(&foundry_config_bg).await;
+            let cfg_for_plan = foundry_config_bg.clone();
+            let changed_for_plan = changed.clone();
+            let remappings_for_plan = remappings.clone();
+            let affected_set = tokio::task::spawn_blocking(move || {
+                compute_reverse_import_closure(&cfg_for_plan, &changed_for_plan, &remappings_for_plan)
+            })
+            .await
+            .ok()
+            .unwrap_or_default();
+            let mut affected_files: Vec<PathBuf> = affected_set.into_iter().collect();
+            if affected_files.is_empty() {
+                affected_files = changed;
+            }
 
-        let text_cache_snapshot = self.text_cache.read().await.clone();
-        match crate::solc::solc_project_index_scoped(
-            &foundry_config,
-            Some(&self.client),
-            Some(&text_cache_snapshot),
-            &affected_files,
-        )
-        .await
-        {
-            Ok(ast_data) => {
-                let scoped_build = Arc::new(crate::goto::CachedBuild::new(ast_data, 0));
-                let mut merge_error: Option<String> = None;
-                let merged = {
-                    let mut cache = self.ast_cache.write().await;
-                    let merged = if let Some(existing) = cache.get(&root_key).cloned() {
-                        let mut merged = (*existing).clone();
-                        match merge_scoped_cached_build(&mut merged, (*scoped_build).clone()) {
-                            Ok(_) => Arc::new(merged),
-                            Err(e) => {
-                                merge_error = Some(e);
-                                scoped_build.clone()
+            let text_cache_snapshot = text_cache.read().await.clone();
+            match crate::solc::solc_project_index_scoped(
+                &foundry_config_bg,
+                Some(&client),
+                Some(&text_cache_snapshot),
+                &affected_files,
+            )
+            .await
+            {
+                Ok(ast_data) => {
+                    let scoped_build = Arc::new(crate::goto::CachedBuild::new(ast_data, 0));
+                    let mut merge_error: Option<String> = None;
+                    let merged = {
+                        let mut cache = ast_cache.write().await;
+                        let merged = if let Some(existing) = cache.get(&root_key_bg).cloned() {
+                            let mut merged = (*existing).clone();
+                            match merge_scoped_cached_build(&mut merged, (*scoped_build).clone()) {
+                                Ok(_) => Arc::new(merged),
+                                Err(e) => {
+                                    merge_error = Some(e);
+                                    scoped_build.clone()
+                                }
                             }
-                        }
-                    } else {
-                        scoped_build.clone()
+                        } else {
+                            scoped_build.clone()
+                        };
+                        cache.insert(root_key_bg.clone(), merged.clone());
+                        merged
                     };
-                    cache.insert(root_key.clone(), merged.clone());
-                    merged
-                };
-                if let Some(e) = merge_error {
-                    self.client
+                    if let Some(e) = merge_error {
+                        client
+                            .log_message(
+                                MessageType::WARNING,
+                                format!("cache refresh merge failed; using refreshed subset: {}", e),
+                            )
+                            .await;
+                    }
+
+                    let cfg_for_save = foundry_config_bg.clone();
+                    let build_for_save = (*merged).clone();
+                    let save_res = tokio::task::spawn_blocking(move || {
+                        crate::project_cache::save_reference_cache_with_report(
+                            &cfg_for_save,
+                            &build_for_save,
+                        )
+                    })
+                    .await;
+                    if let Ok(Ok(report)) = save_res {
+                        client
+                            .log_message(
+                                MessageType::INFO,
+                                format!(
+                                    "cache refreshed from changed files and saved (affected_files={}, hashed_files={}, save={}ms)",
+                                    affected_files.len(),
+                                    report.file_count_hashed,
+                                    report.duration_ms
+                                ),
+                            )
+                            .await;
+                    }
+                }
+                Err(e) => {
+                    client
                         .log_message(
                             MessageType::WARNING,
-                            format!(
-                                "references warm-load reconcile: merge failed, using scoped build: {}",
-                                e
-                            ),
+                            format!("cache refresh from changed files failed: {}", e),
                         )
                         .await;
                 }
+            }
+        });
 
-                let cfg_for_save = foundry_config.clone();
-                let build_for_save = (*merged).clone();
-                let save_res = tokio::task::spawn_blocking(move || {
-                    crate::project_cache::save_reference_cache_with_report(
-                        &cfg_for_save,
-                        &build_for_save,
-                    )
-                })
-                .await;
-                if let Ok(Ok(report)) = save_res {
-                    self.client
-                        .log_message(
-                            MessageType::INFO,
-                            format!(
-                                "references warm-load reconcile: saved cache (affected={}, hashed_files={}, duration={}ms)",
-                                affected_files.len(),
-                                report.file_count_hashed,
-                                report.duration_ms
-                            ),
-                        )
-                        .await;
-                }
-                Some(merged)
-            }
-            Err(e) => {
-                self.client
-                    .log_message(
-                        MessageType::WARNING,
-                        format!("references warm-load reconcile: scoped reindex failed: {}", e),
-                    )
-                    .await;
-                Some(arc)
-            }
-        }
+        Some(arc)
     }
 
     /// Best-effort persistence of the current in-memory project index.
@@ -652,12 +665,15 @@ impl ForgeLsp {
             let cache_key = self.project_cache_key().await;
             let ast_cache = self.ast_cache.clone();
             let client = self.client.clone();
+            let indexed_flag = self.project_indexed.clone();
 
             tokio::spawn(async move {
                 let Some(cache_key) = cache_key else {
+                    indexed_flag.store(false, std::sync::atomic::Ordering::Relaxed);
                     return;
                 };
                 if !foundry_config.root.is_dir() {
+                    indexed_flag.store(false, std::sync::atomic::Ordering::Relaxed);
                     client
                         .log_message(
                             MessageType::INFO,
@@ -715,7 +731,7 @@ impl ForgeLsp {
                                 .log_message(
                                     MessageType::INFO,
                                     format!(
-                                        "project index: cache load hit (sources={}, reused_files={}/{}, complete={}, duration={}ms)",
+                                        "project cache found (indexed_files={}, reused_files={}/{}, complete={}, load={}ms)",
                                         source_count,
                                         report.file_count_reused,
                                         report.file_count_hashed,
@@ -746,13 +762,12 @@ impl ForgeLsp {
                             .log_message(
                                 MessageType::INFO,
                                 format!(
-                                    "project index: cache load miss/partial (reason={}, reused_files={}/{}, duration={}ms)",
+                                    "project cache missing or stale (reason={}, reused_files={}/{}); starting full project build",
                                     report
                                         .miss_reason
                                         .unwrap_or_else(|| "unknown".to_string()),
                                     report.file_count_reused,
-                                    report.file_count_hashed,
-                                    report.duration_ms
+                                    report.file_count_hashed
                                 ),
                             )
                             .await;
@@ -767,10 +782,26 @@ impl ForgeLsp {
                     }
                 }
 
+                client
+                    .log_message(
+                        MessageType::INFO,
+                        "starting full project build",
+                    )
+                    .await;
                 match crate::solc::solc_project_index(&foundry_config, Some(&client), None).await {
                     Ok(ast_data) => {
                         let cached_build = Arc::new(crate::goto::CachedBuild::new(ast_data, 0));
                         let source_count = cached_build.nodes.len();
+                        if source_count == 0 {
+                            indexed_flag.store(false, std::sync::atomic::Ordering::Relaxed);
+                            client
+                                .log_message(
+                                    MessageType::WARNING,
+                                    "project index: full reindex produced 0 sources; skipping cache update",
+                                )
+                                .await;
+                            return;
+                        }
                         let build_for_save = (*cached_build).clone();
                         ast_cache
                             .write()
@@ -779,7 +810,7 @@ impl ForgeLsp {
                         client
                             .log_message(
                                 MessageType::INFO,
-                                format!("project index: cached {} source files", source_count),
+                                format!("full project build complete (indexed_files={})", source_count),
                             )
                             .await;
 
@@ -844,6 +875,7 @@ impl ForgeLsp {
                             .await;
                     }
                     Err(e) => {
+                        indexed_flag.store(false, std::sync::atomic::Ordering::Relaxed);
                         client
                             .log_message(MessageType::WARNING, format!("project index failed: {e}"))
                             .await;
@@ -1248,7 +1280,9 @@ fn merge_scoped_cached_build(
         .decl_index
         .retain(|id, _| match existing.node_id_to_source_path.get(id) {
             Some(path) => !affected_abs_paths.contains(path),
-            None => true,
+            // If a declaration no longer has a backing source path mapping,
+            // treat it as stale and drop it.
+            None => false,
         });
     existing
         .hint_index
@@ -1618,17 +1652,20 @@ impl LanguageServer for ForgeLsp {
             let cache_key = self.project_cache_key().await;
             let ast_cache = self.ast_cache.clone();
             let client = self.client.clone();
+            let indexed_flag = self.project_indexed.clone();
 
             tokio::spawn(async move {
                 let Some(cache_key) = cache_key else {
+                    indexed_flag.store(false, std::sync::atomic::Ordering::Relaxed);
                     return;
                 };
                 if !foundry_config.root.is_dir() {
+                    indexed_flag.store(false, std::sync::atomic::Ordering::Relaxed);
                     client
                         .log_message(
                             MessageType::INFO,
                             format!(
-                                "project index: {} not found, skipping eager index",
+                                "project root {} not found; skipping startup project build",
                                 foundry_config.root.display(),
                             ),
                         )
@@ -1679,7 +1716,7 @@ impl LanguageServer for ForgeLsp {
                                 .log_message(
                                     MessageType::INFO,
                                     format!(
-                                        "project index (eager): cache load hit (sources={}, reused_files={}/{}, complete={}, duration={}ms)",
+                                        "startup: project cache found (indexed_files={}, reused_files={}/{}, complete={}, load={}ms)",
                                         source_count,
                                         report.file_count_reused,
                                         report.file_count_hashed,
@@ -1710,13 +1747,12 @@ impl LanguageServer for ForgeLsp {
                             .log_message(
                                 MessageType::INFO,
                                 format!(
-                                    "project index (eager): cache load miss/partial (reason={}, reused_files={}/{}, duration={}ms)",
+                                    "startup: project cache missing or stale (reason={}, reused_files={}/{}); starting full project build",
                                     report
                                         .miss_reason
                                         .unwrap_or_else(|| "unknown".to_string()),
                                     report.file_count_reused,
-                                    report.file_count_hashed,
-                                    report.duration_ms
+                                    report.file_count_hashed
                                 ),
                             )
                             .await;
@@ -1725,16 +1761,32 @@ impl LanguageServer for ForgeLsp {
                         client
                             .log_message(
                                 MessageType::WARNING,
-                                format!("project index (eager): cache load task failed: {e}"),
+                                format!("startup cache load failed: {e}"),
                             )
                             .await;
                     }
                 }
 
+                client
+                    .log_message(
+                        MessageType::INFO,
+                        "startup: starting full project build",
+                    )
+                    .await;
                 match crate::solc::solc_project_index(&foundry_config, Some(&client), None).await {
                     Ok(ast_data) => {
                         let cached_build = Arc::new(crate::goto::CachedBuild::new(ast_data, 0));
                         let source_count = cached_build.nodes.len();
+                        if source_count == 0 {
+                            indexed_flag.store(false, std::sync::atomic::Ordering::Relaxed);
+                            client
+                                .log_message(
+                                    MessageType::WARNING,
+                                    "startup full project build indexed 0 files; skipping cache update",
+                                )
+                                .await;
+                            return;
+                        }
                         let build_for_save = (*cached_build).clone();
                         ast_cache
                             .write()
@@ -1744,7 +1796,7 @@ impl LanguageServer for ForgeLsp {
                             .log_message(
                                 MessageType::INFO,
                                 format!(
-                                    "project index (eager): cached {} source files",
+                                    "startup full project build complete (indexed_files={})",
                                     source_count
                                 ),
                             )
@@ -1766,7 +1818,7 @@ impl LanguageServer for ForgeLsp {
                                         .log_message(
                                             MessageType::INFO,
                                             format!(
-                                                "project index (eager): cache save complete (hashed_files={}, duration={}ms)",
+                                                "startup cache save complete (hashed_files={}, save={}ms)",
                                                 report.file_count_hashed, report.duration_ms
                                             ),
                                         )
@@ -1777,7 +1829,7 @@ impl LanguageServer for ForgeLsp {
                                         .log_message(
                                             MessageType::WARNING,
                                             format!(
-                                                "project index (eager): failed to persist cache: {e}"
+                                                "startup cache save failed: {e}"
                                             ),
                                         )
                                         .await;
@@ -1787,7 +1839,7 @@ impl LanguageServer for ForgeLsp {
                                         .log_message(
                                             MessageType::WARNING,
                                             format!(
-                                                "project index (eager): cache save task failed: {e}"
+                                                "startup cache save task failed: {e}"
                                             ),
                                         )
                                         .await;
@@ -1810,10 +1862,11 @@ impl LanguageServer for ForgeLsp {
                             .await;
                     }
                     Err(e) => {
+                        indexed_flag.store(false, std::sync::atomic::Ordering::Relaxed);
                         client
                             .log_message(
                                 MessageType::WARNING,
-                                format!("project index (eager): failed: {e}"),
+                                format!("startup full project build failed: {e}"),
                             )
                             .await;
 
@@ -3144,6 +3197,7 @@ impl LanguageServer for ForgeLsp {
             Some(bytes) => bytes,
             None => return Ok(None),
         };
+        let project_index_settings = self.settings.read().await.project_index.clone();
         let file_build = self.get_or_fetch_build(&uri, &file_path, true).await;
         let file_build = match file_build {
             Some(cb) => cb,
@@ -3151,8 +3205,92 @@ impl LanguageServer for ForgeLsp {
         };
         let mut project_build = self.ensure_project_cached_build().await;
         let current_abs = file_path.to_string_lossy().to_string();
+
+        // Degraded mode: if full project cache is unavailable (for example,
+        // project has compile errors), try a scoped build around the current
+        // file and its reverse import closure so references can still work in
+        // the currently edited area.
+        if self.use_solc && project_index_settings.full_project_scan && project_build.is_none() {
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    "project cache unavailable; scheduling scoped build for current area in background",
+                )
+                .await;
+
+            let foundry_config = self.foundry_config_for_file(&file_path).await;
+            let text_cache = self.text_cache.clone();
+            let ast_cache = self.ast_cache.clone();
+            let client = self.client.clone();
+            let cache_key = self.project_cache_key().await;
+            let current_abs_bg = current_abs.clone();
+            tokio::spawn(async move {
+                let remappings = crate::solc::resolve_remappings(&foundry_config).await;
+                let changed = vec![PathBuf::from(&current_abs_bg)];
+                let cfg_for_plan = foundry_config.clone();
+                let remappings_for_plan = remappings.clone();
+                let affected_set = tokio::task::spawn_blocking(move || {
+                    compute_reverse_import_closure(&cfg_for_plan, &changed, &remappings_for_plan)
+                })
+                .await
+                .ok()
+                .unwrap_or_default();
+                let mut affected_files: Vec<PathBuf> = affected_set.into_iter().collect();
+                if affected_files.is_empty() {
+                    affected_files.push(PathBuf::from(&current_abs_bg));
+                } else if !affected_files.iter().any(|p| p == &PathBuf::from(&current_abs_bg)) {
+                    affected_files.push(PathBuf::from(&current_abs_bg));
+                }
+
+                let text_cache_snapshot = text_cache.read().await.clone();
+                match crate::solc::solc_project_index_scoped(
+                    &foundry_config,
+                    Some(&client),
+                    Some(&text_cache_snapshot),
+                    &affected_files,
+                )
+                .await
+                {
+                    Ok(ast_data) => {
+                        let scoped_build = Arc::new(crate::goto::CachedBuild::new(ast_data, 0));
+                        let source_count = scoped_build.nodes.len();
+                        if source_count > 0 {
+                            if let Some(root_key) = cache_key {
+                                ast_cache.write().await.insert(root_key, scoped_build);
+                            }
+                            client
+                                .log_message(
+                                    MessageType::INFO,
+                                    format!(
+                                        "scoped build for current area complete (indexed_files={})",
+                                        source_count
+                                    ),
+                                )
+                                .await;
+                        } else {
+                            client
+                                .log_message(
+                                    MessageType::WARNING,
+                                    "scoped build for current area indexed 0 files",
+                                )
+                                .await;
+                        }
+                    }
+                    Err(e) => {
+                        client
+                            .log_message(
+                                MessageType::WARNING,
+                                format!("scoped build for current area failed: {e}"),
+                            )
+                            .await;
+                    }
+                }
+            });
+        }
+
         if self.use_solc
-            && self.settings.read().await.project_index.full_project_scan
+            && project_index_settings.full_project_scan
+            && project_index_settings.incremental_edit_reindex
             && project_build
                 .as_ref()
                 .is_some_and(|b| !b.nodes.contains_key(&current_abs))
@@ -3170,6 +3308,8 @@ impl LanguageServer for ForgeLsp {
             .unwrap_or_default();
             let mut affected_files: Vec<PathBuf> = affected_set.into_iter().collect();
             if affected_files.is_empty() {
+                affected_files.push(PathBuf::from(&current_abs));
+            } else if !affected_files.iter().any(|p| p == &PathBuf::from(&current_abs)) {
                 affected_files.push(PathBuf::from(&current_abs));
             }
             let text_cache_snapshot = self.text_cache.read().await.clone();
@@ -3207,7 +3347,7 @@ impl LanguageServer for ForgeLsp {
                         .log_message(
                             MessageType::INFO,
                             format!(
-                                "references warm-refresh: scoped reindex applied (affected={})",
+                                "this file was missing from cache; rebuilt affected files (affected_files={})",
                                 affected_files.len()
                             ),
                         )
@@ -3217,7 +3357,7 @@ impl LanguageServer for ForgeLsp {
                     self.client
                         .log_message(
                             MessageType::WARNING,
-                            format!("references warm-refresh: scoped reindex failed: {e}"),
+                            format!("rebuild for missing file failed: {e}"),
                         )
                         .await;
                 }
@@ -3262,6 +3402,135 @@ impl LanguageServer for ForgeLsp {
                 loc.range.end.character,
             ))
         });
+
+        // Guard against mixed-cache/node-id pollution: only keep locations
+        // whose identifier text matches the symbol under cursor.
+        if let Some(target_ident) = crate::rename::get_identifier_at_position(&source_bytes, position)
+        {
+            let mut text_cache_by_uri: HashMap<Url, Vec<u8>> = HashMap::new();
+            text_cache_by_uri.insert(uri.clone(), source_bytes.clone());
+            locations.retain(|loc| {
+                let bytes = if let Some(b) = text_cache_by_uri.get(&loc.uri) {
+                    b.clone()
+                } else if let Ok(path) = loc.uri.to_file_path() {
+                    match std::fs::read(path) {
+                        Ok(b) => {
+                            text_cache_by_uri.insert(loc.uri.clone(), b.clone());
+                            b
+                        }
+                        Err(_) => return false,
+                    }
+                } else {
+                    return false;
+                };
+
+                let start = crate::goto::pos_to_bytes(&bytes, loc.range.start);
+                let end = crate::goto::pos_to_bytes(&bytes, loc.range.end);
+                if end <= start || end > bytes.len() {
+                    return false;
+                }
+                match std::str::from_utf8(&bytes[start..end]) {
+                    Ok(s) => s == target_ident,
+                    Err(_) => false,
+                }
+            });
+        }
+
+        if locations.is_empty()
+            && let Some(range) = crate::rename::get_identifier_range(&source_bytes, position)
+        {
+            locations.push(Location {
+                uri: uri.clone(),
+                range,
+            });
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    "references not ready yet; returning local symbol only",
+                )
+                .await;
+
+            // If project index is not ready, kick a single background retry.
+            if self.use_solc
+                && project_index_settings.full_project_scan
+                && self
+                    .project_indexed
+                    .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                    .is_ok()
+            {
+                let foundry_config = self.foundry_config.read().await.clone();
+                let cache_key = self.project_cache_key().await;
+                let ast_cache = self.ast_cache.clone();
+                let client = self.client.clone();
+                let indexed_flag = self.project_indexed.clone();
+
+                tokio::spawn(async move {
+                    let Some(cache_key) = cache_key else {
+                        indexed_flag.store(false, Ordering::Release);
+                        return;
+                    };
+                    if !foundry_config.root.is_dir() {
+                        indexed_flag.store(false, Ordering::Release);
+                        return;
+                    }
+
+                    client
+                        .log_message(
+                            MessageType::INFO,
+                            "references not ready yet; starting full project build in background",
+                        )
+                        .await;
+                    match crate::solc::solc_project_index(&foundry_config, Some(&client), None)
+                        .await
+                    {
+                        Ok(ast_data) => {
+                            let cached_build = Arc::new(crate::goto::CachedBuild::new(ast_data, 0));
+                            let source_count = cached_build.nodes.len();
+                            if source_count == 0 {
+                                indexed_flag.store(false, Ordering::Release);
+                                client
+                                    .log_message(
+                                        MessageType::WARNING,
+                                        "background full project build indexed 0 files; will retry later",
+                                    )
+                                    .await;
+                                return;
+                            }
+
+                            let build_for_save = (*cached_build).clone();
+                            ast_cache.write().await.insert(cache_key, cached_build);
+                            client
+                                .log_message(
+                                    MessageType::INFO,
+                                    format!(
+                                        "background full project build complete (indexed_files={})",
+                                        source_count
+                                    ),
+                                )
+                                .await;
+
+                            let cfg_for_save = foundry_config.clone();
+                            let _ = tokio::task::spawn_blocking(move || {
+                                crate::project_cache::save_reference_cache_with_report(
+                                    &cfg_for_save,
+                                    &build_for_save,
+                                )
+                            })
+                            .await;
+                        }
+                        Err(e) => {
+                            indexed_flag.store(false, Ordering::Release);
+                            client
+                                .log_message(
+                                    MessageType::WARNING,
+                                    format!("background full project build failed: {e}"),
+                                )
+                                .await;
+                        }
+                    }
+                });
+            }
+        }
 
         if locations.is_empty() {
             self.client

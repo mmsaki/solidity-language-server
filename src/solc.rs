@@ -956,7 +956,54 @@ async fn solc_project_index_from_files(
     let input =
         build_batch_standard_json_input_with_cache(&source_files, &remappings, config, text_cache);
     let raw_output = run_solc(&solc_binary, &input, &config.root).await?;
-    Ok(normalize_solc_output(raw_output, Some(&config.root)))
+    let normalized = normalize_solc_output(raw_output.clone(), Some(&config.root));
+    let source_count = normalized
+        .get("sources")
+        .and_then(|v| v.as_object())
+        .map(|m| m.len())
+        .unwrap_or(0);
+    if source_count == 0 {
+        let errors = raw_output
+            .get("errors")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        let mut messages: Vec<String> = Vec::new();
+        for err in errors {
+            let is_error = err
+                .get("severity")
+                .and_then(|v| v.as_str())
+                .is_some_and(|s| s.eq_ignore_ascii_case("error"));
+            if !is_error {
+                continue;
+            }
+            if let Some(m) = err
+                .get("formattedMessage")
+                .and_then(|v| v.as_str())
+                .or_else(|| err.get("message").and_then(|v| v.as_str()))
+            {
+                let compact = m.lines().next().unwrap_or(m).trim().to_string();
+                if !compact.is_empty() {
+                    messages.push(compact);
+                }
+            }
+            if messages.len() >= 3 {
+                break;
+            }
+        }
+
+        let msg = if messages.is_empty() {
+            "project index produced 0 sources".to_string()
+        } else {
+            format!(
+                "project index produced 0 sources; solc errors: {}",
+                messages.join(" | ")
+            )
+        };
+        return Err(RunnerError::CommandError(std::io::Error::other(msg)));
+    }
+
+    Ok(normalized)
 }
 
 #[cfg(test)]
