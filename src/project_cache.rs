@@ -17,7 +17,7 @@ const CACHE_FILE_V1: &str = "solidity-lsp-schema-v1.json";
 const CACHE_FILE_V2: &str = "solidity-lsp-schema-v2.json";
 const CACHE_SHARDS_DIR_V2: &str = "reference-index-v2";
 const CACHE_GITIGNORE_FILE: &str = ".gitignore";
-const CACHE_GITIGNORE_CONTENTS: &str = "*\n!.gitignore\n";
+const CACHE_GITIGNORE_CONTENTS: &str = "*\n";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PersistedNodeEntry {
