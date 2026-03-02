@@ -1,7 +1,7 @@
 [package]
 name = "solidity-language-server"
 description = "A fast Solidity language server powered by solc and Foundry"
-version = "0.1.26"
+version = "0.1.27"
 edition = "2024"
 license = "MIT"
 readme = "README.md"
@@ -38,7 +38,7 @@ dhat = { version = "0.3", optional = true }
 dhat-heap = ["dhat"]
 
 [profile.release]
-debug = 1  # needed for DHAT backtraces
+debug = 1 # needed for DHAT backtraces
 
 [[bin]]
 name = "dhat-profile"
