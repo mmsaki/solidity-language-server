@@ -7,7 +7,7 @@
 use crate::config::FoundryConfig;
 use crate::runner::RunnerError;
 use serde_json::{Map, Value, json};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use tokio::process::Command;
@@ -51,13 +51,11 @@ fn semver_to_local(v: &semver::Version) -> SemVer {
 /// 4. Fall back to whatever `solc` is on `$PATH`.
 pub async fn resolve_solc_binary(
     config: &FoundryConfig,
-    file_source: Option<&str>,
+    constraint: Option<&PragmaConstraint>,
     client: Option<&tower_lsp::Client>,
 ) -> PathBuf {
-    // 1. Try pragma from the file being compiled
-    if let Some(source) = file_source
-        && let Some(constraint) = parse_pragma(source)
-    {
+    // 1. Try pragma constraint (may be tightened from the full import graph)
+    if let Some(constraint) = constraint {
         // For exact pragmas, always honour the file — foundry.toml can't override
         // without causing a compilation failure.
         // For wildcard pragmas, prefer the foundry.toml version if it satisfies
@@ -66,7 +64,7 @@ pub async fn resolve_solc_binary(
         if !matches!(constraint, PragmaConstraint::Exact(_))
             && let Some(ref config_ver) = config.solc_version
             && let Some(parsed) = SemVer::parse(config_ver)
-            && version_satisfies(&parsed, &constraint)
+            && version_satisfies(&parsed, constraint)
             && let Some(path) = find_solc_binary(config_ver)
         {
             if let Some(c) = client {
@@ -83,7 +81,7 @@ pub async fn resolve_solc_binary(
         }
 
         let installed = get_installed_versions();
-        if let Some(version) = find_matching_version(&constraint, &installed)
+        if let Some(version) = find_matching_version(constraint, &installed)
             && let Some(path) = find_solc_binary(&version.to_string())
         {
             if let Some(c) = client {
@@ -100,7 +98,7 @@ pub async fn resolve_solc_binary(
         }
 
         // No matching version installed — try auto-install via svm
-        let install_version = version_to_install(&constraint);
+        let install_version = version_to_install(constraint);
         if let Some(ref ver_str) = install_version {
             if let Some(c) = client {
                 c.show_message(
@@ -242,6 +240,212 @@ pub enum PragmaConstraint {
     Gte(SemVer),
     /// `>=0.6.2 <0.9.0` — range
     Range(SemVer, SemVer),
+}
+
+/// Extract import paths from Solidity source by scanning for `import` lines.
+///
+/// This is a lightweight alternative to tree-sitter parsing — it only needs
+/// the raw import path strings, not full AST positions.  Handles:
+/// - `import "path";`
+/// - `import {Foo} from "path";`
+/// - `import "path" as Alias;`
+/// - `import * as Alias from "path";`
+fn parse_imports(source: &str) -> Vec<String> {
+    let mut imports = Vec::new();
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if !trimmed.starts_with("import ") {
+            continue;
+        }
+        // Extract the quoted path — find the first quoted string on the line.
+        let path = extract_quoted_string(trimmed);
+        if let Some(p) = path {
+            imports.push(p);
+        }
+    }
+    imports
+}
+
+/// Extract the first single- or double-quoted string from a line.
+fn extract_quoted_string(line: &str) -> Option<String> {
+    for quote in ['"', '\''] {
+        if let Some(start) = line.find(quote) {
+            if let Some(end) = line[start + 1..].find(quote) {
+                return Some(line[start + 1..start + 1 + end].to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Resolve a Solidity import path to an absolute filesystem path.
+///
+/// Handles relative imports (`./`, `../`) and remapped imports.
+fn resolve_import_to_abs(
+    project_root: &Path,
+    importer_abs: &Path,
+    import_path: &str,
+    remappings: &[String],
+) -> Option<PathBuf> {
+    if import_path.starts_with("./") || import_path.starts_with("../") {
+        let base = importer_abs.parent()?;
+        return Some(lexical_normalize(&base.join(import_path)));
+    }
+
+    for remap in remappings {
+        let mut it = remap.splitn(2, '=');
+        let prefix = it.next().unwrap_or_default();
+        let target = it.next().unwrap_or_default();
+        if prefix.is_empty() || target.is_empty() {
+            continue;
+        }
+        if import_path.starts_with(prefix) {
+            let suffix = import_path.strip_prefix(prefix).unwrap_or_default();
+            return Some(lexical_normalize(
+                &project_root.join(format!("{target}{suffix}")),
+            ));
+        }
+    }
+
+    Some(lexical_normalize(&project_root.join(import_path)))
+}
+
+/// Normalize a path by resolving `.` and `..` components lexically
+/// (without hitting the filesystem).
+fn lexical_normalize(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for comp in path.components() {
+        match comp {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
+            _ => out.push(comp.as_os_str()),
+        }
+    }
+    out
+}
+
+/// Collect pragma constraints from a file and all its transitive imports.
+///
+/// Walks the import graph using simple string scanning (no tree-sitter),
+/// resolving import paths via remappings.  Returns all pragmas found so
+/// that the caller can pick a solc version satisfying every file.
+fn collect_import_pragmas(
+    file_path: &Path,
+    project_root: &Path,
+    remappings: &[String],
+) -> Vec<PragmaConstraint> {
+    let mut pragmas = Vec::new();
+    let mut visited = HashSet::new();
+    collect_import_pragmas_recursive(
+        file_path,
+        project_root,
+        remappings,
+        &mut pragmas,
+        &mut visited,
+    );
+    pragmas
+}
+
+fn collect_import_pragmas_recursive(
+    file_path: &Path,
+    project_root: &Path,
+    remappings: &[String],
+    pragmas: &mut Vec<PragmaConstraint>,
+    visited: &mut HashSet<PathBuf>,
+) {
+    if !visited.insert(file_path.to_path_buf()) {
+        return;
+    }
+    let source = match std::fs::read_to_string(file_path) {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+    if let Some(pragma) = parse_pragma(&source) {
+        pragmas.push(pragma);
+    }
+    for import_path in parse_imports(&source) {
+        if let Some(abs) = resolve_import_to_abs(project_root, file_path, &import_path, remappings)
+        {
+            collect_import_pragmas_recursive(&abs, project_root, remappings, pragmas, visited);
+        }
+    }
+}
+
+/// Tighten a set of pragma constraints into a single constraint that
+/// satisfies all of them.
+///
+/// Rules:
+/// - An exact pragma always wins (if any file requires `0.8.23`, we must
+///   use exactly `0.8.23`).
+/// - Multiple exact pragmas that disagree → returns the first one (solc
+///   will error anyway, but we still try).
+/// - For wildcard pragmas, compute the intersection range and return it.
+fn tightest_constraint(pragmas: &[PragmaConstraint]) -> Option<PragmaConstraint> {
+    if pragmas.is_empty() {
+        return None;
+    }
+
+    // If any pragma is Exact, that version must be used.
+    for p in pragmas {
+        if matches!(p, PragmaConstraint::Exact(_)) {
+            return Some(p.clone());
+        }
+    }
+
+    // Normalize every constraint to a (lower, upper) range, then intersect.
+    let mut lower = SemVer {
+        major: 0,
+        minor: 0,
+        patch: 0,
+    };
+    let mut upper: Option<SemVer> = None;
+
+    for p in pragmas {
+        let (lo, hi) = constraint_to_range(p);
+        if lo > lower {
+            lower = lo;
+        }
+        if let Some(hi) = hi {
+            upper = Some(match upper {
+                Some(cur) if hi < cur => hi,
+                Some(cur) => cur,
+                None => hi,
+            });
+        }
+    }
+
+    match upper {
+        Some(hi) if lower >= hi => None, // empty intersection
+        Some(hi) => Some(PragmaConstraint::Range(lower, hi)),
+        None => Some(PragmaConstraint::Gte(lower)),
+    }
+}
+
+/// Convert a pragma constraint to an inclusive lower bound and optional
+/// exclusive upper bound.
+fn constraint_to_range(constraint: &PragmaConstraint) -> (SemVer, Option<SemVer>) {
+    match constraint {
+        PragmaConstraint::Exact(v) => (
+            v.clone(),
+            Some(SemVer {
+                major: v.major,
+                minor: v.minor,
+                patch: v.patch + 1,
+            }),
+        ),
+        PragmaConstraint::Caret(v) => (
+            v.clone(),
+            Some(SemVer {
+                major: v.major,
+                minor: v.minor + 1,
+                patch: 0,
+            }),
+        ),
+        PragmaConstraint::Gte(v) => (v.clone(), None),
+        PragmaConstraint::Range(lo, hi) => (lo.clone(), Some(hi.clone())),
+    }
 }
 
 /// Parse `pragma solidity <constraint>;` from Solidity source.
@@ -710,10 +914,14 @@ pub async fn solc_ast(
     config: &FoundryConfig,
     client: Option<&tower_lsp::Client>,
 ) -> Result<Value, RunnerError> {
-    // Read source to detect pragma version
-    let file_source = std::fs::read_to_string(file_path).ok();
-    let solc_binary = resolve_solc_binary(config, file_source.as_deref(), client).await;
     let remappings = resolve_remappings(config).await;
+
+    // Collect pragma constraints from the file and all its transitive imports
+    // so we pick a solc version that satisfies the entire dependency graph.
+    let file_abs = Path::new(file_path);
+    let pragmas = collect_import_pragmas(file_abs, &config.root, &remappings);
+    let constraint = tightest_constraint(&pragmas);
+    let solc_binary = resolve_solc_binary(config, constraint.as_ref(), client).await;
 
     // Solc's import resolver fails when sources use absolute paths — it resolves
     // 0 transitive imports, causing "No matching declaration found" errors for
@@ -942,16 +1150,24 @@ async fn solc_project_index_from_files(
         .await;
     }
 
-    // Use the first file to detect pragma and resolve solc binary.
-    // Prefer cached content over disk.
-    let first_source = text_cache
-        .and_then(|tc| {
-            let uri = Url::from_file_path(&source_files[0]).ok()?;
-            tc.get(&uri.to_string()).map(|(_, c)| c.clone())
-        })
-        .or_else(|| std::fs::read_to_string(&source_files[0]).ok());
-    let solc_binary = resolve_solc_binary(config, first_source.as_deref(), client).await;
     let remappings = resolve_remappings(config).await;
+
+    // Collect pragma constraints from all source files so we pick a solc
+    // version that satisfies the entire project.
+    let pragmas: Vec<PragmaConstraint> = source_files
+        .iter()
+        .filter_map(|f| {
+            let source = text_cache
+                .and_then(|tc| {
+                    let uri = Url::from_file_path(f).ok()?;
+                    tc.get(&uri.to_string()).map(|(_, c)| c.clone())
+                })
+                .or_else(|| std::fs::read_to_string(f).ok())?;
+            parse_pragma(&source)
+        })
+        .collect();
+    let constraint = tightest_constraint(&pragmas);
+    let solc_binary = resolve_solc_binary(config, constraint.as_ref(), client).await;
 
     let input =
         build_batch_standard_json_input_with_cache(&source_files, &remappings, config, text_cache);
