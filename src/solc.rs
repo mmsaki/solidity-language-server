@@ -5,6 +5,7 @@
 //! unchanged.
 
 use crate::config::FoundryConfig;
+use crate::links;
 use crate::runner::RunnerError;
 use serde_json::{Map, Value, json};
 use std::collections::{HashMap, HashSet};
@@ -242,42 +243,6 @@ pub enum PragmaConstraint {
     Range(SemVer, SemVer),
 }
 
-/// Extract import paths from Solidity source by scanning for `import` lines.
-///
-/// This is a lightweight alternative to tree-sitter parsing — it only needs
-/// the raw import path strings, not full AST positions.  Handles:
-/// - `import "path";`
-/// - `import {Foo} from "path";`
-/// - `import "path" as Alias;`
-/// - `import * as Alias from "path";`
-fn parse_imports(source: &str) -> Vec<String> {
-    let mut imports = Vec::new();
-    for line in source.lines() {
-        let trimmed = line.trim();
-        if !trimmed.starts_with("import ") {
-            continue;
-        }
-        // Extract the quoted path — find the first quoted string on the line.
-        let path = extract_quoted_string(trimmed);
-        if let Some(p) = path {
-            imports.push(p);
-        }
-    }
-    imports
-}
-
-/// Extract the first single- or double-quoted string from a line.
-fn extract_quoted_string(line: &str) -> Option<String> {
-    for quote in ['"', '\''] {
-        if let Some(start) = line.find(quote) {
-            if let Some(end) = line[start + 1..].find(quote) {
-                return Some(line[start + 1..start + 1 + end].to_string());
-            }
-        }
-    }
-    None
-}
-
 /// Resolve a Solidity import path to an absolute filesystem path.
 ///
 /// Handles relative imports (`./`, `../`) and remapped imports.
@@ -365,9 +330,8 @@ fn collect_import_pragmas_recursive(
     if let Some(pragma) = parse_pragma(&source) {
         pragmas.push(pragma);
     }
-    for import_path in parse_imports(&source) {
-        if let Some(abs) = resolve_import_to_abs(project_root, file_path, &import_path, remappings)
-        {
+    for imp in links::ts_find_imports(source.as_bytes()) {
+        if let Some(abs) = resolve_import_to_abs(project_root, file_path, &imp.path, remappings) {
             collect_import_pragmas_recursive(&abs, project_root, remappings, pragmas, visited);
         }
     }
