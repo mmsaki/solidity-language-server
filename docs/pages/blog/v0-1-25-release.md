@@ -121,9 +121,9 @@ Across these 8 releases, tests increased from 168 to 458.
 
 ## What's next
 
-Next targets include `textDocument/codeAction` (quick fixes), `textDocument/codeLens` (test actions for `.t.sol`), and `window/workDoneProgress` for long operations. `textDocument/documentColor` is also scoped. A VS Code extension is in progress.
+Next targets include `textDocument/codeAction` (quick fixes) and `textDocument/codeLens` (test actions for `.t.sol`). `textDocument/documentColor` is also scoped.
 
-A longer-term question is whether to move diagnostics off `forge build` entirely. Solar parser integration is in progress. A full Solar backend would reduce Foundry dependency for core features and improve cold starts.
+A longer-term question is whether to move diagnostics off `forge build` entirely. An experimental Solar parser backend (`--use-solar`) is included and reduces Foundry dependency for core features, with a full Solar backend as a future goal for improved cold starts.
 
 ## Try it
 
