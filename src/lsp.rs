@@ -1958,7 +1958,12 @@ impl LanguageServer for ForgeLsp {
             capabilities: ServerCapabilities {
                 position_encoding: Some(encoding.into()),
                 completion_provider: Some(CompletionOptions {
-                    trigger_characters: Some(vec![".".to_string()]),
+                    trigger_characters: Some(vec![
+                        ".".to_string(),
+                        "\"".to_string(),
+                        "'".to_string(),
+                        "/".to_string(),
+                    ]),
                     resolve_provider: Some(false),
                     ..Default::default()
                 }),
@@ -2936,6 +2941,30 @@ impl LanguageServer for ForgeLsp {
             .to_file_path()
             .ok()
             .and_then(|p| p.to_str().map(|s| s.to_string()));
+
+        // --- Import path completions ---
+        // Check before normal dispatch so we can short-circuit for import strings.
+        if matches!(trigger_char, Some("\"") | Some("'") | Some("/") | None) {
+            if let Some(import_ctx) = completion::import_path_at_cursor(&source_text, position) {
+                if let Ok(current_file) = uri.to_file_path() {
+                    let foundry_cfg = self.foundry_config.read().await;
+                    let project_root = foundry_cfg.root.clone();
+                    let remappings = foundry_cfg.remappings.clone();
+                    drop(foundry_cfg);
+
+                    let items = completion::import_path_completions(
+                        &import_ctx,
+                        &current_file,
+                        &project_root,
+                        &remappings,
+                    );
+                    return Ok(Some(CompletionResponse::List(CompletionList {
+                        is_incomplete: false,
+                        items,
+                    })));
+                }
+            }
+        }
 
         let tail_candidates = if trigger_char == Some(".") {
             vec![]

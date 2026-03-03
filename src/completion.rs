@@ -1,9 +1,9 @@
 use serde_json::Value;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tower_lsp::lsp_types::{
-    CompletionItem, CompletionItemKind, CompletionList, CompletionResponse, Position, Range,
-    TextEdit,
+    CompletionItem, CompletionItemKind, CompletionList, CompletionResponse, Documentation,
+    MarkupContent, MarkupKind, Position, Range, TextEdit,
 };
 
 use crate::goto::CHILD_KEYS;
@@ -309,10 +309,7 @@ fn build_top_level_importables_by_name(
 ///
 /// - Includes: contract/interface/library/struct/enum/UDVT/top-level free function/top-level constant
 /// - Excludes: imported aliases/re-exports, nested declarations, non-constant variables
-pub fn extract_top_level_importables_for_file(
-    path: &str,
-    ast: &Value,
-) -> Vec<TopLevelImportable> {
+pub fn extract_top_level_importables_for_file(path: &str, ast: &Value) -> Vec<TopLevelImportable> {
     let mut out: Vec<TopLevelImportable> = Vec::new();
     let mut stack: Vec<&Value> = vec![ast];
     let mut source_unit_id: Option<NodeId> = None;
@@ -1709,9 +1706,9 @@ pub fn append_auto_import_candidates_last(
 ) -> Vec<CompletionItem> {
     let mut unique_label_edits: HashMap<String, Option<Vec<TextEdit>>> = HashMap::new();
     for item in &auto_import_candidates {
-        let entry = unique_label_edits.entry(item.label.clone()).or_insert_with(|| {
-            item.additional_text_edits.clone()
-        });
+        let entry = unique_label_edits
+            .entry(item.label.clone())
+            .or_insert_with(|| item.additional_text_edits.clone());
         if *entry != item.additional_text_edits {
             *entry = None;
         }
@@ -2046,6 +2043,246 @@ const GLOBAL_FUNCTIONS: &[(&str, &str)] = &[
     ("selfdestruct(address payable recipient)", ""),
 ];
 
+// ---------------------------------------------------------------------------
+// Import path completions
+// ---------------------------------------------------------------------------
+
+/// Context extracted by [`import_path_at_cursor`].
+#[derive(Debug, Clone)]
+pub struct ImportPathContext {
+    /// The portion of the import string already typed (without quotes).
+    /// e.g. `"./lib/"` → `"./lib/"`, `"@oz"` → `"@oz"`
+    pub typed: String,
+}
+
+/// Use tree-sitter to detect whether `position` is inside an import-string
+/// node.  If so, returns the text already typed up to the cursor.
+///
+/// Works on incomplete/in-progress source because tree-sitter is error-tolerant.
+pub fn import_path_at_cursor(source: &str, position: Position) -> Option<ImportPathContext> {
+    let mut parser = tree_sitter::Parser::new();
+    parser
+        .set_language(&tree_sitter_solidity::LANGUAGE.into())
+        .ok()?;
+    let tree = parser.parse(source, None)?;
+
+    let cursor_byte = crate::utils::position_to_byte_offset(source, position);
+
+    // Walk looking for a `string` node inside `import_directive` that
+    // contains the cursor byte.
+    find_import_string_at(tree.root_node(), source.as_bytes(), cursor_byte)
+}
+
+fn find_import_string_at(
+    node: tree_sitter::Node,
+    src: &[u8],
+    cursor_byte: usize,
+) -> Option<ImportPathContext> {
+    if node.kind() == "import_directive" {
+        for i in 0..node.named_child_count() {
+            if let Some(child) = node.named_child(i as u32) {
+                if child.kind() == "string" {
+                    let start = child.start_byte();
+                    let end = child.end_byte();
+                    // cursor must be inside the string (including the closing
+                    // quote position, which is where the user is typing)
+                    if cursor_byte >= start && cursor_byte <= end {
+                        // strip opening quote
+                        let inner_start = start + 1;
+                        let inner_end = cursor_byte.min(end.saturating_sub(1));
+                        let typed = if inner_end >= inner_start {
+                            String::from_utf8_lossy(&src[inner_start..inner_end]).to_string()
+                        } else {
+                            String::new()
+                        };
+                        return Some(ImportPathContext { typed });
+                    }
+                }
+            }
+        }
+        return None;
+    }
+
+    for i in 0..node.child_count() {
+        if let Some(child) = node.child(i as u32) {
+            if child.start_byte() <= cursor_byte && cursor_byte <= child.end_byte() {
+                if let Some(ctx) = find_import_string_at(child, src, cursor_byte) {
+                    return Some(ctx);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Build import-path completion items given:
+/// - `ctx`         — the already-typed portion inside the import string
+/// - `current_file` — absolute path of the file being edited
+/// - `project_root` — absolute project root (foundry workspace root)
+/// - `remappings`  — list of `prefix=target` remapping strings
+///
+/// Returns `None` when the cursor is not inside an import string.
+pub fn import_path_completions(
+    ctx: &ImportPathContext,
+    current_file: &Path,
+    project_root: &Path,
+    remappings: &[String],
+) -> Vec<CompletionItem> {
+    let typed = &ctx.typed;
+
+    if typed.starts_with("./") || typed.starts_with("../") {
+        // Relative path — resolve against the current file's directory
+        let base = match current_file.parent() {
+            Some(p) => p.to_path_buf(),
+            None => return vec![],
+        };
+        let (dir, prefix_in_dir) = split_typed_path(&base, typed);
+        return fs_completions(&dir, &prefix_in_dir, typed);
+    }
+
+    // Check if `typed` already matches a remapping prefix
+    for remap in remappings {
+        let mut it = remap.splitn(2, '=');
+        let prefix = it.next().unwrap_or_default();
+        let target = it.next().unwrap_or_default();
+        if prefix.is_empty() || target.is_empty() {
+            continue;
+        }
+        if typed.starts_with(prefix) {
+            // Cursor is inside a remapped import — walk the target directory
+            let suffix = typed.strip_prefix(prefix).unwrap_or_default();
+            let target_root = project_root.join(target);
+            let (dir, prefix_in_dir) = split_typed_path(&target_root, suffix);
+            return fs_completions(&dir, &prefix_in_dir, typed);
+        }
+    }
+
+    // Nothing typed yet (empty string, just `"` or `'`) — offer:
+    //   1. remapping prefixes
+    //   2. relative starters: ./ and ../
+    let mut items: Vec<CompletionItem> = Vec::new();
+
+    // Remapping prefixes
+    for remap in remappings {
+        let mut it = remap.splitn(2, '=');
+        let prefix = it.next().unwrap_or_default();
+        let target = it.next().unwrap_or_default();
+        if prefix.is_empty() || target.is_empty() {
+            continue;
+        }
+        // Deduplicate: only offer the first occurrence of each prefix
+        if items.iter().any(|i| i.label == prefix) {
+            continue;
+        }
+        items.push(CompletionItem {
+            label: prefix.to_string(),
+            kind: Some(CompletionItemKind::FOLDER),
+            detail: Some(format!("→ {target}")),
+            documentation: Some(Documentation::MarkupContent(MarkupContent {
+                kind: MarkupKind::Markdown,
+                value: format!("Remapping: `{prefix}` → `{target}`"),
+            })),
+            sort_text: Some(format!("0_{prefix}")),
+            ..Default::default()
+        });
+    }
+
+    // Relative starters
+    for starter in &["./", "../"] {
+        items.push(CompletionItem {
+            label: starter.to_string(),
+            kind: Some(CompletionItemKind::FOLDER),
+            sort_text: Some(format!("1_{starter}")),
+            ..Default::default()
+        });
+    }
+
+    items
+}
+
+/// Given a resolved base directory and a typed suffix like `"contracts/"`
+/// or `""`, return `(directory_to_list, prefix_filter)`.
+fn split_typed_path(base: &Path, typed_suffix: &str) -> (PathBuf, String) {
+    if typed_suffix.ends_with('/') || typed_suffix.is_empty() {
+        // The user has typed a complete directory component — list inside it
+        let dir = if typed_suffix.is_empty() {
+            base.to_path_buf()
+        } else {
+            base.join(typed_suffix)
+        };
+        (dir, String::new())
+    } else {
+        // Partial file/dir name — list the parent, filter by last segment
+        let path = base.join(typed_suffix);
+        let prefix = path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let dir = path.parent().unwrap_or(base).to_path_buf();
+        (dir, prefix)
+    }
+}
+
+/// List `.sol` files and subdirectories inside `dir`, filtered by `prefix`.
+/// Items are returned as completion items with `File` or `Folder` kind.
+fn fs_completions(dir: &Path, prefix: &str, typed_so_far: &str) -> Vec<CompletionItem> {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return vec![],
+    };
+
+    let mut items = Vec::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+
+        // Skip hidden files/dirs
+        if name_str.starts_with('.') {
+            continue;
+        }
+
+        if !prefix.is_empty() && !name_str.starts_with(prefix.as_ref() as &str) {
+            continue;
+        }
+
+        let file_type = match entry.file_type() {
+            Ok(ft) => ft,
+            Err(_) => continue,
+        };
+
+        if file_type.is_dir() {
+            let label = format!("{name_str}/");
+            items.push(CompletionItem {
+                label: label.clone(),
+                kind: Some(CompletionItemKind::FOLDER),
+                sort_text: Some(format!("0_{label}")),
+                ..Default::default()
+            });
+        } else if file_type.is_file() && name_str.ends_with(".sol") {
+            // Build the full insert text: everything before the last `/` + this filename
+            let insert = {
+                let last_slash = typed_so_far.rfind('/').map(|i| i + 1).unwrap_or(0);
+                format!("{}{}", &typed_so_far[..last_slash], name_str)
+            };
+            items.push(CompletionItem {
+                label: name_str.to_string(),
+                kind: Some(CompletionItemKind::FILE),
+                insert_text: Some(insert),
+                sort_text: Some(format!("1_{name_str}")),
+                ..Default::default()
+            });
+        }
+    }
+
+    items.sort_by(|a, b| {
+        a.sort_text
+            .as_deref()
+            .unwrap_or(&a.label)
+            .cmp(b.sort_text.as_deref().unwrap_or(&b.label))
+    });
+    items
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -2354,5 +2591,82 @@ mod tests {
             }
             _ => panic!("expected completion list"),
         }
+    }
+
+    // --- import path completion tests ---
+
+    #[test]
+    fn import_path_at_cursor_detects_relative_import() {
+        // Cursor inside the string of a relative import
+        let src = r#"import "./contracts/Token.sol";"#;
+        // position after "./" → character 10
+        let pos = Position {
+            line: 0,
+            character: 10,
+        };
+        let ctx = super::import_path_at_cursor(src, pos);
+        assert!(ctx.is_some(), "should detect import string");
+        let ctx = ctx.unwrap();
+        assert!(ctx.typed.starts_with("./"), "typed should start with ./");
+    }
+
+    #[test]
+    fn import_path_at_cursor_detects_empty_import() {
+        // Cursor immediately after opening quote
+        let src = r#"import "";"#;
+        let pos = Position {
+            line: 0,
+            character: 8,
+        };
+        let ctx = super::import_path_at_cursor(src, pos);
+        assert!(ctx.is_some(), "should detect empty import string");
+        assert_eq!(ctx.unwrap().typed, "");
+    }
+
+    #[test]
+    fn import_path_at_cursor_returns_none_outside_import() {
+        let src = "contract Foo {}";
+        let pos = Position {
+            line: 0,
+            character: 5,
+        };
+        let ctx = super::import_path_at_cursor(src, pos);
+        assert!(ctx.is_none(), "should return None outside import");
+    }
+
+    #[test]
+    fn import_path_completions_empty_typed_offers_remapping_prefixes() {
+        let ctx = super::ImportPathContext {
+            typed: String::new(),
+        };
+        let current = std::path::Path::new("/project/src/Foo.sol");
+        let root = std::path::Path::new("/project");
+        let remappings = vec![
+            "@openzeppelin/=lib/openzeppelin-contracts/src/".to_string(),
+            "forge-std/=lib/forge-std/src/".to_string(),
+        ];
+        let items = super::import_path_completions(&ctx, current, root, &remappings);
+        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+        assert!(
+            labels.contains(&"@openzeppelin/"),
+            "should include @openzeppelin/"
+        );
+        assert!(labels.contains(&"forge-std/"), "should include forge-std/");
+        assert!(labels.contains(&"./"), "should include ./ starter");
+        assert!(labels.contains(&"../"), "should include ../ starter");
+    }
+
+    #[test]
+    fn import_path_completions_remapped_prefix_drills_into_target() {
+        // When typed starts with a known remapping prefix, we should get fs completions
+        // (empty list is fine when the target dir doesn't exist, but no panic)
+        let ctx = super::ImportPathContext {
+            typed: "@openzeppelin/token/".to_string(),
+        };
+        let current = std::path::Path::new("/project/src/Foo.sol");
+        let root = std::path::Path::new("/project");
+        let remappings = vec!["@openzeppelin/=lib/openzeppelin-contracts/src/".to_string()];
+        // Should not panic even if directory doesn't exist
+        let _items = super::import_path_completions(&ctx, current, root, &remappings);
     }
 }
