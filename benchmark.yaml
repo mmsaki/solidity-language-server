@@ -2,21 +2,20 @@
 # Usage: cargo build --release && lsp-bench
 project: example
 file: Shop.sol
-line: 136
+line: 137
 col: 32
 
 iterations: 10
 warmup: 2
 timeout: 10
 index_timeout: 15
-output: benchmarks/v0.1.25
+output: benchmarks/latest
 report: README.md
 
 # Exclude unimplemented methods
 exclude:
   - textDocument/typeDefinition
   - textDocument/implementation
-  - textDocument/codeAction
   - textDocument/codeLens
   - textDocument/documentColor
   - textDocument/colorPresentation
@@ -25,24 +24,24 @@ exclude:
 
 methods:
   textDocument/completion:
-    line: 159
+    line: 160
     col: 18
     trigger: "."
 
   textDocument/signatureHelp:
-    line: 136
+    line: 137
     col: 47
     # Inside PRICE.addTax(TAX, TAX_BASE) — parameter info on first arg
 
   textDocument/documentHighlight:
-    line: 136
+    line: 137
     col: 32
     # PRICE — immutable used across constructor and buy()
 
   textDocument/inlayHint:
-    line: 134
+    line: 135
     col: 0
-    endLine: 146
+    endLine: 147
     endCol: 0
     # buy() function body — parameter names + gas estimates
 
@@ -60,13 +59,13 @@ methods:
         col: 0
 
 servers:
-  - label: v0.1.25
+  - label: latest
     description: Latest version
     cmd: ./target/release/solidity-language-server
 
-  - label: 0.1.24
-    description: Last deployed version
-    cmd: /Users/meek/.solidity-lsp/0.1.24/bin/solidity-language-server
+  # - label: 0.1.24
+  #   description: Last deployed version
+  #   cmd: /Users/meek/.solidity-lsp/0.1.24/bin/solidity-language-server
 
   # - label: solc
   #   description: Official Solidity compiler LSP
