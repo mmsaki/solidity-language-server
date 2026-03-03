@@ -19,18 +19,33 @@ cargo test
 
 ```
 src/
-├── main.rs          # CLI entry point, clap args, tracing setup
-├── lib.rs           # Module declarations
-├── lsp.rs           # LSP server, handler dispatch, capabilities
-├── build.rs         # forge build + diagnostics
-├── goto.rs          # goto-definition, goto-declaration, AST node caching
-├── hover.rs         # textDocument/hover, NatSpec, selectors, @inheritdoc
-├── completion.rs    # Completion engine, chain resolution, using-for
-├── references.rs    # find-references, Yul external refs
-├── rename.rs        # prepare-rename, rename
-├── symbols.rs       # document symbols
-├── lint.rs          # forge lint diagnostics
-└── utils.rs         # shared utilities
+├── main.rs              # CLI entry point, clap args, tracing setup
+├── lib.rs               # Module declarations
+├── lsp.rs               # LSP server, handler dispatch, capabilities
+├── build.rs             # forge build + diagnostics
+├── config.rs            # LSP settings deserialization
+├── completion.rs        # Completion engine, chain resolution, using-for
+├── file_operations.rs   # willCreate/willRename/willDelete file ops
+├── folding.rs           # textDocument/foldingRange
+├── gas.rs               # gas estimate hint extraction
+├── goto.rs              # goto-definition, goto-declaration, AST node caching
+├── highlight.rs         # textDocument/documentHighlight
+├── hover.rs             # textDocument/hover, NatSpec, selectors, @inheritdoc
+├── inlay_hints.rs       # textDocument/inlayHint
+├── links.rs             # textDocument/documentLink
+├── lint.rs              # forge lint diagnostics
+├── project_cache.rs     # v2 on-disk shard cache, single-flight sync
+├── references.rs        # find-references, Yul external refs
+├── rename.rs            # prepare-rename, rename (including aliased imports)
+├── runner.rs            # solc subprocess runner
+├── selection.rs         # textDocument/selectionRange
+├── semantic_tokens.rs   # textDocument/semanticTokens (full/range/delta)
+├── solar_runner.rs      # experimental Solar parser backend
+├── solc.rs              # solc invocation and output parsing
+├── solc_ast/            # AST node types and visitor (12 sub-modules)
+├── symbols.rs           # document/workspace symbols
+├── types.rs             # shared type definitions
+└── utils.rs             # shared utilities
 
 docs/pages/          # Vocs docs content (quickstart, setup, reference, benchmarks)
 build.rs             # Compile-time: git commit hash, OS, arch
@@ -39,12 +54,12 @@ build.rs             # Compile-time: git commit hash, OS, arch
 ## Running Tests
 
 ```sh
-cargo test              # all tests (141 currently)
+cargo test              # all tests (600 currently)
 cargo test hover        # run hover tests only
 cargo test completion   # run completion tests only
 ```
 
-Tests use `pool-manager-ast.json` (7.2MB Uniswap v4 fixture) committed in the repo.
+Tests use `poolmanager.json` (Uniswap v4 fixture) committed in the repo.
 
 ## Testing the LSP
 
@@ -70,7 +85,7 @@ Test against a real Foundry project — the LSP needs `foundry.toml` in the proj
 3. **Add capability in `src/lsp.rs`** — in the `initialize` handler's `ServerCapabilities`
 4. **Add handler in `src/lsp.rs`** — implement the `LanguageServer` trait method
 5. **Use `ast_cache`** — read from `self.ast_cache` instead of calling `self.compiler.ast()` directly
-6. **Write tests** — use `pool-manager-ast.json` fixture, assert against known node IDs
+  6. **Write tests** — use `poolmanager.json` fixture, assert against known node IDs
 7. **Add docs** — document behavior in `docs/pages/reference/*.md` (and update setup/quickstart pages if needed)
 
 ## AST Exploration
@@ -79,13 +94,13 @@ The compiler AST is the foundation. Use `jq` to explore:
 
 ```sh
 # Find a node by ID
-cat pool-manager-ast.json | jq '.. | objects | select(.id == 1767)'
+jq '.. | objects | select(.id == 1767)' poolmanager.json
 
 # Find nodes by type
-cat pool-manager-ast.json | jq '[.. | objects | select(.nodeType == "FunctionDefinition")] | length'
+jq '[.. | objects | select(.nodeType == "FunctionDefinition")] | length' poolmanager.json
 
 # Find nodes with a specific field
-cat pool-manager-ast.json | jq '.. | objects | select(.functionSelector != null) | {id, name, functionSelector}'
+jq '.. | objects | select(.functionSelector != null) | {id, name, functionSelector}' poolmanager.json
 ```
 
 See [documentation site](https://solidity-language-server-docs.pages.dev) and `docs/pages/reference/` for implementation-deep feature guides.
