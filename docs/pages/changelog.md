@@ -2,6 +2,31 @@
 
 # Changelog
 
+## v0.1.28
+
+### Features
+
+- Drop v1 cache path; v2 cache is now the only supported mode
+- Auto-create `.gitignore` in the cache directory on first write
+
+### Fixes
+
+- Pull settings via `workspace/configuration` when `initializationOptions` is absent — fixes Neovim which sends settings only via pull requests, not as `initializationOptions` (#164)
+- Use import-closure for project index: BFS from source/test/script roots via forge remappings compiles only files the project actually imports (~510 vs 1788 for v4-core), cross-file `referencedDeclaration` IDs now populated correctly (#165)
+- Resolve solc version from transitive import pragmas: intersects pragma constraints across the full import graph so a wildcard pragma file importing an exact-version file picks a compatible solc, fixing empty ASTs and broken goto-definition (#162)
+- Use tree-sitter for import parsing in pragma graph walk, correctly handling multi-line import directives
+- Correct `textDocument/rename` for aliased imports (`import {A as B}` and `import './X.sol' as Y`) (#167)
+- Fix config profile fallback and lint parsing
+- Incremental reindex safety with threshold gating and scoped cache merge; warm-load reconciles changed files and persists cache aggressively (#156)
+
+### Docs
+
+- Add `--stdio` to Neovim `cmd` snippets in `DOCS.md`
+- Add `projectIndex` settings to all editor config examples
+- Add missing `willCreate`/`didCreate`/`willDelete`/`didDelete` capabilities to `neovim-plugin-lsp.lua`
+- Fix `CONTRIBUTING.md`: correct fixture name, test count (600), and project structure
+- Fix stale benchmark config references across profiling and completions docs
+
 ## v0.1.27
 
 ### Features
