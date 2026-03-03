@@ -2943,9 +2943,15 @@ impl LanguageServer for ForgeLsp {
             .and_then(|p| p.to_str().map(|s| s.to_string()));
 
         // --- Import path completions ---
-        // Check before normal dispatch so we can short-circuit for import strings.
-        if matches!(trigger_char, Some("\"") | Some("'") | Some("/") | None) {
-            if let Some(import_ctx) = completion::import_path_at_cursor(&source_text, position) {
+        // When triggered by `"`, `'`, or `/` — or when the cursor is manually
+        // invoked inside an import string — we exclusively serve path completions.
+        // If the trigger char is one of these but the cursor is NOT inside an
+        // import string, return nothing (don't fall through to AST completions).
+        let is_import_trigger = matches!(trigger_char, Some("\"") | Some("'") | Some("/"));
+        let import_ctx = completion::import_path_at_cursor(&source_text, position);
+
+        if is_import_trigger || import_ctx.is_some() {
+            return if let Some(ctx) = import_ctx {
                 if let Ok(current_file) = uri.to_file_path() {
                     let foundry_cfg = self.foundry_config.read().await;
                     let project_root = foundry_cfg.root.clone();
@@ -2953,17 +2959,23 @@ impl LanguageServer for ForgeLsp {
                     drop(foundry_cfg);
 
                     let items = completion::import_path_completions(
-                        &import_ctx,
+                        &ctx,
                         &current_file,
                         &project_root,
                         &remappings,
                     );
-                    return Ok(Some(CompletionResponse::List(CompletionList {
+                    Ok(Some(CompletionResponse::List(CompletionList {
                         is_incomplete: false,
                         items,
-                    })));
+                    })))
+                } else {
+                    Ok(None)
                 }
-            }
+            } else {
+                // Trigger was `"`, `'`, or `/` but cursor is not in an import string —
+                // produce no completions rather than leaking AST symbols.
+                Ok(None)
+            };
         }
 
         let tail_candidates = if trigger_char == Some(".") {
