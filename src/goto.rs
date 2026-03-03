@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use tower_lsp::lsp_types::{Location, Position, Range, Url};
+use tower_lsp::lsp_types::{Location, Position, Range, TextEdit, Url};
 use tree_sitter::{Node, Parser};
 
 use crate::types::{NodeId, SourceLoc};
@@ -1667,6 +1667,294 @@ fn find_best_declaration(source: &str, ctx: &CursorContext, file_uri: &Url) -> O
     })
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Code-action helpers (used by lsp.rs `code_action` handler)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// What kind of edit a code action should produce.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum CodeActionKind<'a> {
+    /// Insert fixed text at the very start of the file (line 0, col 0).
+    InsertAtFileStart { text: &'a str },
+
+    /// Replace the token at `diag_range.start` with `replacement`.
+    /// Used for deprecated-builtin fixes (now→block.timestamp, sha3→keccak256, …).
+    /// When `walk_to` is `Some`, walk up to that ancestor node and replace its
+    /// full span instead of just the leaf (e.g. `member_expression` for msg.gas).
+    ReplaceToken {
+        replacement: &'a str,
+        walk_to: Option<&'a str>,
+    },
+
+    /// Delete the token whose start byte falls inside `diag_range`
+    /// (+ one trailing space when present).
+    DeleteToken,
+
+    /// Delete the entire `variable_declaration_statement` containing the
+    /// identifier at `diag_range.start`, including leading whitespace/newline.
+    DeleteLocalVar,
+
+    /// Walk the TS tree up to `walk_to`, then delete the first child whose
+    /// kind matches any entry in `child_kinds` (tried in order).
+    DeleteChildNode {
+        walk_to: &'a str,
+        child_kinds: &'a [&'a str],
+    },
+
+    /// Walk the TS tree up to `walk_to`, then replace the first child whose
+    /// kind matches `child_kind` with `replacement`.
+    ReplaceChildNode {
+        walk_to: &'a str,
+        child_kind: &'a str,
+        replacement: &'a str,
+    },
+
+    /// Walk the TS tree up to `walk_to`, then insert `text` immediately before
+    /// the first child whose kind matches any entry in `before_child`.
+    /// Used for 5424 (insert `virtual` before `returns`/`;`).
+    InsertBeforeNode {
+        walk_to: &'a str,
+        before_child: &'a [&'a str],
+        text: &'a str,
+    },
+}
+
+/// Compute the `TextEdit` for a code action using tree-sitter for precision.
+///
+/// Returns `None` when the tree cannot be parsed or the target node cannot be
+/// located (caller should fall back to returning no action for that diagnostic).
+pub(crate) fn code_action_edit(
+    source: &str,
+    diag_range: Range,
+    kind: CodeActionKind<'_>,
+) -> Option<TextEdit> {
+    let source_bytes = source.as_bytes();
+
+    match kind {
+        // ── Insert fixed text at the top of the file ──────────────────────────
+        CodeActionKind::InsertAtFileStart { text } => Some(TextEdit {
+            range: Range {
+                start: Position {
+                    line: 0,
+                    character: 0,
+                },
+                end: Position {
+                    line: 0,
+                    character: 0,
+                },
+            },
+            new_text: text.to_string(),
+        }),
+
+        // ── Replace the token at diag_range.start ─────────────────────────────
+        CodeActionKind::ReplaceToken {
+            replacement,
+            walk_to,
+        } => {
+            let tree = ts_parse(source)?;
+            let byte = pos_to_bytes(source_bytes, diag_range.start);
+            let mut node = ts_node_at_byte(tree.root_node(), byte)?;
+            // When a walk_to node kind is specified, walk up to that ancestor
+            // so we replace its full span (e.g. `member_expression` for
+            // `msg.gas` or `block.blockhash`).
+            if let Some(target_kind) = walk_to {
+                loop {
+                    if node.kind() == target_kind {
+                        break;
+                    }
+                    node = node.parent()?;
+                }
+            }
+            let start_pos = bytes_to_pos(source_bytes, node.start_byte())?;
+            let end_pos = bytes_to_pos(source_bytes, node.end_byte())?;
+            Some(TextEdit {
+                range: Range {
+                    start: start_pos,
+                    end: end_pos,
+                },
+                new_text: replacement.to_string(),
+            })
+        }
+
+        // ── Delete the token at diag_range.start (+ optional trailing space) ──
+        CodeActionKind::DeleteToken => {
+            let tree = ts_parse(source)?;
+            let byte = pos_to_bytes(source_bytes, diag_range.start);
+            let node = ts_node_at_byte(tree.root_node(), byte)?;
+            let start = node.start_byte();
+            let end =
+                if node.end_byte() < source_bytes.len() && source_bytes[node.end_byte()] == b' ' {
+                    node.end_byte() + 1
+                } else {
+                    node.end_byte()
+                };
+            let start_pos = bytes_to_pos(source_bytes, start)?;
+            let end_pos = bytes_to_pos(source_bytes, end)?;
+            Some(TextEdit {
+                range: Range {
+                    start: start_pos,
+                    end: end_pos,
+                },
+                new_text: String::new(),
+            })
+        }
+
+        // ── Delete the enclosing variable_declaration_statement ───────────────
+        CodeActionKind::DeleteLocalVar => {
+            let tree = ts_parse(source)?;
+            let byte = pos_to_bytes(source_bytes, diag_range.start);
+            let mut node = ts_node_at_byte(tree.root_node(), byte)?;
+
+            loop {
+                if node.kind() == "variable_declaration_statement" {
+                    break;
+                }
+                node = node.parent()?;
+            }
+
+            // Consume the preceding newline + indentation so no blank line remains.
+            let stmt_start = node.start_byte();
+            let delete_from = if stmt_start > 0 {
+                let mut i = stmt_start - 1;
+                while i > 0 && (source_bytes[i] == b' ' || source_bytes[i] == b'\t') {
+                    i -= 1;
+                }
+                if source_bytes[i] == b'\n' {
+                    i
+                } else {
+                    stmt_start
+                }
+            } else {
+                stmt_start
+            };
+
+            let start_pos = bytes_to_pos(source_bytes, delete_from)?;
+            let end_pos = bytes_to_pos(source_bytes, node.end_byte())?;
+            Some(TextEdit {
+                range: Range {
+                    start: start_pos,
+                    end: end_pos,
+                },
+                new_text: String::new(),
+            })
+        }
+
+        // ── Walk up to `walk_to`, delete first child of `child_kind` ─────────
+        //
+        // Used for 4126 (free function visibility) and payable codes where the
+        // diagnostic points to the whole function, not the bad token.
+        CodeActionKind::DeleteChildNode {
+            walk_to,
+            child_kinds,
+        } => {
+            let tree = ts_parse(source)?;
+            let byte = pos_to_bytes(source_bytes, diag_range.start);
+            let mut node = ts_node_at_byte(tree.root_node(), byte)?;
+            loop {
+                if node.kind() == walk_to {
+                    break;
+                }
+                node = node.parent()?;
+            }
+            let mut cursor = node.walk();
+            let children: Vec<_> = node.children(&mut cursor).collect();
+            let child = child_kinds
+                .iter()
+                .find_map(|k| children.iter().find(|c| c.kind() == *k))?;
+            let start = child.start_byte();
+            let end = if child.end_byte() < source_bytes.len()
+                && source_bytes[child.end_byte()] == b' '
+            {
+                child.end_byte() + 1
+            } else {
+                child.end_byte()
+            };
+            let start_pos = bytes_to_pos(source_bytes, start)?;
+            let end_pos = bytes_to_pos(source_bytes, end)?;
+            Some(TextEdit {
+                range: Range {
+                    start: start_pos,
+                    end: end_pos,
+                },
+                new_text: String::new(),
+            })
+        }
+
+        // ── Walk up to `walk_to`, replace first child of `child_kind` ─────────
+        //
+        // Used for 1560/1159/4095: replace wrong visibility with `external`.
+        CodeActionKind::ReplaceChildNode {
+            walk_to,
+            child_kind,
+            replacement,
+        } => {
+            let tree = ts_parse(source)?;
+            let byte = pos_to_bytes(source_bytes, diag_range.start);
+            let mut node = ts_node_at_byte(tree.root_node(), byte)?;
+            loop {
+                if node.kind() == walk_to {
+                    break;
+                }
+                node = node.parent()?;
+            }
+            let mut cursor = node.walk();
+            let child = node
+                .children(&mut cursor)
+                .find(|c| c.kind() == child_kind)?;
+            let start_pos = bytes_to_pos(source_bytes, child.start_byte())?;
+            let end_pos = bytes_to_pos(source_bytes, child.end_byte())?;
+            Some(TextEdit {
+                range: Range {
+                    start: start_pos,
+                    end: end_pos,
+                },
+                new_text: replacement.to_string(),
+            })
+        }
+
+        // ── Walk up to `walk_to`, insert `text` before first matching child ───
+        //
+        // Used for 5424 (insert `virtual` before `return_type_definition` / `;`).
+        //
+        // `before_child` is tried in order — the first matching child kind wins.
+        // This lets callers express "prefer returns, fall back to semicolon".
+        CodeActionKind::InsertBeforeNode {
+            walk_to,
+            before_child,
+            text,
+        } => {
+            let tree = ts_parse(source)?;
+            let byte = pos_to_bytes(source_bytes, diag_range.start);
+            let mut node = ts_node_at_byte(tree.root_node(), byte)?;
+
+            loop {
+                if node.kind() == walk_to {
+                    break;
+                }
+                node = node.parent()?;
+            }
+
+            let mut cursor = node.walk();
+            let children: Vec<_> = node.children(&mut cursor).collect();
+
+            // Try each `before_child` kind in order.
+            for target_kind in before_child {
+                if let Some(child) = children.iter().find(|c| c.kind() == *target_kind) {
+                    let insert_pos = bytes_to_pos(source_bytes, child.start_byte())?;
+                    return Some(TextEdit {
+                        range: Range {
+                            start: insert_pos,
+                            end: insert_pos,
+                        },
+                        new_text: text.to_string(),
+                    });
+                }
+            }
+            None
+        }
+    }
+}
+
 #[cfg(test)]
 mod ts_tests {
     use super::*;
@@ -1782,6 +2070,108 @@ contract Shop {
     }
 
     #[test]
+    fn test_delete_child_node_2462_constructor_public() {
+        // ConstructorVisibility.sol: `constructor() public {}`
+        // Diagnostic range: start={line:9, char:4}, end={line:11, char:5}
+        let source = "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.26;\n\n// Warning 2462\n\ncontract ConstructorVisibility {\n    uint256 public value;\n\n    constructor() public {\n        value = 1;\n    }\n}\n";
+        let diag_range = Range {
+            start: Position {
+                line: 8,
+                character: 4,
+            },
+            end: Position {
+                line: 10,
+                character: 5,
+            },
+        };
+        let source_bytes = source.as_bytes();
+        let tree = ts_parse(source).expect("parse failed");
+        let byte = pos_to_bytes(source_bytes, diag_range.start);
+        eprintln!("2462 byte offset: {byte}");
+        if let Some(mut n) = ts_node_at_byte(tree.root_node(), byte) {
+            loop {
+                eprintln!(
+                    "  ancestor: kind={} start={} end={}",
+                    n.kind(),
+                    n.start_byte(),
+                    n.end_byte()
+                );
+                if n.kind() == "constructor_definition" {
+                    let mut cursor = n.walk();
+                    for child in n.children(&mut cursor) {
+                        eprintln!(
+                            "    child: kind={:?} text={:?}",
+                            child.kind(),
+                            &source[child.start_byte()..child.end_byte()]
+                        );
+                    }
+                    break;
+                }
+                match n.parent() {
+                    Some(p) => n = p,
+                    None => break,
+                }
+            }
+        }
+        let ck: Vec<&str> = vec!["public", "modifier_invocation"];
+        let edit = code_action_edit(
+            source,
+            diag_range,
+            CodeActionKind::DeleteChildNode {
+                walk_to: "constructor_definition",
+                child_kinds: &ck,
+            },
+        );
+        assert!(edit.is_some(), "2462 fix returned None");
+        let edit = edit.unwrap();
+        assert_eq!(edit.new_text, "");
+        let lines: Vec<&str> = source.lines().collect();
+        let deleted = &lines[edit.range.start.line as usize]
+            [edit.range.start.character as usize..edit.range.end.character as usize];
+        assert!(deleted.contains("public"), "deleted: {:?}", deleted);
+    }
+
+    #[test]
+    fn test_delete_child_node_9239_constructor_private() {
+        // Fixture mirrors example/codeaction/ConstructorInvalidVisibility.sol
+        // Diagnostic range from server: start={line:9, char:4}, end={line:11, char:5}
+        let source = "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.26;\n\n// Error 9239: Constructor cannot have visibility.\n// Fix: remove the visibility specifier (private/external) from the constructor.\n\ncontract ConstructorPrivateVisibility {\n    uint256 public value;\n\n    constructor() private {\n        value = 1;\n    }\n}\n";
+        let diag_range = Range {
+            start: Position {
+                line: 9,
+                character: 4,
+            },
+            end: Position {
+                line: 11,
+                character: 5,
+            },
+        };
+        let ck: Vec<&str> = vec!["modifier_invocation"];
+        let edit = code_action_edit(
+            source,
+            diag_range,
+            CodeActionKind::DeleteChildNode {
+                walk_to: "constructor_definition",
+                child_kinds: &ck,
+            },
+        );
+        assert!(edit.is_some(), "expected Some(TextEdit) for 9239, got None");
+        let edit = edit.unwrap();
+        // The edit should delete 'private ' — new_text must be empty
+        assert_eq!(edit.new_text, "", "expected deletion (empty new_text)");
+        // The deleted text should contain 'private'
+        let lines: Vec<&str> = source.lines().collect();
+        let line_text = lines[edit.range.start.line as usize];
+        let deleted =
+            &line_text[edit.range.start.character as usize..edit.range.end.character as usize];
+        assert!(
+            deleted.contains("private"),
+            "expected deleted text to contain 'private', got: {:?}",
+            deleted
+        );
+    }
+
+    #[test]
     fn test_find_best_declaration_same_contract() {
         let source = r#"
 contract A { uint256 public x; }
@@ -1801,3 +2191,4 @@ contract B { uint256 public x; }
         assert_eq!(loc.range.start.line, 2);
     }
 }
+// temp
