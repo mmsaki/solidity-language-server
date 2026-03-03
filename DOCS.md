@@ -24,7 +24,7 @@ If you have neovim 0.11+ installed add these to your config
 -- lsp/solidity-language-server.lua
 return {
   name = "Solidity Language Server",
-  cmd = { "solidity-language-server" },
+  cmd = { "solidity-language-server", "--stdio" },
   filetypes = { "solidity" },
   root_markers = { "foundry.toml", ".git" },
   on_attach = function(_, _)
@@ -119,7 +119,7 @@ Settings are passed via `initializationOptions` or `didChangeConfiguration`. All
 ```lua
 -- lsp/solidity_lsp.lua
 return {
-  cmd = { "solidity-language-server" },
+  cmd = { "solidity-language-server", "--stdio" },
   filetypes = { "solidity" },
   root_markers = { "foundry.toml", ".git" },
   settings = {
@@ -157,6 +157,15 @@ return {
         -- Auto-remove imports via workspace/willDeleteFiles.
         updateImportsOnDelete = true,
       },
+      projectIndex = {
+        -- Build a full project index at startup for cross-file references.
+        fullProjectScan = true,
+        -- Persistent cache mode: "v2"
+        cacheMode = "v2",
+        -- Aggressive scoped dirty-sync reindex on save.
+        -- Falls back to full reindex if scoped compile fails.
+        incrementalEditReindex = false,
+      },
     },
   },
 }
@@ -175,6 +184,9 @@ lint.exclude = ["pascal-case-struct"]
 fileOperations.templateOnCreate = true
 fileOperations.updateImportsOnRename = true
 fileOperations.updateImportsOnDelete = true
+projectIndex.fullProjectScan = true
+projectIndex.cacheMode = "v2"
+projectIndex.incrementalEditReindex = false
 ```
 
 ### VSCode / Cursor
@@ -189,7 +201,10 @@ fileOperations.updateImportsOnDelete = true
   "solidity-language-server.lint.exclude": ["pascal-case-struct"],
   "solidity-language-server.fileOperations.templateOnCreate": true,
   "solidity-language-server.fileOperations.updateImportsOnRename": true,
-  "solidity-language-server.fileOperations.updateImportsOnDelete": true
+  "solidity-language-server.fileOperations.updateImportsOnDelete": true,
+  "solidity-language-server.projectIndex.fullProjectScan": true,
+  "solidity-language-server.projectIndex.cacheMode": "v2",
+  "solidity-language-server.projectIndex.incrementalEditReindex": false
 }
 ```
 
@@ -216,6 +231,11 @@ fileOperations.updateImportsOnDelete = true
           "templateOnCreate": true,
           "updateImportsOnRename": true,
           "updateImportsOnDelete": true
+        },
+        "projectIndex": {
+          "fullProjectScan": true,
+          "cacheMode": "v2",
+          "incrementalEditReindex": false
         }
       }
     }

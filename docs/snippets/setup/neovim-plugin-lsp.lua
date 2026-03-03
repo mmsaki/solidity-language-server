@@ -7,8 +7,12 @@ vim.lsp.config("*", {
     },
     workspace = {
       fileOperations = {
+        willCreate = true,
+        didCreate = true,
         willRename = true,
         didRename = true,
+        willDelete = true,
+        didDelete = true,
       },
     },
   },
