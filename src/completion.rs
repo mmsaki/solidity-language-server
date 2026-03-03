@@ -2059,24 +2059,43 @@ pub fn cursor_is_on_import_line(source: &str, position: Position) -> bool {
         .unwrap_or(false)
 }
 
-/// Walk `project_root` recursively and return every `.sol` file as a path
-/// relative to `current_file`'s directory.
+/// Walk `project_root` recursively and return every `.sol` file as:
+///   1. A relative path from the current file's directory (e.g. `./libraries/Pool.sol`)
+///   2. A remapped path for each matching remapping (e.g. `forge-std/Test.sol`)
 ///
-/// Skips hidden directories and the `out/` / `cache/` / `node_modules/`
-/// build artefact directories that are never imported directly.
-pub fn all_sol_import_paths(current_file: &Path, project_root: &Path) -> Vec<CompletionItem> {
+/// Skips `out/`, `cache/`, `node_modules/`, `.git/`.
+pub fn all_sol_import_paths(
+    current_file: &Path,
+    project_root: &Path,
+    remappings: &[String],
+) -> Vec<CompletionItem> {
     let current_dir = match current_file.parent() {
         Some(d) => d,
         None => return vec![],
     };
 
-    let skip_dirs: &[&str] = &["out", "cache", "node_modules", ".git"];
+    // Pre-parse remappings into (prefix, abs_target_path) pairs.
+    // e.g. "forge-std/=lib/forge-std/src/" → ("forge-std/", "/project/lib/forge-std/src/")
+    let parsed_remappings: Vec<(String, std::path::PathBuf)> = remappings
+        .iter()
+        .filter_map(|r| {
+            let mut it = r.splitn(2, '=');
+            let prefix = it.next()?.to_string();
+            let target = it.next()?;
+            if prefix.is_empty() || target.is_empty() {
+                return None;
+            }
+            Some((prefix, project_root.join(target)))
+        })
+        .collect();
 
+    let skip_dirs: &[&str] = &["out", "cache", "node_modules", ".git"];
     let mut items = Vec::new();
+
     collect_sol_files(
         project_root,
-        project_root,
         current_dir,
+        &parsed_remappings,
         skip_dirs,
         &mut items,
     );
@@ -2086,8 +2105,8 @@ pub fn all_sol_import_paths(current_file: &Path, project_root: &Path) -> Vec<Com
 
 fn collect_sol_files(
     dir: &Path,
-    project_root: &Path,
     current_dir: &Path,
+    remappings: &[(String, std::path::PathBuf)],
     skip_dirs: &[&str],
     out: &mut Vec<CompletionItem>,
 ) {
@@ -2108,29 +2127,50 @@ fn collect_sol_files(
             if skip_dirs.contains(&name_str.as_ref()) {
                 continue;
             }
-            collect_sol_files(&path, project_root, current_dir, skip_dirs, out);
-        } else if path.is_file() && name_str.ends_with(".sol") {
-            // Build relative path from current file's directory
-            let rel = pathdiff::diff_paths(&path, current_dir);
-            let label = match rel {
-                Some(r) => {
-                    let s = r.to_string_lossy().to_string();
-                    // Ensure relative paths start with ./
-                    if s.starts_with("../") || s.starts_with("./") {
-                        s
-                    } else {
-                        format!("./{s}")
-                    }
-                }
-                None => path.to_string_lossy().to_string(),
-            };
-            out.push(CompletionItem {
-                label: label.clone(),
-                kind: Some(CompletionItemKind::FILE),
-                insert_text: Some(label),
-                ..Default::default()
-            });
+            collect_sol_files(&path, current_dir, remappings, skip_dirs, out);
+            continue;
         }
+
+        if !path.is_file() || !name_str.ends_with(".sol") {
+            continue;
+        }
+
+        let filename = name_str.to_string();
+
+        // 1. Relative path (always emitted)
+        if let Some(rel) = pathdiff::diff_paths(&path, current_dir) {
+            let s = rel.to_string_lossy().to_string();
+            let label = if s.starts_with("../") || s.starts_with("./") {
+                s
+            } else {
+                format!("./{s}")
+            };
+            out.push(make_import_item(label, filename.clone()));
+        }
+
+        // 2. Remapped paths — for every remapping whose target is a prefix of
+        //    this file's absolute path, emit the remapped form.
+        //    e.g. file=/project/lib/forge-std/src/Test.sol
+        //         remap forge-std/=/project/lib/forge-std/src/
+        //         → label = "forge-std/Test.sol"
+        for (prefix, target_abs) in remappings {
+            if let Ok(suffix) = path.strip_prefix(target_abs) {
+                let label = format!("{}{}", prefix, suffix.to_string_lossy());
+                out.push(make_import_item(label, filename.clone()));
+            }
+        }
+    }
+}
+
+fn make_import_item(label: String, filename: String) -> CompletionItem {
+    CompletionItem {
+        // filter_text = just the filename so typing "Pool" matches
+        // both "./libraries/Pool.sol" and "forge-std/Pool.sol"
+        filter_text: Some(filename),
+        insert_text: Some(label.clone()),
+        kind: Some(CompletionItemKind::FILE),
+        label,
+        ..Default::default()
     }
 }
 
@@ -2486,7 +2526,7 @@ mod tests {
     fn all_sol_import_paths_no_panic_missing_dir() {
         let current = std::path::Path::new("/nonexistent/src/Foo.sol");
         let root = std::path::Path::new("/nonexistent");
-        let items = super::all_sol_import_paths(current, root);
+        let items = super::all_sol_import_paths(current, root, &[]);
         assert!(items.is_empty());
     }
 
@@ -2495,7 +2535,7 @@ mod tests {
         // Use real paths from the repo fixture
         let root = std::path::Path::new("example");
         let current = root.join("A.sol");
-        let items = super::all_sol_import_paths(&current, root);
+        let items = super::all_sol_import_paths(&current, root, &[]);
         // All labels should start with ./ or ../
         for item in &items {
             assert!(

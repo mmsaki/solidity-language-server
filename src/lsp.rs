@@ -2951,10 +2951,13 @@ impl LanguageServer for ForgeLsp {
 
         if is_import_trigger || on_import_line {
             if let Ok(current_file) = uri.to_file_path() {
-                let project_root = self.foundry_config.read().await.root.clone();
-                let items = completion::all_sol_import_paths(&current_file, &project_root);
+                let foundry_cfg = self.foundry_config.read().await.clone();
+                let project_root = foundry_cfg.root.clone();
+                let remappings = crate::solc::resolve_remappings(&foundry_cfg).await;
+                let items =
+                    completion::all_sol_import_paths(&current_file, &project_root, &remappings);
                 return Ok(Some(CompletionResponse::List(CompletionList {
-                    is_incomplete: false,
+                    is_incomplete: true,
                     items,
                 })));
             }
