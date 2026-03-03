@@ -16,7 +16,7 @@ exclude:
 
 servers:
   - mmsaki@latest
-  - mmsaki@v0.1.24
+  # - mmsaki@v0.1.24
   # - solc
   # - qiuxiang
   # - juanfranblanco
