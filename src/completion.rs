@@ -2047,48 +2047,6 @@ const GLOBAL_FUNCTIONS: &[(&str, &str)] = &[
 // Import path completions
 // ---------------------------------------------------------------------------
 
-/// Returns `true` when `position` is on a line that contains an import
-/// statement (i.e. the line starts with `import` after trimming whitespace).
-/// This is intentionally loose — we just need to know whether to offer
-/// import-path completions at all.
-pub fn cursor_is_on_import_line(source: &str, position: Position) -> bool {
-    source
-        .lines()
-        .nth(position.line as usize)
-        .map(|l| l.trim_start().starts_with("import"))
-        .unwrap_or(false)
-}
-
-/// Returns the text already typed inside the import string on the cursor line,
-/// i.e. everything after the opening `"` or `'` up to `position.character`.
-/// Returns `None` if the cursor is not inside an import string.
-pub fn import_string_prefix(source: &str, position: Position) -> Option<(String, u32)> {
-    let line = source.lines().nth(position.line as usize)?;
-    if !line.trim_start().starts_with("import") {
-        return None;
-    }
-    // Find the last unmatched opening quote before the cursor.
-    let before_cursor = line.get(..position.character as usize)?;
-    let mut quote_char = None;
-    let mut quote_col = None;
-    for (i, ch) in before_cursor.char_indices() {
-        if ch == '"' || ch == '\'' {
-            if quote_char == Some(ch) {
-                // closing quote — we're outside again
-                quote_char = None;
-                quote_col = None;
-            } else if quote_char.is_none() {
-                // opening quote
-                quote_char = Some(ch);
-                quote_col = Some(i as u32 + 1); // col after the quote char
-            }
-        }
-    }
-    let col = quote_col?;
-    let prefix = before_cursor.get(col as usize..)?.to_string();
-    Some((prefix, col))
-}
-
 /// Walk `project_root` recursively and return every `.sol` file as:
 ///   1. A relative path from the current file's directory (e.g. `./libraries/Pool.sol`)
 ///   2. A remapped path for each matching remapping (e.g. `forge-std/Test.sol`)
@@ -2549,89 +2507,6 @@ mod tests {
     }
 
     // --- import path completion tests ---
-
-    #[test]
-    fn cursor_is_on_import_line_detects_import() {
-        let src = "import \"./Foo.sol\";";
-        assert!(super::cursor_is_on_import_line(
-            src,
-            Position {
-                line: 0,
-                character: 10
-            }
-        ));
-    }
-
-    #[test]
-    fn cursor_is_on_import_line_false_for_non_import() {
-        let src = "contract Foo {}";
-        assert!(!super::cursor_is_on_import_line(
-            src,
-            Position {
-                line: 0,
-                character: 5
-            }
-        ));
-    }
-
-    #[test]
-    fn cursor_is_on_import_line_handles_from_style() {
-        let src = "import {Foo} from \"./Foo.sol\";";
-        assert!(super::cursor_is_on_import_line(
-            src,
-            Position {
-                line: 0,
-                character: 20
-            }
-        ));
-    }
-
-    #[test]
-    fn import_string_prefix_mid_path() {
-        // cursor inside import "  ./Fo  |  .sol"
-        let src = "import \"./Foo.sol\";";
-        let (prefix, col) = super::import_string_prefix(
-            src,
-            Position {
-                line: 0,
-                character: 12,
-            },
-        )
-        .expect("should find prefix");
-        assert_eq!(col, 8); // right after the opening `"`
-        assert_eq!(prefix, "./Fo");
-    }
-
-    #[test]
-    fn import_string_prefix_none_outside_quotes() {
-        let src = "import \"./Foo.sol\";";
-        // position 19 is past the closing quote (after the `;`)
-        assert!(
-            super::import_string_prefix(
-                src,
-                Position {
-                    line: 0,
-                    character: 19
-                }
-            )
-            .is_none()
-        );
-    }
-
-    #[test]
-    fn import_string_prefix_none_non_import_line() {
-        let src = "string memory s = \"hello\";";
-        assert!(
-            super::import_string_prefix(
-                src,
-                Position {
-                    line: 0,
-                    character: 20
-                }
-            )
-            .is_none()
-        );
-    }
 
     #[test]
     fn make_import_item_has_filter_text_and_text_edit() {
