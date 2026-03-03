@@ -1,0 +1,4986 @@
+[
+  {
+    "code": 1005,
+    "severity": "error",
+    "message": "Expected elementary type name or identifier for mapping key type",
+    "source": "parsing/Parser.cpp",
+    "line": 1367,
+    "action": null
+  },
+  {
+    "code": 1006,
+    "severity": "error",
+    "message": "blobbasefee",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3379,
+    "action": null
+  },
+  {
+    "code": 1036,
+    "severity": "error",
+    "message": "The first clause is here:",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1078,
+    "action": null
+  },
+  {
+    "code": 1039,
+    "severity": "error",
+    "message": "Argument has to be a type name.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 184,
+    "action": null
+  },
+  {
+    "code": 1078,
+    "severity": "error",
+    "message": "Override changes modifier signature.",
+    "source": "analysis/OverrideChecker.cpp",
+    "line": 525,
+    "action": null
+  },
+  {
+    "code": 1080,
+    "severity": "error",
+    "message": "True expression's type ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1391,
+    "action": null
+  },
+  {
+    "code": 1114,
+    "severity": "error",
+    "message": "Invalid SPDX license identifier.",
+    "source": "parsing/Parser.cpp",
+    "line": 2607,
+    "action": null
+  },
+  {
+    "code": 1130,
+    "severity": "error",
+    "message": "Invalid use of a library name.",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 204,
+    "action": null
+  },
+  {
+    "code": 1139,
+    "severity": "error",
+    "message": "The base slot of the storage layout must be a compile-time constant expression.",
+    "source": "analysis/PostTypeContractLevelChecker.cpp",
+    "line": 97,
+    "action": null
+  },
+  {
+    "code": 1159,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2031,
+    "action": null
+  },
+  {
+    "code": 1164,
+    "severity": "error",
+    "message": "Array containing a (nested) mapping cannot be constructed in memory.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3035,
+    "action": null
+  },
+  {
+    "code": 1180,
+    "severity": "info",
+    "message": "",
+    "source": "formal/CHC.cpp",
+    "line": 2113,
+    "action": null
+  },
+  {
+    "code": 1209,
+    "severity": "error",
+    "message": "); \tif (_function.overrides()) \t\tm_errorReporter.typeError(1209_error, _function.location(), ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2053,
+    "action": null
+  },
+  {
+    "code": 1211,
+    "severity": "error",
+    "message": "Division by zero.",
+    "source": "analysis/StaticAnalyzer.cpp",
+    "line": 322,
+    "action": null
+  },
+  {
+    "code": 1236,
+    "severity": "error",
+    "message": "address(this).balance",
+    "source": "formal/BMC.cpp",
+    "line": 1078,
+    "action": null
+  },
+  {
+    "code": 1267,
+    "severity": "error",
+    "message": "Index expression cannot be omitted.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3463,
+    "action": null
+  },
+  {
+    "code": 1271,
+    "severity": "error",
+    "message": "Expected `catch Panic(uint ...) { ... }`.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1106,
+    "action": null
+  },
+  {
+    "code": 1284,
+    "severity": "error",
+    "message": "Some immutables were read from but never assigned, possibly because of optimization.",
+    "source": "libevmasm/Assembly.cpp",
+    "line": 1455,
+    "action": null
+  },
+  {
+    "code": 1305,
+    "severity": "error",
+    "message": "",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 946,
+    "action": null
+  },
+  {
+    "code": 1391,
+    "severity": "info",
+    "message": "CHC: ",
+    "source": "formal/CHC.cpp",
+    "line": 2057,
+    "action": null
+  },
+  {
+    "code": 1395,
+    "severity": "error",
+    "message": "Variable name ",
+    "source": "libyul/ScopeFiller.cpp",
+    "line": 142,
+    "action": null
+  },
+  {
+    "code": 1397,
+    "severity": "error",
+    "message": "); \t\t\t\telse \t\t\t\t{ \t\t\t\t\tsolAssert(!var->type()->dataStoredIn(DataLocation::CallData), ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 890,
+    "action": null
+  },
+  {
+    "code": 1400,
+    "severity": "error",
+    "message": ") \t\t\tm_errorReporter.typeError( \t\t\t\t1400_error, \t\t\t\t_memberAccess.location(), \t\t\t\t",
+    "source": "analysis/StaticAnalyzer.cpp",
+    "line": 218,
+    "action": null
+  },
+  {
+    "code": 1408,
+    "severity": "error",
+    "message": " suffixes.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 873,
+    "action": null
+  },
+  {
+    "code": 1430,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/ReferencesResolver.cpp",
+    "line": 472,
+    "action": null
+  },
+  {
+    "code": 1439,
+    "severity": "error",
+    "message": "Invalid binary operations in type context.",
+    "source": "analysis/TypeInference.cpp",
+    "line": 377,
+    "action": null
+  },
+  {
+    "code": 1443,
+    "severity": "error",
+    "message": "Data locations of return variables have to be the same when overriding non-external functions, but they differ.",
+    "source": "analysis/OverrideChecker.cpp",
+    "line": 644,
+    "action": null
+  },
+  {
+    "code": 1452,
+    "severity": "error",
+    "message": "Cannot override public state variable.",
+    "source": "analysis/OverrideChecker.cpp",
+    "line": 543,
+    "action": null
+  },
+  {
+    "code": 1456,
+    "severity": "error",
+    "message": "Override changes modifier to public state variable.",
+    "source": "analysis/OverrideChecker.cpp",
+    "line": 509,
+    "action": null
+  },
+  {
+    "code": 1465,
+    "severity": "error",
+    "message": "Illegal token: ",
+    "source": "libyul/AsmParser.cpp",
+    "line": 620,
+    "action": null
+  },
+  {
+    "code": 1469,
+    "severity": "error",
+    "message": "Override changes modifier to function.",
+    "source": "analysis/OverrideChecker.cpp",
+    "line": 494,
+    "action": null
+  },
+  {
+    "code": 1481,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/PostTypeContractLevelChecker.cpp",
+    "line": 186,
+    "action": null
+  },
+  {
+    "code": 1505,
+    "severity": "error",
+    "message": "The base slot expression contains elements that are not yet supported ",
+    "source": "analysis/PostTypeContractLevelChecker.cpp",
+    "line": 144,
+    "action": null
+  },
+  {
+    "code": 1534,
+    "severity": "error",
+    "message": "Expected detailed error message",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 590,
+    "action": null
+  },
+  {
+    "code": 1536,
+    "severity": "error",
+    "message": "offset",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 847,
+    "action": null
+  },
+  {
+    "code": 1544,
+    "severity": "error",
+    "message": "Invalid code snippet in source location mapping. Quote is not terminated.",
+    "source": "libyul/AsmParser.cpp",
+    "line": 261,
+    "action": null
+  },
+  {
+    "code": 1545,
+    "severity": "error",
+    "message": "Type ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1588,
+    "action": null
+  },
+  {
+    "code": 1563,
+    "severity": "error",
+    "message": "Modifier-style base constructor call without arguments.",
+    "source": "analysis/ContractLevelChecker.cpp",
+    "line": 379,
+    "action": null
+  },
+  {
+    "code": 1581,
+    "severity": "error",
+    "message": "Cannot write to immutable here: Immutable variables can only be initialized inline or assigned directly in the constructor.",
+    "source": "analysis/ImmutableValidator.cpp",
+    "line": 64,
+    "action": null
+  },
+  {
+    "code": 1584,
+    "severity": "warning",
+    "message": "BMC: At least two SMT solvers provided conflicting answers. Results might not be sound.",
+    "source": "formal/BMC.cpp",
+    "line": 1213,
+    "action": null
+  },
+  {
+    "code": 1611,
+    "severity": "error",
+    "message": "Enum with more than 256 members is not allowed.",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 69,
+    "action": null
+  },
+  {
+    "code": 1612,
+    "severity": "error",
+    "message": "Expected identifier after ','",
+    "source": "parsing/Parser.cpp",
+    "line": 849,
+    "action": null
+  },
+  {
+    "code": 1621,
+    "severity": "error",
+    "message": " + memberName + ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3202,
+    "action": null
+  },
+  {
+    "code": 1645,
+    "severity": "error",
+    "message": "Function call options have already been set, you have to combine them into a single ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2903,
+    "action": null
+  },
+  {
+    "code": 1684,
+    "severity": "error",
+    "message": "Invalid version pragma. ",
+    "source": "parsing/Parser.cpp",
+    "line": 211,
+    "action": null
+  },
+  {
+    "code": 1686,
+    "severity": "error",
+    "message": "Function with same name and parameter types defined twice.",
+    "source": "analysis/ContractLevelChecker.cpp",
+    "line": 269,
+    "action": null
+  },
+  {
+    "code": 1695,
+    "severity": "error",
+    "message": "Assertion checker does not yet support this global variable.",
+    "source": "formal/SMTEncoder.cpp",
+    "line": 1789,
+    "action": null
+  },
+  {
+    "code": 1697,
+    "severity": "error",
+    "message": "Base constructor already provided.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 425,
+    "action": null
+  },
+  {
+    "code": 1699,
+    "severity": "warning",
+    "message": "selfdestruct",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 372,
+    "action": null
+  },
+  {
+    "code": 1723,
+    "severity": "error",
+    "message": "Function ",
+    "source": "analysis/TypeInference.cpp",
+    "line": 254,
+    "action": null
+  },
+  {
+    "code": 1741,
+    "severity": "error",
+    "message": "Functions must be implemented.",
+    "source": "analysis/SyntaxRestrictor.cpp",
+    "line": 57,
+    "action": null
+  },
+  {
+    "code": 1744,
+    "severity": "error",
+    "message": "Cannot convert to the super type.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2752,
+    "action": null
+  },
+  {
+    "code": 1749,
+    "severity": "error",
+    "message": "Invalid argument for @ast-id.",
+    "source": "libyul/AsmParser.cpp",
+    "line": 323,
+    "action": null
+  },
+  {
+    "code": 1760,
+    "severity": "error",
+    "message": "Types cannot be sliced.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3559,
+    "action": null
+  },
+  {
+    "code": 1763,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/PostTypeContractLevelChecker.cpp",
+    "line": 130,
+    "action": null
+  },
+  {
+    "code": 1788,
+    "severity": "error",
+    "message": " keyword can only be used for state variables or variables at file level.",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 386,
+    "action": null
+  },
+  {
+    "code": 1801,
+    "severity": "error",
+    "message": "Variable declarations with initial value not supported.",
+    "source": "analysis/SyntaxRestrictor.cpp",
+    "line": 97,
+    "action": null
+  },
+  {
+    "code": 1809,
+    "severity": "error",
+    "message": " + keyName + ",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 315,
+    "action": null
+  },
+  {
+    "code": 1812,
+    "severity": "error",
+    "message": "This catch clause type cannot be used on the selected EVM version (",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1067,
+    "action": null
+  },
+  {
+    "code": 1827,
+    "severity": "error",
+    "message": "Override already specified.",
+    "source": "parsing/Parser.cpp",
+    "line": 664,
+    "action": null
+  },
+  {
+    "code": 1834,
+    "severity": "error",
+    "message": "",
+    "source": "interface/CompilerStack.cpp",
+    "line": 2074,
+    "action": null
+  },
+  {
+    "code": 1835,
+    "severity": "error",
+    "message": "Cannot call unimplemented modifier. The modifier has no implementation in the referenced contract. Refer to it by its unqualified name if you want to call the implementation from the most derived contract.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 641,
+    "action": null
+  },
+  {
+    "code": 1844,
+    "severity": "error",
+    "message": " builtins cannot be used with empty bytecode.",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 501,
+    "action": null
+  },
+  {
+    "code": 1845,
+    "severity": "error",
+    "message": " keyword and make the contract abstract to fix this.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2077,
+    "action": null
+  },
+  {
+    "code": 1855,
+    "severity": "error",
+    "message": "Error",
+    "source": "analysis/PostTypeChecker.cpp",
+    "line": 445,
+    "action": null
+  },
+  {
+    "code": 1860,
+    "severity": "error",
+    "message": "Function signature hash collision for ",
+    "source": "analysis/ContractLevelChecker.cpp",
+    "line": 511,
+    "action": null
+  },
+  {
+    "code": 1878,
+    "severity": "warning",
+    "message": "SPDX license identifier not provided in source file. ",
+    "source": "parsing/Parser.cpp",
+    "line": 2614,
+    "action": null
+  },
+  {
+    "code": 1884,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 4020,
+    "action": null
+  },
+  {
+    "code": 1885,
+    "severity": "error",
+    "message": "Expression has to be an error.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1210,
+    "action": null
+  },
+  {
+    "code": 1920,
+    "severity": "error",
+    "message": "",
+    "source": "libyul/YulStack.cpp",
+    "line": 455,
+    "action": null
+  },
+  {
+    "code": 1933,
+    "severity": "error",
+    "message": "Expected contract name following documentation tag @inheritdoc.",
+    "source": "analysis/ReferencesResolver.cpp",
+    "line": 433,
+    "action": null
+  },
+  {
+    "code": 1941,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 253,
+    "action": null
+  },
+  {
+    "code": 1956,
+    "severity": "error",
+    "message": " must be implicitly convertible to ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 118,
+    "action": null
+  },
+  {
+    "code": 1988,
+    "severity": "warning",
+    "message": "CHC: At least two SMT solvers provided conflicting answers. Results might not be sound.",
+    "source": "formal/CHC.cpp",
+    "line": 1907,
+    "action": null
+  },
+  {
+    "code": 1990,
+    "severity": "error",
+    "message": "Only local variables can be assigned to in inline assembly.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 909,
+    "action": null
+  },
+  {
+    "code": 1994,
+    "severity": "error",
+    "message": "",
+    "source": "parsing/Parser.cpp",
+    "line": 389,
+    "action": null
+  },
+  {
+    "code": 2015,
+    "severity": "error",
+    "message": "If statement outside term context.",
+    "source": "analysis/TypeInference.cpp",
+    "line": 444,
+    "action": null
+  },
+  {
+    "code": 2018,
+    "severity": "warning",
+    "message": "Function state mutability can be restricted to ",
+    "source": "analysis/ViewPureChecker.cpp",
+    "line": 164,
+    "action": null
+  },
+  {
+    "code": 2025,
+    "severity": "error",
+    "message": "Access to functions is not allowed in inline assembly.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 918,
+    "action": null
+  },
+  {
+    "code": 2046,
+    "severity": "error",
+    "message": "Recursive struct definition.",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 137,
+    "action": null
+  },
+  {
+    "code": 2056,
+    "severity": "error",
+    "message": "This type cannot be encoded.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2183,
+    "action": null
+  },
+  {
+    "code": 2066,
+    "severity": "warning",
+    "message": "Contract requests the ABI coder v1, which is incompatible with the IR. ",
+    "source": "interface/CompilerStack.cpp",
+    "line": 1584,
+    "action": null
+  },
+  {
+    "code": 2072,
+    "severity": "warning",
+    "message": "Unused local variable.",
+    "source": "analysis/StaticAnalyzer.cpp",
+    "line": 145,
+    "action": null
+  },
+  {
+    "code": 2074,
+    "severity": "error",
+    "message": "Unexpected trailing comma.",
+    "source": "parsing/Parser.cpp",
+    "line": 2547,
+    "action": null
+  },
+  {
+    "code": 2090,
+    "severity": "error",
+    "message": "Invalid use of underscores in number literal. No trailing underscores allowed.",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 315,
+    "action": null
+  },
+  {
+    "code": 2101,
+    "severity": "error",
+    "message": "Too many function return variables. At most 127 return variables allowed for EOF",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 349,
+    "action": null
+  },
+  {
+    "code": 2141,
+    "severity": "error",
+    "message": ". If you want to enable the experimental mode, all source units must include the pragma.",
+    "source": "interface/CompilerStack.cpp",
+    "line": 1390,
+    "action": null
+  },
+  {
+    "code": 2144,
+    "severity": "error",
+    "message": "No matching declaration found after variable lookup.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3646,
+    "action": null
+  },
+  {
+    "code": 2186,
+    "severity": "error",
+    "message": " argument.",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 513,
+    "action": null
+  },
+  {
+    "code": 2193,
+    "severity": "error",
+    "message": "Function call options can only be set on external function calls or contract creations.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2890,
+    "action": null
+  },
+  {
+    "code": 2197,
+    "severity": "error",
+    "message": "Transient cannot be used as data location for constant or immutable variables.",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 475,
+    "action": null
+  },
+  {
+    "code": 2202,
+    "severity": "error",
+    "message": "Code section too large for EOF.",
+    "source": "libevmasm/Assembly.cpp",
+    "line": 1733,
+    "action": null
+  },
+  {
+    "code": 2212,
+    "severity": "error",
+    "message": "Conditional expression as left value is not supported yet.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1416,
+    "action": null
+  },
+  {
+    "code": 2217,
+    "severity": "error",
+    "message": "Referenced node.",
+    "source": "analysis/TypeInference.cpp",
+    "line": 525,
+    "action": null
+  },
+  {
+    "code": 2249,
+    "severity": "error",
+    "message": "Constant variables with non-literal values cannot be forward referenced from inline assembly.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 797,
+    "action": null
+  },
+  {
+    "code": 2256,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/StaticAnalyzer.cpp",
+    "line": 258,
+    "action": null
+  },
+  {
+    "code": 2264,
+    "severity": "warning",
+    "message": "Experimental features are turned on. Do not use experimental features on live deployments.",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 113,
+    "action": null
+  },
+  {
+    "code": 2271,
+    "severity": "error",
+    "message": " No matching user-defined operator found.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1726,
+    "action": null
+  },
+  {
+    "code": 2311,
+    "severity": "error",
+    "message": "Address types can only be payable or non-payable.",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 55,
+    "action": null
+  },
+  {
+    "code": 2314,
+    "severity": "error",
+    "message": "Expected ",
+    "source": "liblangutil/ParserBase.cpp",
+    "line": 78,
+    "action": null
+  },
+  {
+    "code": 2319,
+    "severity": "warning",
+    "message": "This declaration shadows a builtin symbol.",
+    "source": "analysis/NameAndTypeResolver.cpp",
+    "line": 273,
+    "action": null
+  },
+  {
+    "code": 2326,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 4169,
+    "action": null
+  },
+  {
+    "code": 2333,
+    "severity": "error",
+    "message": "The previous declaration is here:",
+    "source": "analysis/NameAndTypeResolver.cpp",
+    "line": 586,
+    "action": null
+  },
+  {
+    "code": 2339,
+    "severity": "info",
+    "message": "",
+    "source": "formal/CHC.cpp",
+    "line": 1894,
+    "action": null
+  },
+  {
+    "code": 2353,
+    "severity": "error",
+    "message": "Invalid ",
+    "source": "analysis/OverrideChecker.cpp",
+    "line": 919,
+    "action": null
+  },
+  {
+    "code": 2394,
+    "severity": "warning",
+    "message": "tstore is only a builtin on EVMs that support transient storage",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 388,
+    "action": null
+  },
+  {
+    "code": 2399,
+    "severity": "error",
+    "message": "Variable declaration in sort context.",
+    "source": "analysis/TypeInference.cpp",
+    "line": 430,
+    "action": null
+  },
+  {
+    "code": 2424,
+    "severity": "warning",
+    "message": "Natspec memory-safe-assembly special comment for inline assembly is deprecated and ",
+    "source": "analysis/DocStringTagParser.cpp",
+    "line": 215,
+    "action": null
+  },
+  {
+    "code": 2428,
+    "severity": "error",
+    "message": "The type of return parameter ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2657,
+    "action": null
+  },
+  {
+    "code": 2443,
+    "severity": "error",
+    "message": "The type of this parameter, ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2643,
+    "action": null
+  },
+  {
+    "code": 2449,
+    "severity": "error",
+    "message": "Definition of base has to precede definition of derived contract",
+    "source": "analysis/NameAndTypeResolver.cpp",
+    "line": 438,
+    "action": null
+  },
+  {
+    "code": 2462,
+    "severity": "warning",
+    "message": " is sufficient.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2083,
+    "action": null
+  },
+  {
+    "code": 2512,
+    "severity": "warning",
+    "message": "BMC: Condition unreachable.",
+    "source": "formal/BMC.cpp",
+    "line": 978,
+    "action": null
+  },
+  {
+    "code": 2519,
+    "severity": "warning",
+    "message": "This declaration shadows an existing declaration.",
+    "source": "analysis/NameAndTypeResolver.cpp",
+    "line": 286,
+    "action": null
+  },
+  {
+    "code": 2527,
+    "severity": "error",
+    "message": "Function declared as pure, but this expression (potentially) reads from the ",
+    "source": "analysis/ViewPureChecker.cpp",
+    "line": 252,
+    "action": null
+  },
+  {
+    "code": 2529,
+    "severity": "error",
+    "message": "); \t\treturn {",
+    "source": "formal/CHC.cpp",
+    "line": 1961,
+    "action": null
+  },
+  {
+    "code": 2536,
+    "severity": "error",
+    "message": "Try can only be used with external function calls and contract creation calls.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 984,
+    "action": null
+  },
+  {
+    "code": 2558,
+    "severity": "error",
+    "message": "Exactly one argument expected for explicit type conversion.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1857,
+    "action": null
+  },
+  {
+    "code": 2571,
+    "severity": "error",
+    "message": "Libraries cannot be inherited from.",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 590,
+    "action": null
+  },
+  {
+    "code": 2573,
+    "severity": "error",
+    "message": " block.",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 390,
+    "action": null
+  },
+  {
+    "code": 2582,
+    "severity": "error",
+    "message": "Type not set for parameter.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 725,
+    "action": null
+  },
+  {
+    "code": 2592,
+    "severity": "error",
+    "message": " + _which + ",
+    "source": "libyul/AsmParser.cpp",
+    "line": 780,
+    "action": null
+  },
+  {
+    "code": 2599,
+    "severity": "error",
+    "message": "Expected type class.",
+    "source": "analysis/TypeInference.cpp",
+    "line": 556,
+    "action": null
+  },
+  {
+    "code": 2604,
+    "severity": "error",
+    "message": " + tagName + ",
+    "source": "analysis/DocStringTagParser.cpp",
+    "line": 89,
+    "action": null
+  },
+  {
+    "code": 2614,
+    "severity": "error",
+    "message": "Indexed expression has to be a type, mapping or array (is ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3518,
+    "action": null
+  },
+  {
+    "code": 2622,
+    "severity": "error",
+    "message": "Expected callable expression before call options.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2871,
+    "action": null
+  },
+  {
+    "code": 2627,
+    "severity": "error",
+    "message": "Named arguments cannot be used for functions that take arbitrary parameters.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2115,
+    "action": null
+  },
+  {
+    "code": 2643,
+    "severity": "error",
+    "message": "Arithmetic error when computing constant value.",
+    "source": "analysis/ConstantEvaluator.cpp",
+    "line": 384,
+    "action": null
+  },
+  {
+    "code": 2655,
+    "severity": "error",
+    "message": "Multi variable declaration not supported.",
+    "source": "analysis/TypeInference.cpp",
+    "line": 394,
+    "action": null
+  },
+  {
+    "code": 2657,
+    "severity": "error",
+    "message": "Assignment requires variable.",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 688,
+    "action": null
+  },
+  {
+    "code": 2661,
+    "severity": "error",
+    "message": "<result>",
+    "source": "formal/BMC.cpp",
+    "line": 1044,
+    "action": null
+  },
+  {
+    "code": 2662,
+    "severity": "error",
+    "message": "Virtual already specified.",
+    "source": "parsing/Parser.cpp",
+    "line": 1044,
+    "action": null
+  },
+  {
+    "code": 2674,
+    "severity": "error",
+    "message": "Invalid source mapping. Source index not defined via @use-src.",
+    "source": "libyul/AsmParser.cpp",
+    "line": 287,
+    "action": null
+  },
+  {
+    "code": 2703,
+    "severity": "error",
+    "message": "Relative jump too far",
+    "source": "libevmasm/Assembly.cpp",
+    "line": 1758,
+    "action": null
+  },
+  {
+    "code": 2721,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2933,
+    "action": null
+  },
+  {
+    "code": 2745,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 140,
+    "action": null
+  },
+  {
+    "code": 2763,
+    "severity": "error",
+    "message": "The following types are only supported for getters in ABI coder v2: ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 545,
+    "action": null
+  },
+  {
+    "code": 2788,
+    "severity": "warning",
+    "message": "BMC: ",
+    "source": "formal/BMC.cpp",
+    "line": 92,
+    "action": null
+  },
+  {
+    "code": 2800,
+    "severity": "error",
+    "message": "Function returns ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1007,
+    "action": null
+  },
+  {
+    "code": 2826,
+    "severity": "error",
+    "message": "Invalid literal value.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3835,
+    "action": null
+  },
+  {
+    "code": 2833,
+    "severity": "error",
+    "message": "There are more than 256 infos. Ignoring the rest.",
+    "source": "liblangutil/ErrorReporter.cpp",
+    "line": 115,
+    "action": null
+  },
+  {
+    "code": 2842,
+    "severity": "error",
+    "message": " for staticcall.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2948,
+    "action": null
+  },
+  {
+    "code": 2854,
+    "severity": "error",
+    "message": "Can only globally attach functions to specific types.",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 442,
+    "action": null
+  },
+  {
+    "code": 2855,
+    "severity": "error",
+    "message": "The selector 0x",
+    "source": "analysis/PostTypeChecker.cpp",
+    "line": 454,
+    "action": null
+  },
+  {
+    "code": 2856,
+    "severity": "error",
+    "message": "",
+    "source": "libyul/AsmParser.cpp",
+    "line": 437,
+    "action": null
+  },
+  {
+    "code": 2876,
+    "severity": "error",
+    "message": "Index access for library types and arrays of libraries are not possible.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3475,
+    "action": null
+  },
+  {
+    "code": 2883,
+    "severity": "error",
+    "message": "Modifier body does not contain '_'.",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 196,
+    "action": null
+  },
+  {
+    "code": 2904,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/NameAndTypeResolver.cpp",
+    "line": 96,
+    "action": null
+  },
+  {
+    "code": 2915,
+    "severity": "error",
+    "message": "Expected a state variable declaration. If you intended this as a fallback function ",
+    "source": "parsing/Parser.cpp",
+    "line": 874,
+    "action": null
+  },
+  {
+    "code": 2943,
+    "severity": "error",
+    "message": "Expected `catch Error(string memory ...) { ... }`.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1089,
+    "action": null
+  },
+  {
+    "code": 2961,
+    "severity": "error",
+    "message": "BMC: ",
+    "source": "formal/BMC.cpp",
+    "line": 119,
+    "action": null
+  },
+  {
+    "code": 2968,
+    "severity": "error",
+    "message": "Invalid character in custom tag @",
+    "source": "analysis/DocStringTagParser.cpp",
+    "line": 331,
+    "action": null
+  },
+  {
+    "code": 2973,
+    "severity": "error",
+    "message": "Wrong argument count for modifier invocation: ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 665,
+    "action": null
+  },
+  {
+    "code": 2990,
+    "severity": "error",
+    "message": ") != ASTString::npos) \t{ \t\tm_errorReporter.syntaxError(2990_error, _literal.location(), ",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 321,
+    "action": null
+  },
+  {
+    "code": 3025,
+    "severity": "error",
+    "message": "Inline array type cannot be declared as LValue.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1517,
+    "action": null
+  },
+  {
+    "code": 3046,
+    "severity": "error",
+    "message": "<result>",
+    "source": "formal/BMC.cpp",
+    "line": 1061,
+    "action": null
+  },
+  {
+    "code": 3061,
+    "severity": "error",
+    "message": "This type is only supported in ABI coder v2. ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 4125,
+    "action": null
+  },
+  {
+    "code": 3069,
+    "severity": "error",
+    "message": "String literal too long ({} > 32)",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 165,
+    "action": null
+  },
+  {
+    "code": 3075,
+    "severity": "warning",
+    "message": "Comparison of internal function pointers can yield unexpected results ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1790,
+    "action": null
+  },
+  {
+    "code": 3081,
+    "severity": "error",
+    "message": "chainid",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3367,
+    "action": null
+  },
+  {
+    "code": 3083,
+    "severity": "error",
+    "message": "",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 240,
+    "action": null
+  },
+  {
+    "code": 3100,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3953,
+    "action": null
+  },
+  {
+    "code": 3101,
+    "severity": "error",
+    "message": "Referenced node.",
+    "source": "analysis/TypeInference.cpp",
+    "line": 486,
+    "action": null
+  },
+  {
+    "code": 3109,
+    "severity": "error",
+    "message": "Mutability already set to ",
+    "source": "parsing/Parser.cpp",
+    "line": 927,
+    "action": null
+  },
+  {
+    "code": 3111,
+    "severity": "error",
+    "message": "{} does not have sort {}",
+    "source": "analysis/TypeInference.cpp",
+    "line": 1185,
+    "action": null
+  },
+  {
+    "code": 3112,
+    "severity": "error",
+    "message": "Modifier can only be referenced in function headers.",
+    "source": "analysis/PostTypeChecker.cpp",
+    "line": 299,
+    "action": null
+  },
+  {
+    "code": 3125,
+    "severity": "error",
+    "message": "; \t\t\t\t\t\terrorMsg += ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3148,
+    "action": null
+  },
+  {
+    "code": 3130,
+    "severity": "warning",
+    "message": " + smtStr + ",
+    "source": "formal/CHC.cpp",
+    "line": 1388,
+    "action": null
+  },
+  {
+    "code": 3132,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/PostTypeChecker.cpp",
+    "line": 353,
+    "action": null
+  },
+  {
+    "code": 3141,
+    "severity": "error",
+    "message": "",
+    "source": "liblangutil/Exceptions.h",
+    "line": 155,
+    "action": null
+  },
+  {
+    "code": 3149,
+    "severity": "warning",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1820,
+    "action": null
+  },
+  {
+    "code": 3195,
+    "severity": "error",
+    "message": "Function in type class declared multiple times.",
+    "source": "analysis/TypeInference.cpp",
+    "line": 239,
+    "action": null
+  },
+  {
+    "code": 3224,
+    "severity": "error",
+    "message": "Constant has no value.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 781,
+    "action": null
+  },
+  {
+    "code": 3250,
+    "severity": "error",
+    "message": "Empty experimental feature name is invalid.",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 103,
+    "action": null
+  },
+  {
+    "code": 3275,
+    "severity": "error",
+    "message": "Modifiers in a library cannot be virtual.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 291,
+    "action": null
+  },
+  {
+    "code": 3287,
+    "severity": "error",
+    "message": "Object name cannot be empty.",
+    "source": "libyul/ObjectParser.cpp",
+    "line": 208,
+    "action": null
+  },
+  {
+    "code": 3320,
+    "severity": "error",
+    "message": "Operators can only be defined in a global 'using for' directive.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3972,
+    "action": null
+  },
+  {
+    "code": 3323,
+    "severity": "error",
+    "message": "",
+    "source": "parsing/Parser.cpp",
+    "line": 753,
+    "action": null
+  },
+  {
+    "code": 3335,
+    "severity": "error",
+    "message": "No param name given",
+    "source": "parsing/DocStringParser.cpp",
+    "line": 139,
+    "action": null
+  },
+  {
+    "code": 3349,
+    "severity": "error",
+    "message": "The type has to be specified explicitly when attaching specific functions.",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 436,
+    "action": null
+  },
+  {
+    "code": 3364,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/ContractLevelChecker.cpp",
+    "line": 457,
+    "action": null
+  },
+  {
+    "code": 3367,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 448,
+    "action": null
+  },
+  {
+    "code": 3383,
+    "severity": "error",
+    "message": "); \t\t\t\t\tif (!actualType.isDynamicallySized() && actualType.length() <= numberType->literalValue(nullptr)) \t\t\t\t\t\tm_errorReporter.typeError(3383_error, _access.location(), ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3452,
+    "action": null
+  },
+  {
+    "code": 3384,
+    "severity": "error",
+    "message": " is not a valid identifier (ends with a dot).",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 730,
+    "action": null
+  },
+  {
+    "code": 3390,
+    "severity": "error",
+    "message": "Invalid rational number.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1558,
+    "action": null
+  },
+  {
+    "code": 3415,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/ContractLevelChecker.cpp",
+    "line": 408,
+    "action": null
+  },
+  {
+    "code": 3419,
+    "severity": "error",
+    "message": "Cannot call function via contract type name.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1994,
+    "action": null
+  },
+  {
+    "code": 3420,
+    "severity": "warning",
+    "message": "",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 70,
+    "action": null
+  },
+  {
+    "code": 3441,
+    "severity": "error",
+    "message": "Functions cannot be defined inside a for-loop init block.",
+    "source": "libyul/AsmParser.cpp",
+    "line": 659,
+    "action": null
+  },
+  {
+    "code": 3448,
+    "severity": "error",
+    "message": "Type containing a (nested) mapping is not allowed as ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 4114,
+    "action": null
+  },
+  {
+    "code": 3464,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/ControlFlowAnalyzer.cpp",
+    "line": 164,
+    "action": null
+  },
+  {
+    "code": 3495,
+    "severity": "error",
+    "message": "This contract is very close to the end of storage. This limits its future upgradability.",
+    "source": "analysis/PostTypeContractLevelChecker.cpp",
+    "line": 244,
+    "action": null
+  },
+  {
+    "code": 3509,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2273,
+    "action": null
+  },
+  {
+    "code": 3515,
+    "severity": "error",
+    "message": "",
+    "source": "parsing/Parser.cpp",
+    "line": 371,
+    "action": null
+  },
+  {
+    "code": 3517,
+    "severity": "error",
+    "message": "",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 490,
+    "action": null
+  },
+  {
+    "code": 3546,
+    "severity": "error",
+    "message": "Expected type name",
+    "source": "parsing/Parser.cpp",
+    "line": 1321,
+    "action": null
+  },
+  {
+    "code": 3548,
+    "severity": "error",
+    "message": "Location already specified.",
+    "source": "parsing/Parser.cpp",
+    "line": 939,
+    "action": null
+  },
+  {
+    "code": 3557,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3720,
+    "action": null
+  },
+  {
+    "code": 3558,
+    "severity": "error",
+    "message": "Constant variable is circular.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 770,
+    "action": null
+  },
+  {
+    "code": 3570,
+    "severity": "error",
+    "message": "Expected a type class.",
+    "source": "analysis/TypeRegistration.cpp",
+    "line": 136,
+    "action": null
+  },
+  {
+    "code": 3573,
+    "severity": "error",
+    "message": "Involved instantiation",
+    "source": "analysis/TypeInference.cpp",
+    "line": 1138,
+    "action": null
+  },
+  {
+    "code": 3622,
+    "severity": "error",
+    "message": " + suffix + ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 866,
+    "action": null
+  },
+  {
+    "code": 3628,
+    "severity": "warning",
+    "message": "This contract has a payable fallback function, but no receive ether function. Consider adding a receive ether function.",
+    "source": "analysis/ContractLevelChecker.cpp",
+    "line": 585,
+    "action": null
+  },
+  {
+    "code": 3644,
+    "severity": "error",
+    "message": "This parameter has a type that can only be used internally. ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 358,
+    "action": null
+  },
+  {
+    "code": 3654,
+    "severity": "error",
+    "message": "Duplicate definition of function ",
+    "source": "analysis/TypeInference.cpp",
+    "line": 702,
+    "action": null
+  },
+  {
+    "code": 3656,
+    "severity": "error",
+    "message": "Missing implementation: ",
+    "source": "analysis/ContractLevelChecker.cpp",
+    "line": 350,
+    "action": null
+  },
+  {
+    "code": 3667,
+    "severity": "error",
+    "message": "Arithmetic error when computing constant value.",
+    "source": "analysis/ConstantEvaluator.cpp",
+    "line": 338,
+    "action": null
+  },
+  {
+    "code": 3716,
+    "severity": "error",
+    "message": "Multiple SPDX license identifiers found in source file. ",
+    "source": "parsing/Parser.cpp",
+    "line": 2624,
+    "action": null
+  },
+  {
+    "code": 3726,
+    "severity": "error",
+    "message": " + name + ",
+    "source": "analysis/NameAndTypeResolver.cpp",
+    "line": 558,
+    "action": null
+  },
+  {
+    "code": 3757,
+    "severity": "error",
+    "message": "Invalid rational number.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1340,
+    "action": null
+  },
+  {
+    "code": 3765,
+    "severity": "error",
+    "message": " cannot be used when compiling to EOF.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2979,
+    "action": null
+  },
+  {
+    "code": 3773,
+    "severity": "error",
+    "message": "Assembly access to immutable variables is not supported.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 762,
+    "action": null
+  },
+  {
+    "code": 3805,
+    "severity": "warning",
+    "message": "This is a pre-release compiler version, please do not use it in production.",
+    "source": "interface/CompilerStack.cpp",
+    "line": 357,
+    "action": null
+  },
+  {
+    "code": 3812,
+    "severity": "error",
+    "message": "",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 308,
+    "action": null
+  },
+  {
+    "code": 3845,
+    "severity": "error",
+    "message": "ABI coder has already been selected for this source unit.",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 146,
+    "action": null
+  },
+  {
+    "code": 3859,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/ReferencesResolver.cpp",
+    "line": 409,
+    "action": null
+  },
+  {
+    "code": 3860,
+    "severity": "warning",
+    "message": "Contract initcode size is ",
+    "source": "interface/CompilerStack.cpp",
+    "line": 1521,
+    "action": null
+  },
+  {
+    "code": 3881,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/DocStringTagParser.cpp",
+    "line": 263,
+    "action": null
+  },
+  {
+    "code": 3891,
+    "severity": "error",
+    "message": ") != ASTString::npos) \t\t\tm_errorReporter.syntaxError(3891_error, _literal.location(), ",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 328,
+    "action": null
+  },
+  {
+    "code": 3893,
+    "severity": "error",
+    "message": "Function type can not be used in this context.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3606,
+    "action": null
+  },
+  {
+    "code": 3904,
+    "severity": "error",
+    "message": "Length has to be placed in parentheses after the array type for new expression.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3041,
+    "action": null
+  },
+  {
+    "code": 3927,
+    "severity": "error",
+    "message": "User-defined identifiers in inline assembly cannot contain '.'.",
+    "source": "analysis/ReferencesResolver.cpp",
+    "line": 495,
+    "action": null
+  },
+  {
+    "code": 3940,
+    "severity": "error",
+    "message": "Integer constant expected.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3486,
+    "action": null
+  },
+  {
+    "code": 3944,
+    "severity": "error",
+    "message": "Underflow (resulting value less than ",
+    "source": "formal/CHC.cpp",
+    "line": 1982,
+    "action": null
+  },
+  {
+    "code": 3950,
+    "severity": "error",
+    "message": "",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 655,
+    "action": null
+  },
+  {
+    "code": 3965,
+    "severity": "error",
+    "message": "The highest accessed data offset exceeds the maximum possible size of the static auxdata section.",
+    "source": "libevmasm/Assembly.cpp",
+    "line": 1796,
+    "action": null
+  },
+  {
+    "code": 3996,
+    "severity": "warning",
+    "message": "CHC analysis was not possible. No Horn solver was available.",
+    "source": "formal/CHC.cpp",
+    "line": 116,
+    "action": null
+  },
+  {
+    "code": 4006,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/ViewPureChecker.cpp",
+    "line": 278,
+    "action": null
+  },
+  {
+    "code": 4013,
+    "severity": "error",
+    "message": "There are more than 256 errors. Aborting.",
+    "source": "liblangutil/ErrorReporter.cpp",
+    "line": 126,
+    "action": null
+  },
+  {
+    "code": 4046,
+    "severity": "error",
+    "message": "Another declaration is here:",
+    "source": "analysis/ContractLevelChecker.cpp",
+    "line": 175,
+    "action": null
+  },
+  {
+    "code": 4061,
+    "severity": "error",
+    "message": "Type ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 529,
+    "action": null
+  },
+  {
+    "code": 4095,
+    "severity": "error",
+    "message": ");  \t\t\tif (!function->returnParameters().empty()) \t\t\t\tm_errorReporter.fatalDeclarationError(6899_error, function->returnParameterList()->location(), ",
+    "source": "analysis/ContractLevelChecker.cpp",
+    "line": 222,
+    "action": null
+  },
+  {
+    "code": 4103,
+    "severity": "error",
+    "message": " You can make the contract abstract to avoid this problem.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 373,
+    "action": null
+  },
+  {
+    "code": 4110,
+    "severity": "error",
+    "message": "",
+    "source": "parsing/Parser.cpp",
+    "line": 897,
+    "action": null
+  },
+  {
+    "code": 4113,
+    "severity": "error",
+    "message": "super",
+    "source": "analysis/ReferencesResolver.cpp",
+    "line": 502,
+    "action": null
+  },
+  {
+    "code": 4117,
+    "severity": "error",
+    "message": " with types defined in the same source unit at file level.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3857,
+    "action": null
+  },
+  {
+    "code": 4123,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 273,
+    "action": null
+  },
+  {
+    "code": 4126,
+    "severity": "error",
+    "message": "Free functions cannot have visibility.",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 485,
+    "action": null
+  },
+  {
+    "code": 4144,
+    "severity": "error",
+    "message": "<result>",
+    "source": "formal/BMC.cpp",
+    "line": 1020,
+    "action": null
+  },
+  {
+    "code": 4156,
+    "severity": "error",
+    "message": "Calldata structs are read-only.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 4216,
+    "action": null
+  },
+  {
+    "code": 4164,
+    "severity": "info",
+    "message": "Inferred type: ",
+    "source": "analysis/DebugWarner.cpp",
+    "line": 45,
+    "action": null
+  },
+  {
+    "code": 4167,
+    "severity": "error",
+    "message": " statement",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 553,
+    "action": null
+  },
+  {
+    "code": 4182,
+    "severity": "error",
+    "message": "Uninitialized mapping. Mappings cannot be created dynamically, you have to assign them from a state variable.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1242,
+    "action": null
+  },
+  {
+    "code": 4195,
+    "severity": "error",
+    "message": "Arithmetic modulo zero.",
+    "source": "analysis/StaticAnalyzer.cpp",
+    "line": 343,
+    "action": null
+  },
+  {
+    "code": 4202,
+    "severity": "error",
+    "message": "Attempt to call variable instead of function.",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 412,
+    "action": null
+  },
+  {
+    "code": 4259,
+    "severity": "error",
+    "message": "Invalid type for argument in the function call. ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 222,
+    "action": null
+  },
+  {
+    "code": 4266,
+    "severity": "error",
+    "message": " variable.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 501,
+    "action": null
+  },
+  {
+    "code": 4289,
+    "severity": "error",
+    "message": "Compound assignment is not allowed for tuple types.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1473,
+    "action": null
+  },
+  {
+    "code": 4294,
+    "severity": "error",
+    "message": "object",
+    "source": "libyul/ObjectParser.cpp",
+    "line": 88,
+    "action": null
+  },
+  {
+    "code": 4316,
+    "severity": "error",
+    "message": "Only number literals are supported.",
+    "source": "analysis/TypeInference.cpp",
+    "line": 1063,
+    "action": null
+  },
+  {
+    "code": 4323,
+    "severity": "error",
+    "message": "); \t\t\t\treturn { \t\t\t\t\t4323_error, \t\t\t\t\tmsg + \t\t\t\t\t",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2490,
+    "action": null
+  },
+  {
+    "code": 4327,
+    "severity": "error",
+    "message": " needs to specify overridden ",
+    "source": "analysis/OverrideChecker.cpp",
+    "line": 909,
+    "action": null
+  },
+  {
+    "code": 4328,
+    "severity": "error",
+    "message": "",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 872,
+    "action": null
+  },
+  {
+    "code": 4334,
+    "severity": "error",
+    "message": "Trying to override non-virtual ",
+    "source": "analysis/OverrideChecker.cpp",
+    "line": 551,
+    "action": null
+  },
+  {
+    "code": 4337,
+    "severity": "error",
+    "message": "Assignment outside term context.",
+    "source": "analysis/TypeInference.cpp",
+    "line": 461,
+    "action": null
+  },
+  {
+    "code": 4357,
+    "severity": "error",
+    "message": "Library name expected. If you want to attach a function, use '{...}'.",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 568,
+    "action": null
+  },
+  {
+    "code": 4375,
+    "severity": "error",
+    "message": "Assertion checker does not support recursive structs.",
+    "source": "formal/SMTEncoder.cpp",
+    "line": 1675,
+    "action": null
+  },
+  {
+    "code": 4377,
+    "severity": "warning",
+    "message": "Value for @solidity tag in inline assembly specified multiple times: ",
+    "source": "analysis/DocStringTagParser.cpp",
+    "line": 231,
+    "action": null
+  },
+  {
+    "code": 4403,
+    "severity": "error",
+    "message": "Not a user-definable operator: {}. Only the following operators can be user-defined: {}",
+    "source": "parsing/Parser.cpp",
+    "line": 1142,
+    "action": null
+  },
+  {
+    "code": 4426,
+    "severity": "error",
+    "message": ", but it can be explicitly converted.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 4163,
+    "action": null
+  },
+  {
+    "code": 4430,
+    "severity": "warning",
+    "message": " + *flag + ",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 366,
+    "action": null
+  },
+  {
+    "code": 4458,
+    "severity": "error",
+    "message": "",
+    "source": "formal/ModelChecker.cpp",
+    "line": 199,
+    "action": null
+  },
+  {
+    "code": 4486,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1307,
+    "action": null
+  },
+  {
+    "code": 4493,
+    "severity": "error",
+    "message": "Free functions cannot be virtual.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 313,
+    "action": null
+  },
+  {
+    "code": 4504,
+    "severity": "error",
+    "message": "Binary operation in term context not yet supported.",
+    "source": "analysis/TypeInference.cpp",
+    "line": 347,
+    "action": null
+  },
+  {
+    "code": 4520,
+    "severity": "error",
+    "message": "First occurrence here: ",
+    "source": "analysis/OverrideChecker.cpp",
+    "line": 869,
+    "action": null
+  },
+  {
+    "code": 4531,
+    "severity": "error",
+    "message": "evmasm",
+    "source": "parsing/Parser.cpp",
+    "line": 1525,
+    "action": null
+  },
+  {
+    "code": 4538,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 288,
+    "action": null
+  },
+  {
+    "code": 4549,
+    "severity": "error",
+    "message": "Libraries cannot have receive ether functions.",
+    "source": "analysis/ContractLevelChecker.cpp",
+    "line": 211,
+    "action": null
+  },
+  {
+    "code": 4588,
+    "severity": "error",
+    "message": "Assertion checker does not yet implement this type of function call.",
+    "source": "formal/SMTEncoder.cpp",
+    "line": 734,
+    "action": null
+  },
+  {
+    "code": 4591,
+    "severity": "error",
+    "message": "There are more than 256 warnings. Ignoring the rest.",
+    "source": "liblangutil/ErrorReporter.cpp",
+    "line": 105,
+    "action": null
+  },
+  {
+    "code": 4593,
+    "severity": "error",
+    "message": "Overriding an implemented ",
+    "source": "analysis/OverrideChecker.cpp",
+    "line": 591,
+    "action": null
+  },
+  {
+    "code": 4619,
+    "severity": "error",
+    "message": " not found.",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 438,
+    "action": null
+  },
+  {
+    "code": 4634,
+    "severity": "error",
+    "message": "Variable not found or variable not lvalue.",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 711,
+    "action": null
+  },
+  {
+    "code": 4649,
+    "severity": "error",
+    "message": "Invalid type for argument in modifier invocation. ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 680,
+    "action": null
+  },
+  {
+    "code": 4656,
+    "severity": "error",
+    "message": "offset",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 823,
+    "action": null
+  },
+  {
+    "code": 4659,
+    "severity": "error",
+    "message": "Referenced declaration is neither modifier nor base class.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 659,
+    "action": null
+  },
+  {
+    "code": 4661,
+    "severity": "error",
+    "message": "",
+    "source": "formal/BMC.cpp",
+    "line": 1094,
+    "action": null
+  },
+  {
+    "code": 4682,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/DocStringAnalyser.cpp",
+    "line": 195,
+    "action": null
+  },
+  {
+    "code": 4705,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 4092,
+    "action": null
+  },
+  {
+    "code": 4713,
+    "severity": "error",
+    "message": "); \t\t\t\t\t\t\treturn false; \t\t\t\t\t\t} \t\t\t\t\t\telse if (suffix != ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 830,
+    "action": null
+  },
+  {
+    "code": 4718,
+    "severity": "error",
+    "message": "Multiple matching identifiers. Resolving overloaded identifiers is not supported.",
+    "source": "analysis/ReferencesResolver.cpp",
+    "line": 358,
+    "action": null
+  },
+  {
+    "code": 4726,
+    "severity": "error",
+    "message": "Functions in interfaces cannot have an implementation.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 441,
+    "action": null
+  },
+  {
+    "code": 4731,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3912,
+    "action": null
+  },
+  {
+    "code": 4767,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeClassRegistration.cpp",
+    "line": 54,
+    "action": null
+  },
+  {
+    "code": 4781,
+    "severity": "error",
+    "message": "Index range access is only possible for arrays and array slices.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3568,
+    "action": null
+  },
+  {
+    "code": 4799,
+    "severity": "error",
+    "message": "Expected expression (inline array elements cannot be omitted).",
+    "source": "parsing/Parser.cpp",
+    "line": 2451,
+    "action": null
+  },
+  {
+    "code": 4802,
+    "severity": "error",
+    "message": "Index access is only implemented for slices of dynamic calldata arrays.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3430,
+    "action": null
+  },
+  {
+    "code": 4805,
+    "severity": "error",
+    "message": "Literal expected.",
+    "source": "libyul/AsmParser.cpp",
+    "line": 497,
+    "action": null
+  },
+  {
+    "code": 4820,
+    "severity": "error",
+    "message": " as a unit denomination is deprecated.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3826,
+    "action": null
+  },
+  {
+    "code": 4822,
+    "severity": "error",
+    "message": "Overriding ",
+    "source": "analysis/OverrideChecker.cpp",
+    "line": 614,
+    "action": null
+  },
+  {
+    "code": 4828,
+    "severity": "error",
+    "message": "Invalid number literal.",
+    "source": "libyul/AsmParser.cpp",
+    "line": 590,
+    "action": null
+  },
+  {
+    "code": 4846,
+    "severity": "error",
+    "message": "",
+    "source": "libyul/ObjectParser.cpp",
+    "line": 117,
+    "action": null
+  },
+  {
+    "code": 4873,
+    "severity": "error",
+    "message": "Additional functions in class instantiation.",
+    "source": "analysis/TypeInference.cpp",
+    "line": 739,
+    "action": null
+  },
+  {
+    "code": 4883,
+    "severity": "error",
+    "message": "This error has a different signature but the same hash: ",
+    "source": "analysis/PostTypeContractLevelChecker.cpp",
+    "line": 69,
+    "action": null
+  },
+  {
+    "code": 4902,
+    "severity": "error",
+    "message": "Solver cvc5 was selected for SMTChecker but it is not available.",
+    "source": "formal/ModelChecker.cpp",
+    "line": 189,
+    "action": null
+  },
+  {
+    "code": 4936,
+    "severity": "error",
+    "message": " + _pragma.literals()[0] + ",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 182,
+    "action": null
+  },
+  {
+    "code": 4937,
+    "severity": "error",
+    "message": "external",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 476,
+    "action": null
+  },
+  {
+    "code": 4955,
+    "severity": "error",
+    "message": "Unsupported identifier in inline assembly.",
+    "source": "analysis/ReferencesResolver.cpp",
+    "line": 299,
+    "action": null
+  },
+  {
+    "code": 4957,
+    "severity": "error",
+    "message": "constructor arguments from a derived contract.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 388,
+    "action": null
+  },
+  {
+    "code": 4974,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2556,
+    "action": null
+  },
+  {
+    "code": 4977,
+    "severity": "error",
+    "message": "Expected a library.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 928,
+    "action": null
+  },
+  {
+    "code": 4990,
+    "severity": "error",
+    "message": "Variable {} used before it was declared.",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 190,
+    "action": null
+  },
+  {
+    "code": 4994,
+    "severity": "error",
+    "message": " + memberName + ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3101,
+    "action": null
+  },
+  {
+    "code": 5005,
+    "severity": "error",
+    "message": "Linearization of inheritance graph impossible",
+    "source": "analysis/NameAndTypeResolver.cpp",
+    "line": 444,
+    "action": null
+  },
+  {
+    "code": 5015,
+    "severity": "error",
+    "message": "Contract extends past the end of storage when this base slot value is specified.",
+    "source": "analysis/PostTypeContractLevelChecker.cpp",
+    "line": 201,
+    "action": null
+  },
+  {
+    "code": 5017,
+    "severity": "error",
+    "message": " is reserved and can not be used.",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 744,
+    "action": null
+  },
+  {
+    "code": 5030,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1944,
+    "action": null
+  },
+  {
+    "code": 5052,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2007,
+    "action": null
+  },
+  {
+    "code": 5096,
+    "severity": "error",
+    "message": "Expected declaration.",
+    "source": "analysis/TypeRegistration.cpp",
+    "line": 107,
+    "action": null
+  },
+  {
+    "code": 5104,
+    "severity": "error",
+    "message": "Unsupported member access expression.",
+    "source": "analysis/TypeInference.cpp",
+    "line": 772,
+    "action": null
+  },
+  {
+    "code": 5107,
+    "severity": "error",
+    "message": ", but it can be explicitly converted.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1301,
+    "action": null
+  },
+  {
+    "code": 5132,
+    "severity": "error",
+    "message": "Different number of arguments in return statement than in returns declaration.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1157,
+    "action": null
+  },
+  {
+    "code": 5142,
+    "severity": "error",
+    "message": "Documentation tag @inheritdoc can only be given once.",
+    "source": "analysis/ReferencesResolver.cpp",
+    "line": 483,
+    "action": null
+  },
+  {
+    "code": 5145,
+    "severity": "error",
+    "message": "Hexadecimal numbers cannot be used with unit denominations. ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3818,
+    "action": null
+  },
+  {
+    "code": 5153,
+    "severity": "error",
+    "message": "Type conversion cannot allow named arguments.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1863,
+    "action": null
+  },
+  {
+    "code": 5159,
+    "severity": "warning",
+    "message": "selfdestruct",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3732,
+    "action": null
+  },
+  {
+    "code": 5172,
+    "severity": "error",
+    "message": "Name has to refer to a user-defined type.",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 190,
+    "action": null
+  },
+  {
+    "code": 5188,
+    "severity": "error",
+    "message": "Assertion checker does not yet implement this operator.",
+    "source": "formal/SMTEncoder.cpp",
+    "line": 1840,
+    "action": null
+  },
+  {
+    "code": 5189,
+    "severity": "error",
+    "message": " (requires Constantinople-compatible VMs).",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3000,
+    "action": null
+  },
+  {
+    "code": 5195,
+    "severity": "error",
+    "message": "Member access outside term context.",
+    "source": "analysis/TypeInference.cpp",
+    "line": 748,
+    "action": null
+  },
+  {
+    "code": 5202,
+    "severity": "error",
+    "message": "Invalid auxdataloadn argument value. Offset must be in range 0...0xFFFF",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 549,
+    "action": null
+  },
+  {
+    "code": 5210,
+    "severity": "error",
+    "message": "Cyclic constant definition (or maximum recursion depth exhausted).",
+    "source": "analysis/ConstantEvaluator.cpp",
+    "line": 302,
+    "action": null
+  },
+  {
+    "code": 5225,
+    "severity": "error",
+    "message": "Public state variables can only override functions with external visibility.",
+    "source": "analysis/OverrideChecker.cpp",
+    "line": 562,
+    "action": null
+  },
+  {
+    "code": 5226,
+    "severity": "error",
+    "message": "); \tif (_pragma.tokens()[0] != Token::Identifier) \t\tm_errorReporter.syntaxError(5226_error, _pragma.location(), ",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 82,
+    "action": null
+  },
+  {
+    "code": 5262,
+    "severity": "error",
+    "message": "Expected a type class.",
+    "source": "analysis/TypeRegistration.cpp",
+    "line": 143,
+    "action": null
+  },
+  {
+    "code": 5296,
+    "severity": "error",
+    "message": "",
+    "source": "parsing/Parser.cpp",
+    "line": 1431,
+    "action": null
+  },
+  {
+    "code": 5306,
+    "severity": "error",
+    "message": "Defining empty structs is disallowed.",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 517,
+    "action": null
+  },
+  {
+    "code": 5320,
+    "severity": "error",
+    "message": "The first clause is here:",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1040,
+    "action": null
+  },
+  {
+    "code": 5332,
+    "severity": "error",
+    "message": "Operators can only be implemented for user-defined value types.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3997,
+    "action": null
+  },
+  {
+    "code": 5333,
+    "severity": "error",
+    "message": "Source file requires different compiler version (current compiler is ",
+    "source": "parsing/Parser.cpp",
+    "line": 201,
+    "action": null
+  },
+  {
+    "code": 5347,
+    "severity": "error",
+    "message": "Try can only be used with external function calls and contract creation calls.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 969,
+    "action": null
+  },
+  {
+    "code": 5348,
+    "severity": "error",
+    "message": "Unsupported AST node during type inference.",
+    "source": "analysis/TypeInference.cpp",
+    "line": 1226,
+    "action": null
+  },
+  {
+    "code": 5359,
+    "severity": "error",
+    "message": "The struct has all its members omitted, therefore the getter cannot return any values.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 557,
+    "action": null
+  },
+  {
+    "code": 5387,
+    "severity": "error",
+    "message": "Multiple matching identifiers. Resolving overloaded identifiers is not supported.",
+    "source": "analysis/ReferencesResolver.cpp",
+    "line": 323,
+    "action": null
+  },
+  {
+    "code": 5399,
+    "severity": "error",
+    "message": "Indexed already specified.",
+    "source": "parsing/Parser.cpp",
+    "line": 919,
+    "action": null
+  },
+  {
+    "code": 5407,
+    "severity": "error",
+    "message": "Cannot implicitly convert component at position ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2329,
+    "action": null
+  },
+  {
+    "code": 5424,
+    "severity": "error",
+    "message": "); \t\telse \t\t\tm_errorReporter.typeError(5424_error, _function.location(), ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 463,
+    "action": null
+  },
+  {
+    "code": 5428,
+    "severity": "error",
+    "message": "",
+    "source": "parsing/Parser.cpp",
+    "line": 2386,
+    "action": null
+  },
+  {
+    "code": 5462,
+    "severity": "error",
+    "message": "Invalid array length, expected integer literal or constant expression.",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 346,
+    "action": null
+  },
+  {
+    "code": 5464,
+    "severity": "error",
+    "message": "Expected array length expression.",
+    "source": "parsing/Parser.cpp",
+    "line": 2757,
+    "action": null
+  },
+  {
+    "code": 5473,
+    "severity": "error",
+    "message": "Types are not supported in untyped Yul.",
+    "source": "libyul/AsmParser.cpp",
+    "line": 812,
+    "action": null
+  },
+  {
+    "code": 5511,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2215,
+    "action": null
+  },
+  {
+    "code": 5523,
+    "severity": "error",
+    "message": "); \t\tm_uniqueErrorReporter.warning( \t\t\t5523_error, \t\t\tsmtPragma->location(), \t\t\t",
+    "source": "formal/ModelChecker.cpp",
+    "line": 112,
+    "action": null
+  },
+  {
+    "code": 5540,
+    "severity": "error",
+    "message": "Identifier is not a contract.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3022,
+    "action": null
+  },
+  {
+    "code": 5547,
+    "severity": "error",
+    "message": "Empty tuple on the left hand side.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1429,
+    "action": null
+  },
+  {
+    "code": 5568,
+    "severity": "error",
+    "message": " + name.str() + ",
+    "source": "libyul/AsmParser.cpp",
+    "line": 766,
+    "action": null
+  },
+  {
+    "code": 5570,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2042,
+    "action": null
+  },
+  {
+    "code": 5574,
+    "severity": "warning",
+    "message": "Contract code size is ",
+    "source": "interface/CompilerStack.cpp",
+    "line": 1503,
+    "action": null
+  },
+  {
+    "code": 5577,
+    "severity": "error",
+    "message": "Invalid type name.",
+    "source": "analysis/TypeRegistration.cpp",
+    "line": 128,
+    "action": null
+  },
+  {
+    "code": 5604,
+    "severity": "error",
+    "message": "Array component cannot be empty.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1551,
+    "action": null
+  },
+  {
+    "code": 5620,
+    "severity": "error",
+    "message": "Expected event name or path.",
+    "source": "parsing/Parser.cpp",
+    "line": 1703,
+    "action": null
+  },
+  {
+    "code": 5631,
+    "severity": "error",
+    "message": "Override changes function or public state variable to modifier.",
+    "source": "analysis/OverrideChecker.cpp",
+    "line": 480,
+    "action": null
+  },
+  {
+    "code": 5651,
+    "severity": "error",
+    "message": "Struct definition exhausts cyclic dependency validator.",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 119,
+    "action": null
+  },
+  {
+    "code": 5653,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1754,
+    "action": null
+  },
+  {
+    "code": 5667,
+    "severity": "warning",
+    "message": "Unused ",
+    "source": "analysis/StaticAnalyzer.cpp",
+    "line": 138,
+    "action": null
+  },
+  {
+    "code": 5704,
+    "severity": "error",
+    "message": "This expression is not callable.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2765,
+    "action": null
+  },
+  {
+    "code": 5709,
+    "severity": "error",
+    "message": "Expected a function definition.",
+    "source": "parsing/Parser.cpp",
+    "line": 712,
+    "action": null
+  },
+  {
+    "code": 5724,
+    "severity": "warning",
+    "message": "SMTChecker: ",
+    "source": "formal/ModelChecker.cpp",
+    "line": 145,
+    "action": null
+  },
+  {
+    "code": 5729,
+    "severity": "error",
+    "message": "BMC does not yet implement this type of function call.",
+    "source": "formal/BMC.cpp",
+    "line": 765,
+    "action": null
+  },
+  {
+    "code": 5740,
+    "severity": "warning",
+    "message": "Unreachable code.",
+    "source": "analysis/ControlFlowAnalyzer.cpp",
+    "line": 226,
+    "action": null
+  },
+  {
+    "code": 5755,
+    "severity": "error",
+    "message": "Member {} not found in type {}.",
+    "source": "analysis/TypeInference.cpp",
+    "line": 766,
+    "action": null
+  },
+  {
+    "code": 5782,
+    "severity": "error",
+    "message": "This function takes two arguments, but ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 105,
+    "action": null
+  },
+  {
+    "code": 5796,
+    "severity": "error",
+    "message": "Functions are not allowed to have the same name as the contract. ",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 407,
+    "action": null
+  },
+  {
+    "code": 5798,
+    "severity": "warning",
+    "message": "Multiple Horn solvers were selected for CHC.",
+    "source": "formal/CHC.cpp",
+    "line": 84,
+    "action": null
+  },
+  {
+    "code": 5805,
+    "severity": "warning",
+    "message": "",
+    "source": "analysis/StaticAnalyzer.cpp",
+    "line": 272,
+    "action": null
+  },
+  {
+    "code": 5840,
+    "severity": "warning",
+    "message": "CHC: ",
+    "source": "formal/CHC.cpp",
+    "line": 2041,
+    "action": null
+  },
+  {
+    "code": 5856,
+    "severity": "error",
+    "message": " + tagName + ",
+    "source": "analysis/DocStringTagParser.cpp",
+    "line": 99,
+    "action": null
+  },
+  {
+    "code": 5859,
+    "severity": "error",
+    "message": "Function expects {} literal.",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 478,
+    "action": null
+  },
+  {
+    "code": 5883,
+    "severity": "error",
+    "message": "); \t\t\t\t\terror = 5883_error; \t\t\t\t\tmessage = ",
+    "source": "analysis/ContractLevelChecker.cpp",
+    "line": 275,
+    "action": null
+  },
+  {
+    "code": 5887,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/ViewPureChecker.cpp",
+    "line": 287,
+    "action": null
+  },
+  {
+    "code": 5904,
+    "severity": "error",
+    "message": "Unregistered type.",
+    "source": "analysis/TypeInference.cpp",
+    "line": 1216,
+    "action": null
+  },
+  {
+    "code": 5921,
+    "severity": "error",
+    "message": "basefee",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3373,
+    "action": null
+  },
+  {
+    "code": 5934,
+    "severity": "error",
+    "message": "Undeclared type variable.",
+    "source": "analysis/TypeInference.cpp",
+    "line": 583,
+    "action": null
+  },
+  {
+    "code": 5967,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/ReferencesResolver.cpp",
+    "line": 445,
+    "action": null
+  },
+  {
+    "code": 5982,
+    "severity": "error",
+    "message": "Libraries cannot have fallback functions.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2021,
+    "action": null
+  },
+  {
+    "code": 5992,
+    "severity": "error",
+    "message": "Return argument type ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1163,
+    "action": null
+  },
+  {
+    "code": 6002,
+    "severity": "info",
+    "message": "BMC: ",
+    "source": "formal/BMC.cpp",
+    "line": 108,
+    "action": null
+  },
+  {
+    "code": 6005,
+    "severity": "error",
+    "message": " Did you intend to call the function?",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3138,
+    "action": null
+  },
+  {
+    "code": 6012,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 225,
+    "action": null
+  },
+  {
+    "code": 6020,
+    "severity": "error",
+    "message": "Operator ",
+    "source": "analysis/ConstantEvaluator.cpp",
+    "line": 362,
+    "action": null
+  },
+  {
+    "code": 6022,
+    "severity": "error",
+    "message": "Stray arguments.",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 95,
+    "action": null
+  },
+  {
+    "code": 6031,
+    "severity": "error",
+    "message": "Internal error: Expression undefined for SMT solver.",
+    "source": "formal/SMTEncoder.cpp",
+    "line": 2567,
+    "action": null
+  },
+  {
+    "code": 6041,
+    "severity": "error",
+    "message": "Function {} used without being called.",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 198,
+    "action": null
+  },
+  {
+    "code": 6052,
+    "severity": "error",
+    "message": "Function name ",
+    "source": "libyul/ScopeFiller.cpp",
+    "line": 157,
+    "action": null
+  },
+  {
+    "code": 6090,
+    "severity": "error",
+    "message": "Fractional numbers cannot yet be encoded.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2144,
+    "action": null
+  },
+  {
+    "code": 6102,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 281,
+    "action": null
+  },
+  {
+    "code": 6118,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 174,
+    "action": null
+  },
+  {
+    "code": 6133,
+    "severity": "warning",
+    "message": "Statement has no effect.",
+    "source": "analysis/StaticAnalyzer.cpp",
+    "line": 204,
+    "action": null
+  },
+  {
+    "code": 6138,
+    "severity": "error",
+    "message": " This function requires a single bytes argument.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2468,
+    "action": null
+  },
+  {
+    "code": 6161,
+    "severity": "error",
+    "message": "The value of the constant ",
+    "source": "analysis/PostTypeChecker.cpp",
+    "line": 165,
+    "action": null
+  },
+  {
+    "code": 6162,
+    "severity": "warning",
+    "message": "Naming function type parameters is deprecated.",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 505,
+    "action": null
+  },
+  {
+    "code": 6189,
+    "severity": "error",
+    "message": " for delegatecall.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2942,
+    "action": null
+  },
+  {
+    "code": 6219,
+    "severity": "error",
+    "message": "Expected two arguments: a function pointer followed by a tuple.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2198,
+    "action": null
+  },
+  {
+    "code": 6231,
+    "severity": "error",
+    "message": "Expected `catch (bytes memory ...) { ... }` or `catch { ... }`.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1052,
+    "action": null
+  },
+  {
+    "code": 6240,
+    "severity": "info",
+    "message": "",
+    "source": "formal/BMC.cpp",
+    "line": 1253,
+    "action": null
+  },
+  {
+    "code": 6269,
+    "severity": "warning",
+    "message": " + tagName + ",
+    "source": "analysis/DocStringTagParser.cpp",
+    "line": 238,
+    "action": null
+  },
+  {
+    "code": 6272,
+    "severity": "error",
+    "message": "",
+    "source": "libyul/AsmParser.cpp",
+    "line": 447,
+    "action": null
+  },
+  {
+    "code": 6275,
+    "severity": "error",
+    "message": " + importPath + ",
+    "source": "interface/CompilerStack.cpp",
+    "line": 1320,
+    "action": null
+  },
+  {
+    "code": 6280,
+    "severity": "error",
+    "message": "Types in storage containing (nested) mappings cannot be assigned to.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 489,
+    "action": null
+  },
+  {
+    "code": 6281,
+    "severity": "error",
+    "message": "Token incompatible with Solidity parser as part of pragma directive.",
+    "source": "parsing/Parser.cpp",
+    "line": 246,
+    "action": null
+  },
+  {
+    "code": 6321,
+    "severity": "warning",
+    "message": "Unnamed return variable can remain unassigned",
+    "source": "analysis/ControlFlowAnalyzer.cpp",
+    "line": 181,
+    "action": null
+  },
+  {
+    "code": 6359,
+    "severity": "error",
+    "message": "Return argument type ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1181,
+    "action": null
+  },
+  {
+    "code": 6367,
+    "severity": "error",
+    "message": "Invalid value in source location mapping. ",
+    "source": "libyul/AsmParser.cpp",
+    "line": 278,
+    "action": null
+  },
+  {
+    "code": 6377,
+    "severity": "error",
+    "message": "Immutable variables cannot have a non-value type.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 512,
+    "action": null
+  },
+  {
+    "code": 6378,
+    "severity": "error",
+    "message": "Unable to deduce common type for array elements.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1579,
+    "action": null
+  },
+  {
+    "code": 6408,
+    "severity": "error",
+    "message": "Modifiers cannot be defined or declared in interfaces.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 298,
+    "action": null
+  },
+  {
+    "code": 6417,
+    "severity": "warning",
+    "message": "The constructor of the contract (or its base) uses inline assembly. ",
+    "source": "analysis/StaticAnalyzer.cpp",
+    "line": 235,
+    "action": null
+  },
+  {
+    "code": 6444,
+    "severity": "error",
+    "message": " has to be a tuple of types.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 135,
+    "action": null
+  },
+  {
+    "code": 6460,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeInference.cpp",
+    "line": 1193,
+    "action": null
+  },
+  {
+    "code": 6480,
+    "severity": "error",
+    "message": "you have to change the inheritance layout or the names of the functions.",
+    "source": "analysis/OverrideChecker.cpp",
+    "line": 821,
+    "action": null
+  },
+  {
+    "code": 6509,
+    "severity": "error",
+    "message": "Invalid type, expected ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1020,
+    "action": null
+  },
+  {
+    "code": 6520,
+    "severity": "error",
+    "message": "Cannot assign to a constant variable.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 4200,
+    "action": null
+  },
+  {
+    "code": 6536,
+    "severity": "error",
+    "message": "Interfaces can only inherit from other interfaces.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 244,
+    "action": null
+  },
+  {
+    "code": 6546,
+    "severity": "error",
+    "message": "Documentation tag @",
+    "source": "analysis/DocStringTagParser.cpp",
+    "line": 339,
+    "action": null
+  },
+  {
+    "code": 6553,
+    "severity": "error",
+    "message": "The msize instruction cannot be used when the Yul optimizer is activated because ",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 377,
+    "action": null
+  },
+  {
+    "code": 6564,
+    "severity": "error",
+    "message": "custom",
+    "source": "analysis/DocStringTagParser.cpp",
+    "line": 322,
+    "action": null
+  },
+  {
+    "code": 6578,
+    "severity": "error",
+    "message": "Cannot access local Solidity variables from inside an inline assembly function.",
+    "source": "analysis/ReferencesResolver.cpp",
+    "line": 381,
+    "action": null
+  },
+  {
+    "code": 6594,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/ContractLevelChecker.cpp",
+    "line": 568,
+    "action": null
+  },
+  {
+    "code": 6620,
+    "severity": "error",
+    "message": "Previous instantiation.",
+    "source": "analysis/TypeRegistration.cpp",
+    "line": 158,
+    "action": null
+  },
+  {
+    "code": 6651,
+    "severity": "error",
+    "message": ", but ",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 448,
+    "action": null
+  },
+  {
+    "code": 6668,
+    "severity": "error",
+    "message": "Previous list:",
+    "source": "parsing/Parser.cpp",
+    "line": 423,
+    "action": null
+  },
+  {
+    "code": 6675,
+    "severity": "error",
+    "message": " + memberName + ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3176,
+    "action": null
+  },
+  {
+    "code": 6700,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/StaticAnalyzer.cpp",
+    "line": 355,
+    "action": null
+  },
+  {
+    "code": 6708,
+    "severity": "error",
+    "message": "Number literal too large (> 256 bits)",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 173,
+    "action": null
+  },
+  {
+    "code": 6732,
+    "severity": "error",
+    "message": "The first clause is here:",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1095,
+    "action": null
+  },
+  {
+    "code": 6739,
+    "severity": "error",
+    "message": "Invalid number literals.",
+    "source": "analysis/TypeInference.cpp",
+    "line": 1069,
+    "action": null
+  },
+  {
+    "code": 6753,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/PostTypeContractLevelChecker.cpp",
+    "line": 173,
+    "action": null
+  },
+  {
+    "code": 6772,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3932,
+    "action": null
+  },
+  {
+    "code": 6777,
+    "severity": "error",
+    "message": "Return arguments required.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1143,
+    "action": null
+  },
+  {
+    "code": 6792,
+    "severity": "error",
+    "message": " defined.",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 605,
+    "action": null
+  },
+  {
+    "code": 6838,
+    "severity": "warning",
+    "message": "",
+    "source": "formal/BMC.cpp",
+    "line": 994,
+    "action": null
+  },
+  {
+    "code": 6879,
+    "severity": "error",
+    "message": "Virtual already specified.",
+    "source": "parsing/Parser.cpp",
+    "line": 671,
+    "action": null
+  },
+  {
+    "code": 6913,
+    "severity": "error",
+    "message": "Call or assignment expected.",
+    "source": "libyul/AsmParser.cpp",
+    "line": 478,
+    "action": null
+  },
+  {
+    "code": 6931,
+    "severity": "error",
+    "message": "Only one default case allowed.",
+    "source": "libyul/AsmParser.cpp",
+    "line": 374,
+    "action": null
+  },
+  {
+    "code": 6933,
+    "severity": "error",
+    "message": "Expected primary expression.",
+    "source": "parsing/Parser.cpp",
+    "line": 2482,
+    "action": null
+  },
+  {
+    "code": 6948,
+    "severity": "error",
+    "message": "Missing function: ",
+    "source": "analysis/TypeInference.cpp",
+    "line": 717,
+    "action": null
+  },
+  {
+    "code": 6959,
+    "severity": "error",
+    "message": "Overriding ",
+    "source": "analysis/OverrideChecker.cpp",
+    "line": 662,
+    "action": null
+  },
+  {
+    "code": 6995,
+    "severity": "error",
+    "message": " + *argumentNames[i] + ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2530,
+    "action": null
+  },
+  {
+    "code": 7000,
+    "severity": "error",
+    "message": "",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 451,
+    "action": null
+  },
+  {
+    "code": 7006,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2954,
+    "action": null
+  },
+  {
+    "code": 7026,
+    "severity": "error",
+    "message": "Inline assembly marked memory-safe multiple times.",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 358,
+    "action": null
+  },
+  {
+    "code": 7104,
+    "severity": "error",
+    "message": " + m_dialect.builtin(_builtin.handle).name + ",
+    "source": "libyul/AsmParser.cpp",
+    "line": 547,
+    "action": null
+  },
+  {
+    "code": 7128,
+    "severity": "error",
+    "message": "External function arguments of reference type are read-only.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 4226,
+    "action": null
+  },
+  {
+    "code": 7139,
+    "severity": "error",
+    "message": "msg.data",
+    "source": "analysis/StaticAnalyzer.cpp",
+    "line": 248,
+    "action": null
+  },
+  {
+    "code": 7223,
+    "severity": "error",
+    "message": "",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 770,
+    "action": null
+  },
+  {
+    "code": 7229,
+    "severity": "error",
+    "message": "Assertion checker does not yet implement the type ",
+    "source": "formal/SMTEncoder.cpp",
+    "line": 2027,
+    "action": null
+  },
+  {
+    "code": 7238,
+    "severity": "warning",
+    "message": "This assignment performs two copies to storage. Since storage copies do not first ",
+    "source": "analysis/StaticAnalyzer.cpp",
+    "line": 445,
+    "action": null
+  },
+  {
+    "code": 7239,
+    "severity": "warning",
+    "message": "This assignment involves multiple accesses to a bytes array in storage while simultaneously enlarging it. ",
+    "source": "analysis/StaticAnalyzer.cpp",
+    "line": 455,
+    "action": null
+  },
+  {
+    "code": 7279,
+    "severity": "error",
+    "message": "Cannot perform packed encoding for a literal.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2162,
+    "action": null
+  },
+  {
+    "code": 7301,
+    "severity": "error",
+    "message": "Another declaration is here:",
+    "source": "analysis/ContractLevelChecker.cpp",
+    "line": 164,
+    "action": null
+  },
+  {
+    "code": 7319,
+    "severity": "error",
+    "message": "Maximum recursion depth reached during parsing.",
+    "source": "liblangutil/ParserBase.cpp",
+    "line": 89,
+    "action": null
+  },
+  {
+    "code": 7325,
+    "severity": "warning",
+    "message": " Either use mappings or dynamic arrays and allow their size to be increased only",
+    "source": "analysis/StaticAnalyzer.cpp",
+    "line": 183,
+    "action": null
+  },
+  {
+    "code": 7341,
+    "severity": "error",
+    "message": "Fallback function must be external.",
+    "source": "analysis/SyntaxRestrictor.cpp",
+    "line": 73,
+    "action": null
+  },
+  {
+    "code": 7359,
+    "severity": "error",
+    "message": "); \t\t\tm_errorReporter.typeError( \t\t\t\t7359_error, \t\t\t\t_identifier.location(), \t\t\t\t",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3751,
+    "action": null
+  },
+  {
+    "code": 7364,
+    "severity": "error",
+    "message": "Different number of components on the left hand side (",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1266,
+    "action": null
+  },
+  {
+    "code": 7366,
+    "severity": "error",
+    "message": "Operator ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1494,
+    "action": null
+  },
+  {
+    "code": 7380,
+    "severity": "error",
+    "message": "Variable definition exhausting cyclic dependency validator.",
+    "source": "analysis/PostTypeChecker.cpp",
+    "line": 221,
+    "action": null
+  },
+  {
+    "code": 7398,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1929,
+    "action": null
+  },
+  {
+    "code": 7400,
+    "severity": "error",
+    "message": " + contract + ",
+    "source": "formal/ModelChecker.cpp",
+    "line": 87,
+    "action": null
+  },
+  {
+    "code": 7407,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 4180,
+    "action": null
+  },
+  {
+    "code": 7415,
+    "severity": "error",
+    "message": "Only external function types can be payable.",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 235,
+    "action": null
+  },
+  {
+    "code": 7428,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeInference.cpp",
+    "line": 727,
+    "action": null
+  },
+  {
+    "code": 7501,
+    "severity": "error",
+    "message": "Cannot call unimplemented base function.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1988,
+    "action": null
+  },
+  {
+    "code": 7507,
+    "severity": "error",
+    "message": "Assertion checker does not yet support this expression.",
+    "source": "formal/SMTEncoder.cpp",
+    "line": 1453,
+    "action": null
+  },
+  {
+    "code": 7515,
+    "severity": "error",
+    "message": "Expected a tuple with ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2312,
+    "action": null
+  },
+  {
+    "code": 7531,
+    "severity": "error",
+    "message": "Unsupported identifier in inline assembly.",
+    "source": "analysis/ReferencesResolver.cpp",
+    "line": 312,
+    "action": null
+  },
+  {
+    "code": 7556,
+    "severity": "error",
+    "message": " This function requires a single bytes argument.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2606,
+    "action": null
+  },
+  {
+    "code": 7575,
+    "severity": "error",
+    "message": "",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 522,
+    "action": null
+  },
+  {
+    "code": 7576,
+    "severity": "error",
+    "message": " Did you mean ",
+    "source": "analysis/ReferencesResolver.cpp",
+    "line": 149,
+    "action": null
+  },
+  {
+    "code": 7587,
+    "severity": "error",
+    "message": "Storage layout cannot be specified for abstract contracts.",
+    "source": "analysis/ContractLevelChecker.cpp",
+    "line": 115,
+    "action": null
+  },
+  {
+    "code": 7591,
+    "severity": "error",
+    "message": "Unexpected trailing comma in parameter list.",
+    "source": "parsing/Parser.cpp",
+    "line": 1413,
+    "action": null
+  },
+  {
+    "code": 7593,
+    "severity": "error",
+    "message": "No candidates for overload resolution found.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3632,
+    "action": null
+  },
+  {
+    "code": 7598,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3404,
+    "action": null
+  },
+  {
+    "code": 7615,
+    "severity": "error",
+    "message": "Only direct number constants and references to such constants are supported by inline assembly.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 808,
+    "action": null
+  },
+  {
+    "code": 7637,
+    "severity": "error",
+    "message": "Experimental solidity requires Constantinople EVM version at the minimum.",
+    "source": "parsing/Parser.cpp",
+    "line": 273,
+    "action": null
+  },
+  {
+    "code": 7649,
+    "severity": "warning",
+    "message": "CHC analysis was not possible since no Horn solver was found and enabled.",
+    "source": "formal/CHC.cpp",
+    "line": 74,
+    "action": null
+  },
+  {
+    "code": 7650,
+    "severity": "error",
+    "message": "Assertion checker does not yet support this expression.",
+    "source": "formal/SMTEncoder.cpp",
+    "line": 1544,
+    "action": null
+  },
+  {
+    "code": 7676,
+    "severity": "error",
+    "message": "Contract requires too much storage.",
+    "source": "analysis/ContractLevelChecker.cpp",
+    "line": 601,
+    "action": null
+  },
+  {
+    "code": 7710,
+    "severity": "warning",
+    "message": "BMC analysis was not possible since no SMT solver was found and enabled.",
+    "source": "formal/BMC.cpp",
+    "line": 68,
+    "action": null
+  },
+  {
+    "code": 7723,
+    "severity": "error",
+    "message": "Data locations of parameters have to be the same when overriding non-external functions, but they differ.",
+    "source": "analysis/OverrideChecker.cpp",
+    "line": 636,
+    "action": null
+  },
+  {
+    "code": 7737,
+    "severity": "error",
+    "message": "Inline assembly may cause SMTChecker to produce spurious warnings (false positives).",
+    "source": "formal/SMTEncoder.cpp",
+    "line": 348,
+    "action": null
+  },
+  {
+    "code": 7743,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 4055,
+    "action": null
+  },
+  {
+    "code": 7756,
+    "severity": "error",
+    "message": "only available for Byzantium-compatible",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 826,
+    "action": null
+  },
+  {
+    "code": 7757,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/PostTypeChecker.cpp",
+    "line": 359,
+    "action": null
+  },
+  {
+    "code": 7758,
+    "severity": "error",
+    "message": "Expected the name of a built-in primitive type.",
+    "source": "analysis/TypeRegistration.cpp",
+    "line": 77,
+    "action": null
+  },
+  {
+    "code": 7771,
+    "severity": "error",
+    "message": ") != std::string::npos) \t\tm_errorReporter.syntaxError( \t\t\t7771_error, \t\t\t_location, \t\t\tfmt::format(",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 737,
+    "action": null
+  },
+  {
+    "code": 7775,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3982,
+    "action": null
+  },
+  {
+    "code": 7788,
+    "severity": "error",
+    "message": "Expected ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2302,
+    "action": null
+  },
+  {
+    "code": 7792,
+    "severity": "error",
+    "message": " has override specified but does not override anything.",
+    "source": "analysis/OverrideChecker.cpp",
+    "line": 895,
+    "action": null
+  },
+  {
+    "code": 7804,
+    "severity": "error",
+    "message": "Only elementary types, user defined value types, contract types or enums are allowed as mapping keys.",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 259,
+    "action": null
+  },
+  {
+    "code": 7813,
+    "severity": "error",
+    "message": "",
+    "source": "interface/CompilerStack.cpp",
+    "line": 207,
+    "action": null
+  },
+  {
+    "code": 7828,
+    "severity": "warning",
+    "message": "Inline assembly has invalid NatSpec documentation.",
+    "source": "analysis/DocStringTagParser.cpp",
+    "line": 184,
+    "action": null
+  },
+  {
+    "code": 7858,
+    "severity": "error",
+    "message": "",
+    "source": "parsing/Parser.cpp",
+    "line": 173,
+    "action": null
+  },
+  {
+    "code": 7864,
+    "severity": "error",
+    "message": "Contract dependencies exhausting cyclic dependency validator",
+    "source": "interface/CompilerStack.cpp",
+    "line": 183,
+    "action": null
+  },
+  {
+    "code": 7920,
+    "severity": "error",
+    "message": "Identifier not found or not unique.",
+    "source": "analysis/ReferencesResolver.cpp",
+    "line": 196,
+    "action": null
+  },
+  {
+    "code": 7927,
+    "severity": "error",
+    "message": "Wrong argument count for constructor call: ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 257,
+    "action": null
+  },
+  {
+    "code": 7944,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 901,
+    "action": null
+  },
+  {
+    "code": 7985,
+    "severity": "error",
+    "message": "Transient storage is not supported by EVM versions older than cancun.",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 403,
+    "action": null
+  },
+  {
+    "code": 7997,
+    "severity": "error",
+    "message": "Another declaration is here:",
+    "source": "analysis/ContractLevelChecker.cpp",
+    "line": 153,
+    "action": null
+  },
+  {
+    "code": 8009,
+    "severity": "error",
+    "message": "Invalid rational number (too large or division by zero).",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2153,
+    "action": null
+  },
+  {
+    "code": 8015,
+    "severity": "error",
+    "message": "Invalid type for argument in the bytes.concat function call. ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2392,
+    "action": null
+  },
+  {
+    "code": 8022,
+    "severity": "error",
+    "message": "Override can only be used with public state variables.",
+    "source": "analysis/OverrideChecker.cpp",
+    "line": 503,
+    "action": null
+  },
+  {
+    "code": 8050,
+    "severity": "error",
+    "message": "suicide",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3726,
+    "action": null
+  },
+  {
+    "code": 8051,
+    "severity": "error",
+    "message": " This function requires a single bytes argument.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2594,
+    "action": null
+  },
+  {
+    "code": 8063,
+    "severity": "error",
+    "message": "Modifiers without implementation must be marked virtual.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 305,
+    "action": null
+  },
+  {
+    "code": 8084,
+    "severity": "warning",
+    "message": "BMC analysis was not possible. No SMT solver (Z3 or cvc5) was available.",
+    "source": "formal/BMC.cpp",
+    "line": 135,
+    "action": null
+  },
+  {
+    "code": 8113,
+    "severity": "error",
+    "message": "blockhash",
+    "source": "analysis/StaticAnalyzer.cpp",
+    "line": 224,
+    "action": null
+  },
+  {
+    "code": 8115,
+    "severity": "error",
+    "message": "Assertion checker does not yet support the type of this variable.",
+    "source": "formal/SMTEncoder.cpp",
+    "line": 2554,
+    "action": null
+  },
+  {
+    "code": 8118,
+    "severity": "error",
+    "message": "The type has to be specified explicitly at file level (cannot use '*').",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 430,
+    "action": null
+  },
+  {
+    "code": 8129,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 158,
+    "action": null
+  },
+  {
+    "code": 8140,
+    "severity": "warning",
+    "message": "",
+    "source": "formal/BMC.cpp",
+    "line": 1266,
+    "action": null
+  },
+  {
+    "code": 8143,
+    "severity": "error",
+    "message": "",
+    "source": "libyul/ObjectParser.cpp",
+    "line": 104,
+    "action": null
+  },
+  {
+    "code": 8149,
+    "severity": "error",
+    "message": " can only be used inside a function.",
+    "source": "libyul/AsmParser.cpp",
+    "line": 402,
+    "action": null
+  },
+  {
+    "code": 8158,
+    "severity": "error",
+    "message": "Solver z3 was selected for SMTChecker but it is not available.",
+    "source": "formal/ModelChecker.cpp",
+    "line": 213,
+    "action": null
+  },
+  {
+    "code": 8187,
+    "severity": "error",
+    "message": "Expected function name.",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 559,
+    "action": null
+  },
+  {
+    "code": 8198,
+    "severity": "error",
+    "message": " not found.",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 224,
+    "action": null
+  },
+  {
+    "code": 8273,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 121,
+    "action": null
+  },
+  {
+    "code": 8274,
+    "severity": "error",
+    "message": "Variables cannot be declared in interfaces.",
+    "source": "analysis/PostTypeChecker.cpp",
+    "line": 401,
+    "action": null
+  },
+  {
+    "code": 8297,
+    "severity": "error",
+    "message": " keyword can only be used for state variables.",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 392,
+    "action": null
+  },
+  {
+    "code": 8342,
+    "severity": "error",
+    "message": "Only constant variables are allowed at file level.",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 380,
+    "action": null
+  },
+  {
+    "code": 8364,
+    "severity": "error",
+    "message": "Assertion checker does not yet implement type ",
+    "source": "formal/SMTEncoder.cpp",
+    "line": 2579,
+    "action": null
+  },
+  {
+    "code": 8381,
+    "severity": "error",
+    "message": "Tuple component cannot be empty.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1542,
+    "action": null
+  },
+  {
+    "code": 8387,
+    "severity": "error",
+    "message": "Invalid values in source location mapping. Could not parse location specification.",
+    "source": "libyul/AsmParser.cpp",
+    "line": 242,
+    "action": null
+  },
+  {
+    "code": 8417,
+    "severity": "warning",
+    "message": "difficulty",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3391,
+    "action": null
+  },
+  {
+    "code": 8452,
+    "severity": "error",
+    "message": "Contains invalid UTF-8 sequence at position ",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 301,
+    "action": null
+  },
+  {
+    "code": 8456,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeInference.cpp",
+    "line": 1175,
+    "action": null
+  },
+  {
+    "code": 8477,
+    "severity": "error",
+    "message": " persisting.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3128,
+    "action": null
+  },
+  {
+    "code": 8534,
+    "severity": "error",
+    "message": "Too many function parameters. At most 127 parameters allowed for EOF",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 342,
+    "action": null
+  },
+  {
+    "code": 8544,
+    "severity": "warning",
+    "message": "Inline assembly marked as memory safe using both a NatSpec tag and an assembly block annotation. ",
+    "source": "analysis/DocStringTagParser.cpp",
+    "line": 207,
+    "action": null
+  },
+  {
+    "code": 8592,
+    "severity": "warning",
+    "message": "BMC: Error trying to invoke SMT solver.",
+    "source": "formal/BMC.cpp",
+    "line": 965,
+    "action": null
+  },
+  {
+    "code": 8598,
+    "severity": "error",
+    "message": "More than 4 indexed arguments for anonymous event.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 703,
+    "action": null
+  },
+  {
+    "code": 8657,
+    "severity": "error",
+    "message": "The underlying type for a user defined value type has to be an elementary value type.",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 148,
+    "action": null
+  },
+  {
+    "code": 8678,
+    "severity": "error",
+    "message": "",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 273,
+    "action": null
+  },
+  {
+    "code": 8714,
+    "severity": "error",
+    "message": "Previous definition:",
+    "source": "parsing/Parser.cpp",
+    "line": 443,
+    "action": null
+  },
+  {
+    "code": 8729,
+    "severity": "error",
+    "message": "Contract deployment is only supported in the trusted mode for external calls",
+    "source": "formal/SMTEncoder.cpp",
+    "line": 723,
+    "action": null
+  },
+  {
+    "code": 8758,
+    "severity": "error",
+    "message": "Contract expected.",
+    "source": "analysis/NameAndTypeResolver.cpp",
+    "line": 432,
+    "action": null
+  },
+  {
+    "code": 8760,
+    "severity": "warning",
+    "message": "This declaration has the same name as another declaration.",
+    "source": "analysis/NameAndTypeResolver.cpp",
+    "line": 279,
+    "action": null
+  },
+  {
+    "code": 8787,
+    "severity": "warning",
+    "message": "Unexpected value for @solidity tag in inline assembly: ",
+    "source": "analysis/DocStringTagParser.cpp",
+    "line": 224,
+    "action": null
+  },
+  {
+    "code": 8807,
+    "severity": "error",
+    "message": "Contract or array type expected.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3059,
+    "action": null
+  },
+  {
+    "code": 8827,
+    "severity": "error",
+    "message": "Constructor for ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3121,
+    "action": null
+  },
+  {
+    "code": 8830,
+    "severity": "error",
+    "message": "Index expression cannot be omitted.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3503,
+    "action": null
+  },
+  {
+    "code": 8841,
+    "severity": "error",
+    "message": " with user-defined types.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3864,
+    "action": null
+  },
+  {
+    "code": 8863,
+    "severity": "error",
+    "message": "Different number of arguments in return statement than in returns declaration.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1174,
+    "action": null
+  },
+  {
+    "code": 8871,
+    "severity": "error",
+    "message": "Storage arrays with nested mappings do not support .push(<arg>).",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3213,
+    "action": null
+  },
+  {
+    "code": 8885,
+    "severity": "error",
+    "message": "This function takes one argument, but ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 196,
+    "action": null
+  },
+  {
+    "code": 8894,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/ContractLevelChecker.cpp",
+    "line": 130,
+    "action": null
+  },
+  {
+    "code": 8922,
+    "severity": "error",
+    "message": " This function requires a single bytes argument.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2475,
+    "action": null
+  },
+  {
+    "code": 8936,
+    "severity": "error",
+    "message": "",
+    "source": "parsing/Parser.cpp",
+    "line": 2466,
+    "action": null
+  },
+  {
+    "code": 8961,
+    "severity": "error",
+    "message": "Function cannot be declared as ",
+    "source": "analysis/ViewPureChecker.cpp",
+    "line": 262,
+    "action": null
+  },
+  {
+    "code": 8970,
+    "severity": "error",
+    "message": "",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 532,
+    "action": null
+  },
+  {
+    "code": 9005,
+    "severity": "error",
+    "message": "",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 261,
+    "action": null
+  },
+  {
+    "code": 9062,
+    "severity": "error",
+    "message": "Expected an inline tuple, not an expression of a tuple type.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2288,
+    "action": null
+  },
+  {
+    "code": 9068,
+    "severity": "error",
+    "message": " suffix to access storage reference variables.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 881,
+    "action": null
+  },
+  {
+    "code": 9079,
+    "severity": "error",
+    "message": "Variable declarations can only be used inside blocks.",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 212,
+    "action": null
+  },
+  {
+    "code": 9088,
+    "severity": "error",
+    "message": " directive is not allowed inside interfaces.",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 454,
+    "action": null
+  },
+  {
+    "code": 9097,
+    "severity": "error",
+    "message": "The previous declaration is here:",
+    "source": "analysis/NameAndTypeResolver.cpp",
+    "line": 414,
+    "action": null
+  },
+  {
+    "code": 9098,
+    "severity": "error",
+    "message": "Overriding ",
+    "source": "analysis/OverrideChecker.cpp",
+    "line": 579,
+    "action": null
+  },
+  {
+    "code": 9102,
+    "severity": "error",
+    "message": "Override already specified.",
+    "source": "parsing/Parser.cpp",
+    "line": 1038,
+    "action": null
+  },
+  {
+    "code": 9106,
+    "severity": "error",
+    "message": "State mutability can only be specified for address types.",
+    "source": "parsing/Parser.cpp",
+    "line": 1308,
+    "action": null
+  },
+  {
+    "code": 9114,
+    "severity": "error",
+    "message": "Function expects direct literals as arguments.",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 472,
+    "action": null
+  },
+  {
+    "code": 9125,
+    "severity": "error",
+    "message": "Override already specified.",
+    "source": "parsing/Parser.cpp",
+    "line": 910,
+    "action": null
+  },
+  {
+    "code": 9132,
+    "severity": "error",
+    "message": "",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 900,
+    "action": null
+  },
+  {
+    "code": 9134,
+    "severity": "error",
+    "message": " + sourceName + ",
+    "source": "formal/ModelChecker.cpp",
+    "line": 76,
+    "action": null
+  },
+  {
+    "code": 9159,
+    "severity": "error",
+    "message": "Only contracts are supported.",
+    "source": "analysis/SyntaxRestrictor.cpp",
+    "line": 48,
+    "action": null
+  },
+  {
+    "code": 9170,
+    "severity": "warning",
+    "message": "Comparison of variables of contract type is deprecated and scheduled for removal. ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1837,
+    "action": null
+  },
+  {
+    "code": 9173,
+    "severity": "error",
+    "message": "Function call in sort context.",
+    "source": "analysis/TypeInference.cpp",
+    "line": 872,
+    "action": null
+  },
+  {
+    "code": 9182,
+    "severity": "error",
+    "message": "Function, variable, struct or modifier declaration expected.",
+    "source": "parsing/Parser.cpp",
+    "line": 503,
+    "action": null
+  },
+  {
+    "code": 9207,
+    "severity": "warning",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3231,
+    "action": null
+  },
+  {
+    "code": 9214,
+    "severity": "error",
+    "message": "Types in storage containing (nested) mappings cannot be assigned to.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1454,
+    "action": null
+  },
+  {
+    "code": 9239,
+    "severity": "error",
+    "message": "Constructor cannot have visibility.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2068,
+    "action": null
+  },
+  {
+    "code": 9259,
+    "severity": "error",
+    "message": "Only constants of value type and byte array type are implemented.",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 532,
+    "action": null
+  },
+  {
+    "code": 9272,
+    "severity": "error",
+    "message": "selector",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 855,
+    "action": null
+  },
+  {
+    "code": 9274,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3349,
+    "action": null
+  },
+  {
+    "code": 9282,
+    "severity": "error",
+    "message": "Unsupported AST node.",
+    "source": "analysis/SyntaxRestrictor.cpp",
+    "line": 41,
+    "action": null
+  },
+  {
+    "code": 9292,
+    "severity": "error",
+    "message": "Expression has to be an event invocation.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1199,
+    "action": null
+  },
+  {
+    "code": 9301,
+    "severity": "error",
+    "message": "Expected contract but got ",
+    "source": "analysis/PostTypeChecker.cpp",
+    "line": 264,
+    "action": null
+  },
+  {
+    "code": 9302,
+    "severity": "warning",
+    "message": "Return value of low-level calls not used.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1353,
+    "action": null
+  },
+  {
+    "code": 9308,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2498,
+    "action": null
+  },
+  {
+    "code": 9318,
+    "severity": "error",
+    "message": " + name + ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2992,
+    "action": null
+  },
+  {
+    "code": 9322,
+    "severity": "error",
+    "message": "Candidate:",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3683,
+    "action": null
+  },
+  {
+    "code": 9348,
+    "severity": "error",
+    "message": " keyword, they are abstract implicitly.",
+    "source": "analysis/ContractLevelChecker.cpp",
+    "line": 331,
+    "action": null
+  },
+  {
+    "code": 9397,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/ReferencesResolver.cpp",
+    "line": 458,
+    "action": null
+  },
+  {
+    "code": 9428,
+    "severity": "error",
+    "message": "Can only use modifiers defined in the current contract or in base contracts.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 631,
+    "action": null
+  },
+  {
+    "code": 9429,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3808,
+    "action": null
+  },
+  {
+    "code": 9432,
+    "severity": "warning",
+    "message": "prevrandao",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3385,
+    "action": null
+  },
+  {
+    "code": 9439,
+    "severity": "error",
+    "message": "",
+    "source": "parsing/Parser.cpp",
+    "line": 636,
+    "action": null
+  },
+  {
+    "code": 9456,
+    "severity": "error",
+    "message": "Overriding ",
+    "source": "analysis/OverrideChecker.cpp",
+    "line": 534,
+    "action": null
+  },
+  {
+    "code": 9467,
+    "severity": "error",
+    "message": " to access storage or transient storage variables.",
+    "source": "analysis/ReferencesResolver.cpp",
+    "line": 371,
+    "action": null
+  },
+  {
+    "code": 9469,
+    "severity": "error",
+    "message": "Library is not allowed to inherit.",
+    "source": "analysis/ContractLevelChecker.cpp",
+    "line": 525,
+    "action": null
+  },
+  {
+    "code": 9478,
+    "severity": "error",
+    "message": " or alias list.",
+    "source": "parsing/Parser.cpp",
+    "line": 333,
+    "action": null
+  },
+  {
+    "code": 9511,
+    "severity": "warning",
+    "message": "ABI coder v1 is deprecated and scheduled for removal. Use ABI coder v2 instead.",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 158,
+    "action": null
+  },
+  {
+    "code": 9515,
+    "severity": "error",
+    "message": "Struct containing a (nested) mapping cannot be constructed.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2740,
+    "action": null
+  },
+  {
+    "code": 9553,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2613,
+    "action": null
+  },
+  {
+    "code": 9563,
+    "severity": "error",
+    "message": "Invalid mobile type.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1565,
+    "action": null
+  },
+  {
+    "code": 9574,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1317,
+    "action": null
+  },
+  {
+    "code": 9576,
+    "severity": "error",
+    "message": "CHC: ",
+    "source": "formal/CHC.cpp",
+    "line": 2068,
+    "action": null
+  },
+  {
+    "code": 9578,
+    "severity": "error",
+    "message": "Type not supported in packed mode.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2174,
+    "action": null
+  },
+  {
+    "code": 9589,
+    "severity": "error",
+    "message": "Identifier is not a library name.",
+    "source": "analysis/ReferencesResolver.cpp",
+    "line": 219,
+    "action": null
+  },
+  {
+    "code": 9592,
+    "severity": "warning",
+    "message": "",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 584,
+    "action": null
+  },
+  {
+    "code": 9609,
+    "severity": "error",
+    "message": "Previous definition:",
+    "source": "analysis/TypeRegistration.cpp",
+    "line": 187,
+    "action": null
+  },
+  {
+    "code": 9611,
+    "severity": "error",
+    "message": "Decoding type ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 164,
+    "action": null
+  },
+  {
+    "code": 9636,
+    "severity": "error",
+    "message": "Use of unary + is disallowed.",
+    "source": "parsing/Parser.cpp",
+    "line": 2226,
+    "action": null
+  },
+  {
+    "code": 9640,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1955,
+    "action": null
+  },
+  {
+    "code": 9658,
+    "severity": "error",
+    "message": "Variable declaration has to declare a single variable.",
+    "source": "analysis/SyntaxRestrictor.cpp",
+    "line": 87,
+    "action": null
+  },
+  {
+    "code": 9679,
+    "severity": "error",
+    "message": "Experimental feature name is missing.",
+    "source": "analysis/SyntaxChecker.cpp",
+    "line": 89,
+    "action": null
+  },
+  {
+    "code": 9680,
+    "severity": "error",
+    "message": "",
+    "source": "parsing/Parser.cpp",
+    "line": 651,
+    "action": null
+  },
+  {
+    "code": 9689,
+    "severity": "error",
+    "message": "Index expression cannot be omitted.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3438,
+    "action": null
+  },
+  {
+    "code": 9717,
+    "severity": "error",
+    "message": "Invalid mobile type in true expression.",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1373,
+    "action": null
+  },
+  {
+    "code": 9755,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2456,
+    "action": null
+  },
+  {
+    "code": 9767,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 1660,
+    "action": null
+  },
+  {
+    "code": 9804,
+    "severity": "error",
+    "message": "",
+    "source": "libyul/ObjectParser.cpp",
+    "line": 170,
+    "action": null
+  },
+  {
+    "code": 9822,
+    "severity": "error",
+    "message": "",
+    "source": "libyul/AsmAnalysis.cpp",
+    "line": 936,
+    "action": null
+  },
+  {
+    "code": 9825,
+    "severity": "error",
+    "message": "Initialization of transient storage state variables is not supported.",
+    "source": "analysis/DeclarationTypeChecker.cpp",
+    "line": 482,
+    "action": null
+  },
+  {
+    "code": 9827,
+    "severity": "error",
+    "message": "Invalid type for argument in constructor call. ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 271,
+    "action": null
+  },
+  {
+    "code": 9831,
+    "severity": "error",
+    "message": "Expected type declaration.",
+    "source": "analysis/TypeRegistration.cpp",
+    "line": 114,
+    "action": null
+  },
+  {
+    "code": 9862,
+    "severity": "error",
+    "message": " + exprType->humanReadableName() + ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 3161,
+    "action": null
+  },
+  {
+    "code": 9886,
+    "severity": "error",
+    "message": " + std::move(_name) + ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2913,
+    "action": null
+  },
+  {
+    "code": 9903,
+    "severity": "error",
+    "message": "",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2973,
+    "action": null
+  },
+  {
+    "code": 9914,
+    "severity": "error",
+    "message": "Function overload clash during conversion to external types for arguments.",
+    "source": "analysis/ContractLevelChecker.cpp",
+    "line": 497,
+    "action": null
+  },
+  {
+    "code": 9942,
+    "severity": "error",
+    "message": "No description given for param ",
+    "source": "parsing/DocStringParser.cpp",
+    "line": 150,
+    "action": null
+  },
+  {
+    "code": 9977,
+    "severity": "error",
+    "message": "Invalid type for argument in the string.concat function call. ",
+    "source": "analysis/TypeChecker.cpp",
+    "line": 2362,
+    "action": null
+  },
+  {
+    "code": 9980,
+    "severity": "error",
+    "message": "Function name expected.",
+    "source": "libyul/AsmParser.cpp",
+    "line": 707,
+    "action": null
+  }
+]
