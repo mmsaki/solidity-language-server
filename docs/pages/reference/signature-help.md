@@ -136,8 +136,8 @@ What we need tests to keep guaranteeing:
 ## Verify quickly
 
 ```bash
-# standalone benchmark config for signatureHelp
-lsp-bench -c benchmarks/signature-help.yaml
+# standalone benchmark config for signatureHelp (create a local config)
+lsp-bench -c benchmarks/pool.yaml
 
 # inspect mapping declarations in a solc AST
 jq '[.. | objects | select(.nodeType=="VariableDeclaration" and .typeName.nodeType=="Mapping") | {name, keyName:(.typeName.keyName // ""), keyType:.typeName.keyType.typeDescriptions.typeString, valueType:.typeName.valueType.typeDescriptions.typeString}]' poolmanager.json

@@ -100,22 +100,25 @@ cargo build --release --features dhat-heap
 # (measures init + diagnostics + shutdown only)
 lsp-bench -c benchmarks/dhat-profile.yaml
 
-# Output: v4-core/dhat-heap.json (server cwd is the project dir)
+# Output: dhat-heap.json (in the server working directory used by the benchmark)
 ```
 
-The `benchmarks/dhat-profile.yaml` config excludes all LSP methods so the
-benchmark completes quickly even with DHAT overhead:
+Create a `benchmarks/dhat-profile.yaml` config (not committed — create locally) that
+excludes all LSP methods so the benchmark completes quickly even with DHAT overhead:
 
 ```yaml
-project: v4-core
+# benchmarks/dhat-profile.yaml (create locally)
+project: /path/to/your/project
 file: test/PoolManager.t.sol
 index_timeout: 300
 exclude:
   - textDocument/definition
   - textDocument/hover
-  # ... all methods excluded
+  - textDocument/completion
+  - textDocument/references
 servers:
-  - mmsaki@latest
+  - label: local
+    cmd: ./target/release/solidity-language-server
 warmup: 0
 iterations: 1
 ```

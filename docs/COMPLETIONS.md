@@ -705,7 +705,7 @@ Benchmarks compare two server binaries side-by-side against the same project. Th
 Benchmark configs are YAML files in `benchmarks/`. The config specifies the project directory, target file and cursor position, server binaries, and what LSP requests to benchmark.
 
 ```yaml
-# benchmarks/v4-core-completion.yaml
+# benchmarks/pool.yaml
 project: /path/to/uniswap/v4-core
 file: src/libraries/Pool.sol
 line: 206                    # 0-based line number
@@ -717,21 +717,19 @@ timeout: 10
 index_timeout: 15
 response: full               # include full response JSON in output
 trigger_character: "."        # send triggerKind:2 with this character
-output: benchmarks/v4-core
-report: benchmarks/v4-core/COMPLETION.md
+output: benchmarks/pool
+report: benchmarks/pool/COMPLETION.md
 
 benchmarks:
   - initialize
   - textDocument/completion
 
 servers:
-  - label: v0.1.14-full
+  - label: released
     cmd: solidity-language-server
-    args: ["--completion-mode", "full"]
 
-  - label: v0.1.15-full
+  - label: local
     cmd: ./target/release/solidity-language-server
-    args: ["--completion-mode", "full"]
 ```
 
 Key config fields:
