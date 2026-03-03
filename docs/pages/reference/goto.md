@@ -30,18 +30,20 @@ At request time, `textDocument/definition` checks whether the file is clean or d
 flowchart TD
   A["Request: textDocument/definition"] --> B["Load source bytes + cursor name"]
   B --> C{"Dirty file? text_version > build_version"}
-  C -->|No| D["AST offset path: goto_declaration_cached"]
-  D --> E{"Found?"}
-  E -->|Yes| Z["Return Location"]
-  E -->|No| F["Tree-sitter fallback: goto_definition_ts"]
   C -->|Yes| G["Tree-sitter path: goto_definition_ts"]
-  F --> H{"validate_goto_target(name match)"}
-  G --> H
-  H -->|Yes| Z
+  G --> H{"validate_goto_target(name match)"}
+  H -->|Yes| Z["Return Location"]
   H -->|No or unresolved| I["AST name path: goto_declaration_by_name"]
   I --> J{"Found?"}
   J -->|Yes| Z
   J -->|No| K["Return null"]
+  C -->|No| D["AST offset path: goto_declaration_cached"]
+  D --> E{"Found?"}
+  E -->|Yes| Z
+  E -->|No| F["Tree-sitter fallback: goto_definition_ts"]
+  F --> L{"validate_goto_target(name match)"}
+  L -->|Yes| Z
+  L -->|No| K
 ```
 
 ## End-to-end request path
@@ -81,20 +83,25 @@ A separate race was fixed so goto/hover read correct text after formatting:
 
 ## Current Behavior Summary
 
-- **Dirty buffers:** tree-sitter path first, then AST-by-name fallback.
-- **Clean buffers:** AST-by-offset path first, then tree-sitter fallback.
+- **Dirty buffers:** tree-sitter path first (validated), then AST-by-name fallback. `goto_declaration_by_name` is only used in the dirty path.
+- **Clean buffers:** AST-by-offset path first, then tree-sitter fallback (validated). `goto_declaration_by_name` is not used in the clean path.
 - **Tree-sitter results are validated** against cursor identifier text before return.
 - **Parameter and local declaration navigation** is supported by tree-sitter declaration scanning.
+- **Content hash guard:** `on_change` skips a rebuild entirely when the saved text hash matches `CachedBuild.content_hash` from the last successful build. This prevents stale `build_version` drift in format-on-save loops.
 
 ## Reused Infrastructure
 
 | Component | From | Used For |
 |-----------|------|----------|
 | `CompletionCache` | completion.rs | Scope chain, type resolution, inheritance |
-| `scope_declarations` | completion.rs | Name → type mappings per scope |
+| `scope_declarations` | completion.rs | Declaration → scope node mappings |
+| `scope_parent` | completion.rs | Upward scope walk |
+| `scope_ranges` | completion.rs | Innermost scope at cursor position |
+| `name_to_type` | completion.rs | Symbol name → type identifier for resolution |
 | `linearized_base_contracts` | completion.rs | C3 inheritance resolution |
 | `name_to_node_id` | completion.rs | Contract name → scope ID |
 | `text_cache` | lsp.rs | Live buffer content |
+| `CachedBuild.content_hash` | lsp.rs / goto.rs | Skip rebuild when saved text is identical to last build |
 | tree-sitter parser | goto.rs | Parse live buffer and find declaration ranges |
 
 ## Test Coverage

@@ -90,7 +90,7 @@ It is a speed/coverage tradeoff: better latency in the editor, but visibility de
 
 - Broken or partially edited files can still return symbols because this path does not depend on `solc`.
 - `fallback_receive_definition` names are synthesized as `fallback` or `receive` from node text.
-- Import symbols are rendered as `import "<path>"`.
+- Import symbols are rendered as `import <literal>` where `<literal>` is the raw Solidity string token including its surrounding quote characters — e.g. `import "./Pool.sol"` produces the symbol name `import "./Pool.sol"`.
 - For nodes that do not expose a `name` field, symbol extraction falls back to the first `identifier` child.
 
 ## Tree-sitter node coverage

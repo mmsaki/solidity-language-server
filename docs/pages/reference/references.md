@@ -32,11 +32,11 @@ References use two cache layers:
 - in-memory `ast_cache`/`CachedBuild` entries for fast request-time lookups,
 - on-disk project cache (`.solidity-language-server/solidity-lsp-schema-v2.json` + shard files) for warm starts.
 
-In `v0.1.27`, cache behavior is:
+Current cache behavior (v0.1.29):
 
 - Warm-load reconcile: if source hashes changed, affected files are recompiled and merged before cache write-back.
-- Per-save upsert: after successful save/build, touched files are upserted into cache v2 quickly.
-- Single-flight/debounced sync: bursty save events do not spawn overlapping cache jobs.
+- Per-save upsert: after successful save/build, touched files are upserted into cache v2 quickly (350ms debounce).
+- Single-flight/debounced sync: bursty save events do not spawn overlapping cache jobs (700ms debounce for full sync).
 - Scoped incremental reindex is gated by `projectIndex.incrementalEditReindexThreshold`; when the affected ratio is too high, the server falls back to full reindex for correctness.
 
 Practical result: references can be partial right at startup, then become complete as reconcile finishes, while later saves keep cache freshness without full-project recompiles on every edit.
@@ -86,7 +86,7 @@ Instead, the server derives a stable identity:
 - declaration file absolute path (`def_abs_path`)
 - declaration byte offset (`def_byte_offset`)
 
-Then each other cached build re-resolves that location locally (`byte_to_id`) and collects matching references in that build.
+Then each other cached build re-resolves that location locally via `byte_to_id(&build.nodes, def_abs_path, def_byte_offset)` — note that `byte_to_id` takes the unwrapped `nodes` map from the build, not a full `CachedBuild` — and collects matching references in that build.
 
 One important detail: resolution prefers `name_location` over `src` for declarations when available, so cross-file matching lands on the symbol name itself rather than a broader declaration span.
 

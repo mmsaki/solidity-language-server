@@ -78,13 +78,13 @@ For the resolved typed declaration (`DeclNode`):
 
 ## Documentation source priority
 
-Documentation resolution uses this order:
+Documentation resolution fires exactly one of three branches, tried in order:
 
-- Use compiler-derived doc index entries first (`userdoc`/`devdoc`).
-- Fall back to declaration-level NatSpec extraction.
-- For parameter/return variables, fall back to parent declaration param/return docs.
+1. **`lookup_doc_entry_typed`** — look up the declaration in `doc_index` (compiler-derived `userdoc`/`devdoc`). Preferred because it contains structured docs and compiler-resolved inherited docs.
+2. **`extract_doc_text` + NatSpec fallback** — if no `doc_index` entry, extract raw NatSpec from the declaration node. If the text contains `@inheritdoc`, attempt to resolve parent docs.
+3. **`lookup_param_doc_typed`** — if neither of the above produces content, and the hover target is a parameter or return variable, look up the `@param`/`@return` description from the parent declaration's doc entry.
 
-`doc_index` is preferred because it already contains structured docs and compiler-resolved inherited docs where available.
+Only one of these three branches fires per hover response. The call-site `@param` detail (below) is additive and independent of this chain.
 
 ## `@inheritdoc` behavior
 
@@ -112,9 +112,13 @@ This allows hover to show meaningful parameter descriptions directly at usage si
 
 Gas text is added only when all conditions are true:
 
-- gas index is available,
+- gas index is non-empty,
 - hovered declaration matches function/contract gas lookup,
-- source includes the gas sentinel comment (`@lsp-enable gas-estimates`) for that declaration region.
+- source includes the gas sentinel comment near the declaration region.
+
+The sentinel is a substring match on `"lsp-enable gas-estimates"` (`GAS_SENTINEL` in `src/gas.rs`). Two forms both work:
+- `/// @custom:lsp-enable gas-estimates` — canonical NatSpec-compliant form (recommended)
+- `/// lsp-enable gas-estimates` — shorter form, also matched
 
 This is intentional to keep hover lightweight unless explicitly enabled.
 

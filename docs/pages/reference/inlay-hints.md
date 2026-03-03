@@ -12,10 +12,14 @@ This page documents the current inlay-hint implementation:
 ## Terms used in this page
 
 - **`HintIndex`**: `HashMap<abs_path, HintLookup>` prebuilt from AST at build-cache creation time.
-- **`HintLookup.by_offset`**: exact `call_start_byte -> CallSite` map (best when offsets are fresh).
-- **`HintLookup.by_name`**: fallback `(name, arg_count) -> CallSite` map (works when offsets drift).
-- **`CallSite`**: resolved semantic info for one call shape (`param names`, `skip`, `decl_id`).
-- **`skip`**: number of leading params to skip for hint labels (mainly `using for` receiver).
+- **`HintLookup`**: public struct with two private lookup maps and two public methods (`resolve_callsite_with_skip`, `resolve_callsite_param`). Callers use the methods, not the maps directly.
+  - `by_offset` (private): exact `call_start_byte → CallSite` map (best when AST offsets are fresh).
+  - `by_name` (private): fallback `(name, arg_count) → CallSite` map (works when offsets drift).
+- **`CallSite`**: private struct with three fields: `info: ParamInfo`, `name: String`, `decl_id: u64`.
+- **`ParamInfo`**: private struct nested inside `CallSite` — holds `names: Vec<String>` (parameter names) and `skip: usize`.
+- **`ResolvedCallSite`**: public struct returned by `resolve_callsite_param` — holds `param_name: String` and `decl_id: u64`.
+- **`skip`**: number of leading params to skip for hint labels (1 for `using-for` library calls, 0 otherwise).
+- **`ConstructorIndex`**: `HashMap<u64, ConstructorInfo>` — built as an intermediate from `decl_index` and passed to `build_hint_index()`. Not stored on `CachedBuild`; discarded after the hint index is built.
 
 ## Why this design exists
 
@@ -55,14 +59,17 @@ flowchart TD
 
 ## How callsite mapping is built
 
-`build_hint_index(...)` runs once when `CachedBuild` is created.
+`CachedBuild::new()` in `goto.rs` builds the hint index in two steps:
 
-For each source file:
+1. **`build_constructor_index(&decl_index)`** — scans `decl_index` for contract declarations with constructors and builds `ConstructorIndex` (`HashMap<contract_id, ConstructorInfo>`). This is a temporary; it is not stored on `CachedBuild`.
+2. **`build_hint_index(sources, &decl_index, &constructor_index)`** — for each source file:
+   - Walk call-like AST nodes (`FunctionCall` and `EmitStatement`).
+   - Resolve declaration via `referencedDeclaration`.
+   - Extract parameter metadata from typed declarations (`decl_index`).
+   - For `new ContractName(args)` expressions, look up constructor info from `constructor_index`.
+   - Store both exact-offset (`by_offset`) and name/arity fallback (`by_name`) entries in `HintLookup`.
 
-- Walk call-like AST nodes (`FunctionCall` and `EmitStatement`).
-- Resolve declaration via `referencedDeclaration`.
-- Extract parameter metadata from typed declarations.
-- Store both exact-offset and name/arity fallback lookup entries.
+`ConstructorIndex` is discarded after `build_hint_index` returns. The final `HintIndex` is stored on `CachedBuild.hint_index`.
 
 This is why request-time hinting is mostly lookup work, not full AST recomputation.
 
@@ -83,14 +90,12 @@ Special cases handled:
 
 ## Gas hint behavior
 
-Gas hints are generated from tree-sitter node positions and gas index data.  
-They are only shown if:
+Gas hints are generated inside `inlay_hints()` from tree-sitter node positions and gas index data. Generation is gated on:
 
 - gas index is non-empty,
-- `settings.inlay_hints.gas_estimates` is true,
-- and source-level gas sentinel rules match the declaration region.
+- source-level gas sentinel is present near the declaration (`/// @custom:lsp-enable gas-estimates` or the shorter `/// lsp-enable gas-estimates` — both match via substring on `GAS_SENTINEL = "lsp-enable gas-estimates"`).
 
-In request filtering, gas hints are identified by `InlayHintKind::TYPE`.
+After generation, hints are **filtered in `lsp.rs`** at request time by `InlayHintKind`. Gas hints use `InlayHintKind::TYPE`; parameter hints use `InlayHintKind::PARAMETER`. The `settings.inlay_hints.gas_estimates` toggle is applied in this filter step — not during generation. This means `inlay_hints()` may produce gas hints that are suppressed before the response is returned.
 
 ## Refresh behavior
 

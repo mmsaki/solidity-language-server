@@ -41,13 +41,15 @@ flowchart TD
 
 ## Step 1: Find call context
 
-The parser path handles both complete and incomplete syntax:
+All three strategies are handled inside a single function `ts_find_call_for_signature()` in `src/inlay_hints.rs`:
 
-- Normal parse path: try `ts_find_call_at_byte()` to locate `call_expression` / `emit_statement` / `array_access`.
-- Parent walk fallback: walk up from the cursor node until one of those enclosing node kinds is found.
-- Text-scan fallback: if tree-sitter is incomplete (for example `foo(` while typing), scan text backwards for unmatched `(` or `[` and extract identifier name.
+1. **`ts_find_call_at_byte()`** — try to locate a `call_expression` or `emit_statement` node at the cursor byte position. Does **not** handle `array_access`.
+2. **Inline parent walk** — if `ts_find_call_at_byte` returns nothing, walk up the tree from the deepest node at the cursor, looking for a `call_expression`, `emit_statement`, or `array_access` ancestor. This is the only path that resolves `array_access` (mapping index access).
+3. **Text-scan fallback** — if the tree-sitter tree is incomplete (e.g. `foo(` while still typing), call `find_call_by_text_scan()` or `find_index_by_text_scan()` which scan text backwards for an unmatched `(` or `[` and extract the identifier name.
 
-This fallback is why signature help still appears while the user is mid-typing.
+These are not separately-invokable fallback functions — they are sequential branches inside `ts_find_call_for_signature`. Only `ts_find_call_at_byte`, `find_call_by_text_scan`, and `find_index_by_text_scan` are named functions; the parent walk is inline logic.
+
+This is why signature help still appears while the user is mid-typing.
 
 ## Step 2: Resolve target
 
