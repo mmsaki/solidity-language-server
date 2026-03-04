@@ -194,6 +194,9 @@ fn config_fingerprint(config: &FoundryConfig) -> String {
         "evm_version": config.evm_version,
         "sources_dir": config.sources_dir,
         "libs": config.libs,
+        // via_ir changes the Yul IR pipeline which can produce different AST
+        // node IDs — toggling it must invalidate the cache.
+        "via_ir": config.via_ir,
     });
     keccak_hex(payload.to_string().as_bytes())
 }
@@ -215,14 +218,22 @@ pub fn save_reference_cache(config: &FoundryConfig, build: &CachedBuild) -> Resu
     save_reference_cache_with_report(config, build, None).map(|_| ())
 }
 
-/// Incrementally upsert v2 cache shards from a partial build (typically a
-/// saved file compile). This is a fast-path: it updates per-file shards and
-/// file hashes for touched files, while preserving existing global metadata.
+/// Incrementally upsert v2 cache shards for changed files, serializing
+/// global metadata (`path_to_abs`, `id_to_path_map`, `external_refs`) from
+/// the **merged in-memory `CachedBuild`** (root-key entry in `ast_cache`).
 ///
-/// The authoritative full-project cache is still produced by full reconcile.
+/// This ensures the disk cache always mirrors the authoritative in-memory
+/// state, which has correct globally-remapped file IDs from
+/// `merge_scoped_cached_build`.  Only file shards for `changed_abs_paths`
+/// are rewritten (the incremental fast-path); all other shards are preserved.
+///
+/// The full-project reconcile (`save_reference_cache_with_report`) is still
+/// the canonical full save; this function bridges the gap between saves so
+/// that a restart can warm-start from a reasonably up-to-date cache.
 pub fn upsert_reference_cache_v2_with_report(
     config: &FoundryConfig,
     build: &CachedBuild,
+    changed_abs_paths: &[String],
 ) -> Result<CacheSaveReport, String> {
     let started = Instant::now();
     if !config.root.is_dir() {
@@ -231,6 +242,8 @@ pub fn upsert_reference_cache_v2_with_report(
 
     let (_cache_root, shards_dir) = ensure_cache_dir_layout(&config.root)?;
 
+    // Load existing metadata (for file_hashes and node_shards of unchanged
+    // files) or start fresh.
     let meta_path = cache_file_path_v2(&config.root);
     let mut meta = if let Ok(bytes) = fs::read(&meta_path) {
         serde_json::from_slice::<PersistedReferenceCacheV2>(&bytes).unwrap_or(
@@ -277,20 +290,14 @@ pub fn upsert_reference_cache_v2_with_report(
         };
     }
 
-    // Collect the set of abs_paths being upserted so we can purge stale IDs.
-    let upsert_abs: std::collections::HashSet<&str> =
-        build.nodes.keys().map(|s| s.as_str()).collect();
-
-    // Remove stale NodeIds for files being overwritten: old IDs are invalid
-    // after recompile (solc assigns new integers), so keep id_to_path_map and
-    // external_refs clean to avoid phantom cross-file reference hits.
-    meta.id_to_path_map
-        .retain(|_id, path| !upsert_abs.contains(path.as_str()));
-    meta.external_refs
-        .retain(|r| !upsert_abs.contains(r.src.as_str()));
-
+    // Write shards only for the changed files.
+    let changed_set: std::collections::HashSet<&str> =
+        changed_abs_paths.iter().map(|s| s.as_str()).collect();
     let mut touched = 0usize;
     for (abs_path, file_nodes) in &build.nodes {
+        if !changed_set.contains(abs_path.as_str()) {
+            continue;
+        }
         let abs = Path::new(abs_path);
         let rel = relative_to_root(&config.root, abs);
         let shard_name = shard_file_name_for_rel_path(&rel);
@@ -317,33 +324,21 @@ pub fn upsert_reference_cache_v2_with_report(
             meta.node_shards.insert(rel, shard_name);
             touched += 1;
         }
-
-        meta.path_to_abs.insert(abs_path.clone(), abs_path.clone());
     }
 
-    for (k, v) in &build.id_to_path_map {
-        meta.id_to_path_map.insert(k.clone(), v.clone());
-    }
-
-    // Also prune external_refs whose target decl_id no longer exists in
-    // id_to_path_map (i.e. old IDs from the recompiled files that were just
-    // removed above).  This prevents stale cross-file reference hits.
-    let live_ids: std::collections::HashSet<i64> = meta
-        .id_to_path_map
-        .keys()
-        .filter_map(|k| k.parse().ok())
-        .collect();
-    meta.external_refs.retain(|r| live_ids.contains(&r.decl_id));
-
-    // Append replacement external_refs from the partial build so that
-    // reference resolution still works for touched files without waiting
-    // for a full cache save.
-    for (src, decl_id) in &build.external_refs {
-        meta.external_refs.push(PersistedExternalRef {
+    // Serialize global metadata from the authoritative merged build.
+    // This replaces the buggy per-file merge that previously wrote
+    // un-remapped file IDs and identity path_to_abs entries.
+    meta.path_to_abs = build.path_to_abs.clone();
+    meta.id_to_path_map = build.id_to_path_map.clone();
+    meta.external_refs = build
+        .external_refs
+        .iter()
+        .map(|(src, id)| PersistedExternalRef {
             src: src.clone(),
-            decl_id: decl_id.0,
-        });
-    }
+            decl_id: id.0,
+        })
+        .collect();
 
     let payload_v2 = serde_json::to_vec(&meta).map_err(|e| format!("serialize v2 cache: {e}"))?;
     write_atomic_json(&meta_path, &payload_v2)?;
@@ -484,8 +479,7 @@ pub fn changed_files_since_v2_cache(
         return Err("config fingerprint mismatch".to_string());
     }
 
-    // Hash only the files listed in the saved cache (the compiled closure),
-    // not every file discovered by walking lib dirs.
+    // Hash cached files and compare to saved hashes.
     let saved_paths: Vec<PathBuf> = persisted
         .file_hashes
         .keys()
@@ -493,12 +487,26 @@ pub fn changed_files_since_v2_cache(
         .collect();
     let current_hashes = hash_file_list(config, &saved_paths)?;
     let mut changed = Vec::new();
-    for (rel, current_hash) in current_hashes {
-        match persisted.file_hashes.get(&rel) {
-            Some(prev) if prev == &current_hash => {}
+    for (rel, current_hash) in &current_hashes {
+        match persisted.file_hashes.get(rel) {
+            Some(prev) if prev == current_hash => {}
             _ => changed.push(config.root.join(rel)),
         }
     }
+
+    // Detect new files: walk the source dir to find .sol files that are not
+    // in the cached file list.  This ensures newly-created files trigger a
+    // scoped reindex instead of silently remaining invisible until a full
+    // rebuild.
+    let saved_rels: std::collections::HashSet<&String> = persisted.file_hashes.keys().collect();
+    let discovered = crate::solc::discover_source_files(config);
+    for path in &discovered {
+        let rel = relative_to_root(&config.root, path);
+        if !saved_rels.contains(&rel) {
+            changed.push(path.clone());
+        }
+    }
+
     Ok(changed)
 }
 

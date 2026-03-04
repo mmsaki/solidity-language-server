@@ -134,7 +134,7 @@ The `.gitignore` is written automatically the first time the cache directory is 
 
 | Field | Purpose |
 |---|---|
-| `schema_version` | Must equal `2` to be loaded |
+| `schema_version` | Must equal `3` to be loaded |
 | `project_root` | Absolute path to the project root |
 | `config_fingerprint` | Keccak256 of config inputs (see below) |
 | `file_hashes` | `BTreeMap<rel_path, keccak256_hex>` — current content hashes at save time |
@@ -172,8 +172,9 @@ Shard filename = `keccak256(rel_path_bytes)` as hex + `.json`. All writes use wr
 | `remappings` | Affects which files are resolved |
 | `evm_version` | Can change which code paths solc parses |
 | `sources_dir` / `libs` | Determines the set of source files in scope |
+| `via_ir` | Yul IR pipeline can produce different AST node IDs |
 
-Optimizer settings (`optimizer`, `optimizer_runs`, `via_ir`) are intentionally excluded — they affect bytecode but not the AST shape or node IDs.
+Optimizer settings (`optimizer`, `optimizer_runs`) are intentionally excluded — they affect bytecode but not the AST shape or node IDs.
 
 ### Per-file content hashes
 
@@ -217,14 +218,13 @@ On each `didSave`, the server may launch two independent background workers:
 
 ### Fast-path upsert worker (350ms debounce)
 
-Drains `project_cache_upsert_files` (the saved file's abs path). Reads the in-memory `ast_cache` entry for that URI, then calls `upsert_reference_cache_v2_with_report()`:
+Drains `project_cache_upsert_files` (the saved file's abs path). Reads the **authoritative root-key `CachedBuild`** from `ast_cache` (the merged build with correctly remapped global file IDs), then calls `upsert_reference_cache_v2_with_report()`:
 
-- Reads and parses the existing index file.
-- Removes stale node IDs and external refs for the upserted files.
+- Reads and parses the existing index file (for `file_hashes` and `node_shards` of unchanged files).
 - Writes only the changed per-file shards.
-- Updates `file_hashes`, `node_shards`, `path_to_abs`, `id_to_path_map`, `external_refs` atomically.
+- Serializes `path_to_abs`, `id_to_path_map`, and `external_refs` directly from the in-memory merged build, ensuring the disk cache always mirrors the authoritative in-memory state.
 
-This keeps the on-disk shard data fresh between full project reindexes.
+This keeps the on-disk cache data fresh between full project reindexes without introducing file ID remapping drift.
 
 ### Full sync worker (700ms debounce)
 

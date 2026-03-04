@@ -446,6 +446,13 @@ impl ForgeLsp {
             }
         }
 
+        // Clear stale diagnostics immediately so the user sees instant feedback
+        // while solc is compiling.  Fresh diagnostics (if any) are published
+        // below once the build finishes.
+        self.client
+            .publish_diagnostics(uri.clone(), vec![], None)
+            .await;
+
         // Check if linting should be skipped based on foundry.toml + editor settings.
         let (should_lint, lint_settings) = {
             let lint_cfg = self.lint_config.read().await;
@@ -604,7 +611,21 @@ impl ForgeLsp {
                     .await;
             }
         } else {
-            // Build has errors - keep the existing cache (don't invalidate)
+            // Build has errors — keep the existing AST (don't invalidate
+            // navigation) but stamp the content_hash so the next save with
+            // *different* content is not falsely skipped by the early-return
+            // guard above.  Without this, fixing an error and reverting to a
+            // previously-compiled state would match the old hash → skip the
+            // rebuild → leave stale error diagnostics in the editor.
+            {
+                let mut cache = self.ast_cache.write().await;
+                let uri_key = uri.to_string();
+                if let Some(existing) = cache.get(&uri_key).cloned() {
+                    let mut updated = (*existing).clone();
+                    updated.content_hash = content_hash;
+                    cache.insert(uri_key, Arc::new(updated));
+                }
+            }
             self.client
                 .log_message(
                     MessageType::INFO,
@@ -1493,8 +1514,10 @@ async fn run_did_save(this: ForgeLsp, params: DidSaveTextDocumentParams) {
     let settings_snapshot = this.settings.read().await.clone();
 
     // Fast-path incremental v2 cache upsert on save (debounced single-flight):
-    // update shards for recently saved file builds from memory.
-    // Full-project reconcile still runs separately when marked dirty.
+    // serialize the authoritative root-key CachedBuild to disk, writing
+    // shards only for recently changed files.  Global metadata (path_to_abs,
+    // id_to_path_map, external_refs) comes from the merged in-memory build
+    // which has correct globally-remapped file IDs.
     if this.use_solc
         && settings_snapshot.project_index.full_project_scan
         && matches!(
@@ -1511,6 +1534,8 @@ async fn run_did_save(this: ForgeLsp, params: DidSaveTextDocumentParams) {
             let client = this.client.clone();
             let running_flag = this.project_cache_upsert_running.clone();
             let pending_flag = this.project_cache_upsert_pending.clone();
+            let foundry_config = this.foundry_config.read().await.clone();
+            let root_key = this.project_cache_key().await;
 
             tokio::spawn(async move {
                 loop {
@@ -1532,77 +1557,47 @@ async fn run_did_save(this: ForgeLsp, params: DidSaveTextDocumentParams) {
                         continue;
                     }
 
-                    let mut work_items: Vec<(
-                        crate::config::FoundryConfig,
-                        crate::goto::CachedBuild,
-                    )> = Vec::new();
-                    {
-                        let cache = ast_cache.read().await;
-                        for abs_str in changed_paths {
-                            let path = PathBuf::from(&abs_str);
-                            let Ok(uri) = Url::from_file_path(&path) else {
-                                continue;
-                            };
-                            let uri_key = uri.to_string();
-                            let Some(build) = cache.get(&uri_key).cloned() else {
-                                continue;
-                            };
-                            // Only upsert if this build contains the saved file itself.
-                            if !build.nodes.contains_key(&abs_str) {
-                                continue;
-                            }
-                            let cfg = crate::config::load_foundry_config(&path);
-                            work_items.push((cfg, (*build).clone()));
-                        }
-                    }
-
-                    if work_items.is_empty() {
+                    // Read the authoritative merged root-key build from
+                    // ast_cache.  This is the CachedBuild that
+                    // merge_scoped_cached_build has already remapped with
+                    // correct global file IDs.
+                    let Some(ref rk) = root_key else {
                         continue;
-                    }
+                    };
+                    let Some(root_build) = ast_cache.read().await.get(rk).cloned() else {
+                        continue;
+                    };
+
+                    let cfg = foundry_config.clone();
+                    let build = (*root_build).clone();
+                    let changed = changed_paths.clone();
 
                     let res = tokio::task::spawn_blocking(move || {
-                        let mut total_files = 0usize;
-                        let mut total_ms = 0u128;
-                        let mut failures: Vec<String> = Vec::new();
-                        for (cfg, build) in work_items {
-                            match crate::project_cache::upsert_reference_cache_v2_with_report(
-                                &cfg, &build,
-                            ) {
-                                Ok(report) => {
-                                    total_files += report.file_count_hashed;
-                                    total_ms += report.duration_ms;
-                                }
-                                Err(e) => failures.push(e),
-                            }
-                        }
-                        (total_files, total_ms, failures)
+                        crate::project_cache::upsert_reference_cache_v2_with_report(
+                            &cfg, &build, &changed,
+                        )
                     })
                     .await;
 
                     match res {
-                        Ok((total_files, total_ms, failures)) => {
-                            if !failures.is_empty() {
-                                client
-                                    .log_message(
-                                        MessageType::WARNING,
-                                        format!(
-                                            "project cache v2 upsert: {} failure(s), first={}",
-                                            failures.len(),
-                                            failures[0]
-                                        ),
-                                    )
-                                    .await;
-                            } else {
-                                client
-                                    .log_message(
-                                        MessageType::INFO,
-                                        format!(
-                                            "project cache v2 upsert (debounced): touched_files={}, duration={}ms",
-                                            total_files, total_ms
-                                        ),
-                                    )
-                                    .await;
-                            }
+                        Ok(Ok(report)) => {
+                            client
+                                .log_message(
+                                    MessageType::INFO,
+                                    format!(
+                                        "project cache v2 upsert (debounced): touched_files={}, duration={}ms",
+                                        report.file_count_hashed, report.duration_ms
+                                    ),
+                                )
+                                .await;
+                        }
+                        Ok(Err(e)) => {
+                            client
+                                .log_message(
+                                    MessageType::WARNING,
+                                    format!("project cache v2 upsert: {e}"),
+                                )
+                                .await;
                         }
                         Err(e) => {
                             client
