@@ -1476,10 +1476,10 @@ fn merge_scoped_cached_build(
 
     // Remap scoped local source IDs to existing/canonical IDs.
     use crate::types::SolcFileId;
-    let mut path_to_existing_id: HashMap<String, SolcFileId> = HashMap::new();
+    let mut path_to_existing_id: HashMap<crate::types::RelPath, SolcFileId> = HashMap::new();
     for (id, path) in &existing.id_to_path_map {
         path_to_existing_id
-            .entry(path.clone())
+            .entry(crate::types::RelPath::new(path.clone()))
             .or_insert_with(|| id.clone());
     }
     let mut used_ids: HashSet<SolcFileId> = existing.id_to_path_map.keys().cloned().collect();
@@ -1492,7 +1492,8 @@ fn merge_scoped_cached_build(
 
     let mut id_remap: HashMap<SolcFileId, SolcFileId> = HashMap::new();
     for (scoped_id, path) in &scoped.id_to_path_map {
-        let canonical = if let Some(id) = path_to_existing_id.get(path) {
+        let scoped_path = crate::types::RelPath::new(path.clone());
+        let canonical = if let Some(id) = path_to_existing_id.get(&scoped_path) {
             id.clone()
         } else {
             let id = loop {
@@ -1502,7 +1503,7 @@ fn merge_scoped_cached_build(
                     break candidate;
                 }
             };
-            path_to_existing_id.insert(path.clone(), id.clone());
+            path_to_existing_id.insert(scoped_path, id.clone());
             id
         };
         id_remap.insert(scoped_id.clone(), canonical);

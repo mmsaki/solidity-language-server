@@ -368,7 +368,7 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
     let est_contracts = source_count * 5;
 
     let mut names: Vec<CompletionItem> = Vec::with_capacity(est_names);
-    let mut seen_names: HashMap<String, usize> = HashMap::with_capacity(est_names);
+    let mut seen_names: HashMap<SymbolName, usize> = HashMap::with_capacity(est_names);
     let mut name_to_type: HashMap<SymbolName, TypeIdentifier> = HashMap::with_capacity(est_names);
     let mut node_members: HashMap<NodeId, Vec<CompletionItem>> =
         HashMap::with_capacity(est_contracts);
@@ -382,7 +382,7 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
     let mut contract_locations: Vec<(String, String, NodeId)> = Vec::with_capacity(est_contracts);
 
     // contract_node_id → fn_name → Vec<signature> (for matching method_identifiers to AST signatures)
-    let mut function_signatures: HashMap<NodeId, HashMap<String, Vec<String>>> =
+    let mut function_signatures: HashMap<NodeId, HashMap<SymbolName, Vec<String>>> =
         HashMap::with_capacity(est_contracts);
 
     // (contract_node_id, fn_name) → return typeIdentifier
@@ -531,7 +531,7 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
 
                         let idx = names.len();
                         names.push(item);
-                        seen_names.insert(name.to_string(), idx);
+                        seen_names.insert(SymbolName::new(name), idx);
 
                         // Store name → typeIdentifier mapping
                         if let Some(tid) = type_id {
@@ -584,7 +584,7 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
                         && let Some(id) = node_id
                     {
                         let mut members = Vec::new();
-                        let mut fn_sigs: HashMap<String, Vec<String>> = HashMap::new();
+                        let mut fn_sigs: HashMap<SymbolName, Vec<String>> = HashMap::new();
                         if let Some(nodes_array) = tree.get("nodes").and_then(|v| v.as_array()) {
                             for member in nodes_array {
                                 let member_type = member
@@ -621,7 +621,7 @@ pub fn build_completion_cache(sources: &Value, contracts: Option<&Value>) -> Com
 
                                         if let Some(sig) = build_function_signature(member) {
                                             fn_sigs
-                                                .entry(member_name.to_string())
+                                                .entry(SymbolName::new(member_name))
                                                 .or_default()
                                                 .push(sig.clone());
                                             (Some(sig), None)

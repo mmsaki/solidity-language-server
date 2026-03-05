@@ -94,23 +94,23 @@ This means after a warm-load, only cross-file goto-definition and references wor
 | Field | Purpose |
 |---|---|
 | `names` | Flat list of all named identifiers (unscoped) |
-| `name_to_type` | name → typeIdentifier; used for dot-completion |
-| `type_to_node` | typeIdentifier → defining node id |
+| `name_to_type` | `SymbolName` → `TypeIdentifier`; used for dot-completion |
+| `type_to_node` | `TypeIdentifier` → defining node id |
 | `node_members` | struct/contract/enum/library member completion items |
-| `name_to_node_id` | contract/library/interface name → node id |
+| `name_to_node_id` | `SymbolName` (contract/library/interface name) → node id |
 | `method_identifiers` | 4-byte selectors from `evm.methodIdentifiers` |
 | `function_return_types` | `(contract_id, fn_name)` → return typeIdentifier (for `foo().`) |
-| `using_for` | Library functions via `using X for T` |
+| `using_for` | `TypeIdentifier` → library functions via `using X for T` |
 | `using_for_wildcard` | Functions from `using X for *` |
 | `general_completions` | Pre-built non-dot completion list (AST names + keywords + globals + units) |
 | `scope_declarations` | Declarations per scope node |
 | `scope_parent` | Scope tree for upward scope walks |
 | `scope_ranges` | All scope byte ranges sorted by span size (innermost-first) |
-| `path_to_file_id` | abs_path → AST file id (for scope-aware lookup) |
+| `path_to_file_id` | `RelPath` → AST file id (for scope-aware lookup) |
 | `linearized_base_contracts` | C3 linearization per contract (for inherited member lookup) |
 | `contract_kinds` | `"contract"`, `"interface"`, or `"library"` |
-| `top_level_importables_by_name` | Import-on-completion: symbol name → candidates |
-| `top_level_importables_by_file` | Same data keyed by declaring file (for incremental invalidation) |
+| `top_level_importables_by_name` | Import-on-completion: `SymbolName` → candidates |
+| `top_level_importables_by_file` | Same data keyed by `RelPath` (for incremental invalidation) |
 
 ---
 
