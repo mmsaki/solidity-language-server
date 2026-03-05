@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use tower_lsp::lsp_types::{Location, Position, Range, TextEdit, Url};
 use tree_sitter::{Node, Parser};
 
-use crate::types::{AbsPath, NodeId, SourceLoc, SrcLocation};
+use crate::types::{AbsPath, NodeId, RelPath, SourceLoc, SrcLocation};
 use crate::utils::push_if_node_or_array;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -93,7 +93,7 @@ pub type ExternalRefs = HashMap<SrcLocation, NodeId>;
 #[derive(Debug, Clone)]
 pub struct CachedBuild {
     pub nodes: HashMap<AbsPath, HashMap<NodeId, NodeInfo>>,
-    pub path_to_abs: HashMap<String, AbsPath>,
+    pub path_to_abs: HashMap<RelPath, AbsPath>,
     pub external_refs: ExternalRefs,
     pub id_to_path_map: HashMap<crate::types::SolcFileId, String>,
     /// O(1) typed declaration node lookup by AST node ID.
@@ -259,7 +259,7 @@ impl CachedBuild {
     /// cross-file node/reference maps (not full gas/doc/hint indexes).
     pub fn from_reference_index(
         nodes: HashMap<AbsPath, HashMap<NodeId, NodeInfo>>,
-        path_to_abs: HashMap<String, AbsPath>,
+        path_to_abs: HashMap<RelPath, AbsPath>,
         external_refs: ExternalRefs,
         id_to_path_map: HashMap<crate::types::SolcFileId, String>,
         build_version: i32,
@@ -289,7 +289,7 @@ impl CachedBuild {
 /// Return type of [`cache_ids`]: `(nodes, path_to_abs, external_refs)`.
 type CachedIds = (
     HashMap<AbsPath, HashMap<NodeId, NodeInfo>>,
-    HashMap<String, AbsPath>,
+    HashMap<RelPath, AbsPath>,
     ExternalRefs,
 );
 
@@ -300,7 +300,7 @@ pub fn cache_ids(sources: &Value) -> CachedIds {
     // Typical project: ~200 nodes/file, ~10 external refs/file.
     let mut nodes: HashMap<AbsPath, HashMap<NodeId, NodeInfo>> =
         HashMap::with_capacity(source_count);
-    let mut path_to_abs: HashMap<String, AbsPath> = HashMap::with_capacity(source_count);
+    let mut path_to_abs: HashMap<RelPath, AbsPath> = HashMap::with_capacity(source_count);
     let mut external_refs: ExternalRefs = HashMap::with_capacity(source_count * 10);
 
     if let Some(sources_obj) = sources.as_object() {
@@ -314,7 +314,7 @@ pub fn cache_ids(sources: &Value) -> CachedIds {
                         .to_string(),
                 );
 
-                path_to_abs.insert(path.clone(), abs_path.clone());
+                path_to_abs.insert(RelPath::new(path), abs_path.clone());
 
                 // Initialize the per-file node map with a size hint.
                 // Use the top-level `nodes` array length as a proxy for total
@@ -495,7 +495,7 @@ pub fn src_to_location(
 
 pub fn goto_bytes(
     nodes: &HashMap<AbsPath, HashMap<NodeId, NodeInfo>>,
-    path_to_abs: &HashMap<String, AbsPath>,
+    path_to_abs: &HashMap<RelPath, AbsPath>,
     id_to_path: &HashMap<crate::types::SolcFileId, String>,
     external_refs: &ExternalRefs,
     uri: &str,

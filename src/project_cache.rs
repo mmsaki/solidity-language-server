@@ -1,7 +1,7 @@
 use crate::config::FoundryConfig;
 use crate::config::ProjectIndexCacheMode;
 use crate::goto::{CachedBuild, NodeInfo};
-use crate::types::{AbsPath, NodeId};
+use crate::types::{AbsPath, NodeId, RelPath};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
@@ -332,7 +332,7 @@ pub fn upsert_reference_cache_v2_with_report(
     meta.path_to_abs = build
         .path_to_abs
         .iter()
-        .map(|(k, v)| (k.clone(), v.to_string()))
+        .map(|(k, v)| (k.to_string(), v.to_string()))
         .collect();
     meta.id_to_path_map = build.id_to_path_map.clone();
     meta.external_refs = build
@@ -443,7 +443,7 @@ pub fn save_reference_cache_with_report(
         path_to_abs: build
             .path_to_abs
             .iter()
-            .map(|(k, v)| (k.clone(), v.to_string()))
+            .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect(),
         external_refs: external_refs.clone(),
         id_to_path_map: build.id_to_path_map.clone(),
@@ -586,7 +586,7 @@ pub fn load_lib_cache(sub_root: &Path) -> Option<CachedBuild> {
         persisted
             .path_to_abs
             .into_iter()
-            .map(|(k, v)| (k, AbsPath::new(v)))
+            .map(|(k, v)| (RelPath::new(k), AbsPath::new(v)))
             .collect(),
         external_refs,
         persisted.id_to_path_map,
@@ -789,7 +789,7 @@ pub fn load_reference_cache_with_report(
                 persisted
                     .path_to_abs
                     .into_iter()
-                    .map(|(k, v)| (k, AbsPath::new(v)))
+                    .map(|(k, v)| (RelPath::new(k), AbsPath::new(v)))
                     .collect(),
                 external_refs,
                 persisted.id_to_path_map,

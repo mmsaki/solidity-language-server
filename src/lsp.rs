@@ -1536,7 +1536,7 @@ fn merge_scoped_cached_build(
         .retain(|path, _| !affected_paths.contains(path.as_str()));
     existing
         .path_to_abs
-        .retain(|path, _| !affected_paths.contains(path));
+        .retain(|path, _| !affected_paths.contains(path.as_str()));
     existing
         .id_to_path_map
         .retain(|_, path| !affected_paths.contains(path));

@@ -1,12 +1,12 @@
 use serde_json::Value;
 use solidity_language_server::goto;
-use solidity_language_server::types::{AbsPath, NodeId, SolcFileId};
+use solidity_language_server::types::{AbsPath, NodeId, RelPath, SolcFileId};
 use std::collections::HashMap;
 use std::fs;
 
 type CachedIds = (
     HashMap<AbsPath, HashMap<NodeId, goto::NodeInfo>>,
-    HashMap<String, AbsPath>,
+    HashMap<RelPath, AbsPath>,
     goto::ExternalRefs,
 );
 
@@ -259,7 +259,7 @@ fn test_goto_bytes_resolves_yul_identifier() {
 
 struct SetupGotoResult(
     HashMap<AbsPath, HashMap<NodeId, goto::NodeInfo>>,
-    HashMap<String, AbsPath>,
+    HashMap<RelPath, AbsPath>,
     HashMap<SolcFileId, String>,
     goto::ExternalRefs,
 );

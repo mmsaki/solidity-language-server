@@ -176,6 +176,63 @@ impl std::borrow::Borrow<str> for AbsPath {
     }
 }
 
+/// A project-relative Solidity source path (e.g. `src/Foo.sol`, `lib/X.sol`).
+///
+/// This wraps keys used in maps like `path_to_abs`, where solc emits paths
+/// relative to the project root.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct RelPath(String);
+
+impl RelPath {
+    pub fn new(s: impl Into<String>) -> Self {
+        Self(s.into())
+    }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+impl std::fmt::Display for RelPath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl AsRef<str> for RelPath {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::ops::Deref for RelPath {
+    type Target = str;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<String> for RelPath {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
+impl From<&str> for RelPath {
+    fn from(s: &str) -> Self {
+        Self(s.to_owned())
+    }
+}
+
+impl std::borrow::Borrow<str> for RelPath {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 /// A solc source-file ID in string form (e.g. `"0"`, `"34"`, `"127"`).
 ///
 /// The compiler assigns each input file a numeric ID that appears as the

@@ -59,7 +59,7 @@ Caches the list of solc versions installed by svm-rs. Populated lazily on first 
 | Field | Type | Built by | Purpose |
 |---|---|---|---|
 | `nodes` | `HashMap<AbsPath, HashMap<NodeId, NodeInfo>>` | `cache_ids()` in `goto.rs` | Two-level map: abs_path → node_id → `NodeInfo`. `AbsPath` is a typed wrapper over path strings. Core of goto-definition, references, rename. |
-| `path_to_abs` | `HashMap<String, AbsPath>` | `cache_ids()` | Maps solc-relative path → absolute path. Needed because solc outputs relative keys. |
+| `path_to_abs` | `HashMap<RelPath, AbsPath>` | `cache_ids()` | Maps solc-relative path → absolute path. Needed because solc outputs relative keys. |
 | `external_refs` | `HashMap<SrcLocation, NodeId>` | `cache_ids()` | `SrcLocation("offset:length:fileId")` → declaration `NodeId` for Yul `externalReferences`. |
 | `id_to_path_map` | `HashMap<SolcFileId, String>` | `CachedBuild::new()` | Source file id → relative path. `SolcFileId` wraps the stringified solc id (`"0"`, `"34"`, …). |
 | `decl_index` | `HashMap<NodeId, DeclNode>` | `solc_ast::extract_decl_nodes()` | Typed declaration lookup: function, variable, contract, event, error, struct, enum, modifier, UDVT. Keyed by `NodeId`. |
