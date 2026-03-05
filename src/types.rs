@@ -18,6 +18,15 @@ pub struct NodeId(pub i64);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct FileId(pub u64);
 
+/// Type wrapper for Solidity compiler diagnostic error codes.
+///
+/// Solc and forge diagnostics carry numeric codes like `2072`, `1878`, and
+/// `7359`. Wrapping the integer avoids mixing error-code keys with unrelated
+/// numeric IDs in maps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ErrorCode(pub u32);
+
 /// A parsed `"offset:length:fileId"` source location from the AST.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SourceLoc {
@@ -70,6 +79,24 @@ impl std::fmt::Display for NodeId {
 impl std::fmt::Display for FileId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl std::fmt::Display for ErrorCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<u32> for ErrorCode {
+    fn from(value: u32) -> Self {
+        Self(value)
+    }
+}
+
+impl std::borrow::Borrow<u32> for ErrorCode {
+    fn borrow(&self) -> &u32 {
+        &self.0
     }
 }
 

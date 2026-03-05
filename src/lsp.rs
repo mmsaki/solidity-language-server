@@ -14,6 +14,7 @@ use crate::selection;
 use crate::semantic_tokens;
 use crate::symbols;
 use crate::types::DocumentUri;
+use crate::types::ErrorCode;
 use crate::utils;
 use std::collections::{HashMap, HashSet};
 use std::path::{Component, Path, PathBuf};
@@ -90,7 +91,7 @@ pub struct ForgeLsp {
         RwLock<HashMap<DocumentUri, tokio::sync::watch::Sender<Option<DidSaveTextDocumentParams>>>>,
     >,
     /// JSON-driven code-action database loaded once at startup.
-    code_action_db: Arc<HashMap<u32, crate::code_actions::CodeActionDef>>,
+    code_action_db: Arc<HashMap<ErrorCode, crate::code_actions::CodeActionDef>>,
     /// Cached builds loaded from sub-project (lib) caches.
     ///
     /// When `fullProjectScan` is enabled, the server discovers existing LSP
@@ -4812,9 +4813,9 @@ impl LanguageServer for ForgeLsp {
             }
 
             // Diagnostics from solc carry the error code as a string.
-            let code: u32 = match &diag.code {
+            let code: ErrorCode = match &diag.code {
                 Some(NumberOrString::String(s)) => match s.parse() {
-                    Ok(n) => n,
+                    Ok(n) => ErrorCode(n),
                     Err(_) => continue,
                 },
                 _ => continue,
