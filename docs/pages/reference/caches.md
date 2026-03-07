@@ -127,6 +127,7 @@ This means after a warm-load, only cross-file goto-definition and references wor
 | `.solidity-language-server/.gitignore` | `*` — ensures the entire directory is gitignored |
 | `.solidity-language-server/solidity-lsp-schema-v2.json` | Main index file (`PersistedReferenceCacheV2`) |
 | `.solidity-language-server/reference-index-v2/<keccak256_hex>.json` | One shard per source file (`PersistedFileShardV2`) |
+| `.solidity-language-server/last-solc-input.json` | Most recent `solc --standard-json` input payload (debug/repro aid), overwritten on each solc run |
 
 The `.gitignore` is written automatically the first time the cache directory is created.
 
