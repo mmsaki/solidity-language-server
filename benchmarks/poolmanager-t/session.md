@@ -6,7 +6,7 @@
 
 **Responses:**
 
-**mmsaki** (23.2ms, 9.9 MB) — ok
+**mmsaki** (35.4ms, 9.9 MB) — ok
 
 <details>
 <summary>Summary: <code>"ok"</code></summary>
@@ -24,96 +24,14 @@
 
 **Responses:**
 
-**mmsaki** (4.8s, 265.0 MB) — 15 diagnostics
+**mmsaki** (2.8ms, 10.6 MB) — 0 diagnostics
 
 <details>
-<summary>Summary: <code>{ diagnostics: Array(15) [{ code: "mixed-case-variable", message: "mutable variables should use mixedCase", range: { ...</code></summary>
+<summary>Summary: <code>{ diagnostics: [], uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/Poo..." }</code></summary>
 
 ```json
 {
-  "diagnostics": [
-    {
-      "code": "mixed-case-variable",
-      "message": "mutable variables should use mixedCase",
-      "range": {
-        "end": {
-          "character": 40,
-          "line": 354
-        },
-        "start": {
-          "character": 16,
-          "line": 354
-        }
-      },
-      "severity": 3,
-      "source": "forge-lint"
-    },
-    {
-      "code": "mixed-case-variable",
-      "message": "mutable variables should use mixedCase",
-      "range": {
-        "end": {
-          "character": 40,
-          "line": 355
-        },
-        "start": {
-          "character": 16,
-          "line": 355
-        }
-      },
-      "severity": 3,
-      "source": "forge-lint"
-    },
-    {
-      "code": "mixed-case-variable",
-      "message": "mutable variables should use mixedCase",
-      "range": {
-        "end": {
-          "character": 40,
-          "line": 383
-        },
-        "start": {
-          "character": 16,
-          "line": 383
-        }
-      },
-      "severity": 3,
-      "source": "forge-lint"
-    },
-    {
-      "code": "mixed-case-variable",
-      "message": "mutable variables should use mixedCase",
-      "range": {
-        "end": {
-          "character": 40,
-          "line": 384
-        },
-        "start": {
-          "character": 16,
-          "line": 384
-        }
-      },
-      "severity": 3,
-      "source": "forge-lint"
-    },
-    {
-      "code": "unused-import",
-      "message": "unused imports should be removed",
-      "range": {
-        "end": {
-          "character": 22,
-          "line": 15
-        },
-        "start": {
-          "character": 8,
-          "line": 15
-        }
-      },
-      "severity": 3,
-      "source": "forge-lint"
-    },
-    "... 10 more (15 total)"
-  ],
+  "diagnostics": [],
   "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/PoolManager.t.sol"
 }
 ```
@@ -127,7 +45,7 @@
 
 **Responses:**
 
-**mmsaki** (9.7ms, 263.9 MB) — delta
+**mmsaki** (13.3ms, 10.3 MB) — delta
 
 <details>
 <summary>Summary: <code>{ edits: [], resultId: "3" }</code></summary>
@@ -164,7 +82,7 @@
 
 **Responses:**
 
-**mmsaki** (6.3ms, 262.5 MB) — `TickMath.sol:9`
+**mmsaki** (8.0ms, 261.0 MB) — `TickMath.sol:9`
 
 <details>
 <summary>Summary: <code>{ range: { end: { character: 16, line: 9 }, start: { character: 8, line: 9 } }, uri: "file:///Users/meek/developer/mm...</code></summary>
@@ -210,7 +128,7 @@
 
 **Responses:**
 
-**mmsaki** (0.7ms, 263.1 MB) — `TickMath.sol:9`
+**mmsaki** (1.6ms, 261.8 MB) — `TickMath.sol:9`
 
 <details>
 <summary>Summary: <code>{ range: { end: { character: 16, line: 9 }, start: { character: 8, line: 9 } }, uri: "file:///Users/meek/developer/mm...</code></summary>
@@ -256,7 +174,7 @@
 
 **Responses:**
 
-**mmsaki** (6.3ms, 262.3 MB) — error PoolNotInitialized()
+**mmsaki** (11.6ms, 261.8 MB) — error PoolNotInitialized()
 
 <details>
 <summary>Summary: <code>{ contents: { kind: "markdown", value: "```solidity
@@ -265,14 +183,13 @@ error PoolNotInitialized()
 
 Selector: `0x486aa307`
 
----
-Throw...</code></summary>
+NodeId: `...</code></summary>
 
 ```json
 {
   "contents": {
     "kind": "markdown",
-    "value": "```solidity\nerror PoolNotInitialized()\n```\n\nSelector: `0x486aa307`\n\n---\nThrown when trying to interact with a non-initialized pool"
+    "value": "```solidity\nerror PoolNotInitialized()\n```\n\nSelector: `0x486aa307`\n\nNodeId: `236` referencedDeclaration: `9000`\n\n---\nThrown when trying to interact with a non-initialized pool"
   }
 }
 ```
@@ -305,52 +222,13 @@ Throw...</code></summary>
 
 **Responses:**
 
-**mmsaki** (8.6ms, 263.0 MB) — 67 references
+**mmsaki** (6.7ms, 260.9 MB) — 7 references
 
 <details>
-<summary>Summary: <code>Array(67) [{ range: { end: { character: 62, line: 97 }, start: { character: 46, line: 97 } }, uri: "file:///Users/mee...</code></summary>
+<summary>Summary: <code>Array(7) [{ range: { end: { character: 62, line: 107 }, start: { character: 46, line: 107 } }, uri: "file:///Users/me...</code></summary>
 
 ```json
 [
-  {
-    "range": {
-      "end": {
-        "character": 62,
-        "line": 97
-      },
-      "start": {
-        "character": 46,
-        "line": 97
-      }
-    },
-    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/PoolManager.t.sol"
-  },
-  {
-    "range": {
-      "end": {
-        "character": 28,
-        "line": 70
-      },
-      "start": {
-        "character": 12,
-        "line": 70
-      }
-    },
-    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/utils/Deployers.sol"
-  },
-  {
-    "range": {
-      "end": {
-        "character": 24,
-        "line": 206
-      },
-      "start": {
-        "character": 8,
-        "line": 206
-      }
-    },
-    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/utils/Deployers.sol"
-  },
   {
     "range": {
       "end": {
@@ -377,7 +255,46 @@ Throw...</code></summary>
     },
     "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/PoolManager.t.sol"
   },
-  "... 62 more (67 total)"
+  {
+    "range": {
+      "end": {
+        "character": 62,
+        "line": 97
+      },
+      "start": {
+        "character": 46,
+        "line": 97
+      }
+    },
+    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/PoolManager.t.sol"
+  },
+  {
+    "range": {
+      "end": {
+        "character": 24,
+        "line": 206
+      },
+      "start": {
+        "character": 8,
+        "line": 206
+      }
+    },
+    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/utils/Deployers.sol"
+  },
+  {
+    "range": {
+      "end": {
+        "character": 28,
+        "line": 70
+      },
+      "start": {
+        "character": 12,
+        "line": 70
+      }
+    },
+    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/utils/Deployers.sol"
+  },
+  "... 2 more (7 total)"
 ]
 ```
 </details>
@@ -410,7 +327,7 @@ Throw...</code></summary>
 
 **Responses:**
 
-**mmsaki** (52.9ms, 262.8 MB) — 23 items (amount0, amount1, checkTicks)
+**mmsaki** (53.3ms, 262.2 MB) — 23 items (amount0, amount1, checkTicks)
 
 <details>
 <summary>Summary: <code>{ isIncomplete: false, items: Array(23) [{ detail: "function amount0(BalanceDelta balanceDelta) internal pure returns...</code></summary>
@@ -474,7 +391,7 @@ Throw...</code></summary>
 
 **Responses:**
 
-**mmsaki** (5.8ms, 263.3 MB) — function bound(uint256 x, uint256 min, uint256 max...
+**mmsaki** (8.1ms, 261.5 MB) — function bound(uint256 x, uint256 min, uint256 max...
 
 <details>
 <summary>Summary: <code>{ activeParameter: 0, activeSignature: 0, signatures: Array(1) [{ activeParameter: 0, label: "function bound(uint256 ...</code></summary>
@@ -538,7 +455,7 @@ Throw...</code></summary>
 
 **Responses:**
 
-**mmsaki** (12.5ms, 263.4 MB) — 9 edits in 1 files
+**mmsaki** (17.3ms, 260.7 MB) — 9 edits in 1 files
 
 <details>
 <summary>Summary: <code>{ changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/PoolManager.t.sol: Array(9) [{...</code></summary>
@@ -551,12 +468,25 @@ Throw...</code></summary>
         "newText": "__lsp_bench_rename__",
         "range": {
           "end": {
-            "character": 57,
-            "line": 256
+            "character": 17,
+            "line": 266
           },
           "start": {
-            "character": 48,
-            "line": 256
+            "character": 8,
+            "line": 266
+          }
+        }
+      },
+      {
+        "newText": "__lsp_bench_rename__",
+        "range": {
+          "end": {
+            "character": 17,
+            "line": 259
+          },
+          "start": {
+            "character": 8,
+            "line": 259
           }
         }
       },
@@ -577,25 +507,12 @@ Throw...</code></summary>
         "newText": "__lsp_bench_rename__",
         "range": {
           "end": {
-            "character": 81,
-            "line": 266
+            "character": 17,
+            "line": 258
           },
           "start": {
-            "character": 72,
-            "line": 266
-          }
-        }
-      },
-      {
-        "newText": "__lsp_bench_rename__",
-        "range": {
-          "end": {
-            "character": 27,
-            "line": 254
-          },
-          "start": {
-            "character": 18,
-            "line": 254
+            "character": 8,
+            "line": 258
           }
         }
       },
@@ -604,11 +521,11 @@ Throw...</code></summary>
         "range": {
           "end": {
             "character": 42,
-            "line": 258
+            "line": 259
           },
           "start": {
             "character": 33,
-            "line": 258
+            "line": 259
           }
         }
       },
@@ -643,7 +560,7 @@ Throw...</code></summary>
 
 **Responses:**
 
-**mmsaki** (0.2ms, 263.8 MB) — ready (line 116)
+**mmsaki** (0.2ms, 260.8 MB) — ready (line 116)
 
 <details>
 <summary>Summary: <code>{ end: { character: 59, line: 116 }, start: { character: 51, line: 116 } }</code></summary>
@@ -682,7 +599,7 @@ Throw...</code></summary>
 
 **Responses:**
 
-**mmsaki** (6.2ms, 263.6 MB) — 35 symbols
+**mmsaki** (7.4ms, 10.5 MB) — 35 symbols
 
 <details>
 <summary>Summary: <code>Array(35) [{ kind: 15, name: "pragma solidity ^0.8.20", range: { end: { character: 24, line: 1 }, start: { character:...</code></summary>
@@ -838,7 +755,7 @@ Throw...</code></summary>
 
 **Responses:**
 
-**mmsaki** (7.2ms, 263.6 MB) — [{"kind":2,"range":{"end":{"character":1...
+**mmsaki** (9.2ms, 260.9 MB) — [{"kind":2,"range":{"end":{"character":1...
 
 <details>
 <summary>Summary: <code>Array(19) [{ kind: 2, range: { end: { character: 16, line: 9 }, start: { character: 8, line: 9 } } }, { kind: 2, rang...</code></summary>
@@ -935,7 +852,7 @@ Throw...</code></summary>
 
 **Responses:**
 
-**mmsaki** (1.7ms, 262.4 MB) — 33 links
+**mmsaki** (2.7ms, 262.1 MB) — 33 links
 
 <details>
 <summary>Summary: <code>Array(33) [{ range: { end: { character: 38, line: 3 }, start: { character: 20, line: 3 } }, target: "file:///Users/me...</code></summary>
@@ -1041,7 +958,7 @@ Throw...</code></summary>
 
 **Responses:**
 
-**mmsaki** (18.8ms, 263.4 MB) — 1 edits
+**mmsaki** (35.9ms, 10.5 MB) — 1 edits
 
 <details>
 <summary>Summary: <code>Array(1) [{ newText: "// SPDX-License-Identifier: UNLICENSED
@@ -1088,7 +1005,7 @@ import {Test...", range: { end...</code></summary>
 
 **Responses:**
 
-**mmsaki** (7.3ms, 262.3 MB) — [{"endCharacter":1,"endLine":1261,"start...
+**mmsaki** (8.2ms, 10.5 MB) — [{"endCharacter":1,"endLine":1261,"start...
 
 <details>
 <summary>Summary: <code>Array(93) [{ endCharacter: 1, endLine: 1261, startCharacter: 44, startLine: 37 }, { endCharacter: 6, endLine: 54, sta...</code></summary>
@@ -1156,7 +1073,7 @@ import {Test...", range: { end...</code></summary>
 
 **Responses:**
 
-**mmsaki** (5.8ms, 263.6 MB) — [{"parent":{"parent":{"parent":{"parent"...
+**mmsaki** (7.8ms, 10.4 MB) — [{"parent":{"parent":{"parent":{"parent"...
 
 <details>
 <summary>Summary: <code>Array(1) [{ parent: { parent: { parent: { parent: { parent: { parent: { parent: { parent: { parent: { parent: { range...</code></summary>
@@ -1329,7 +1246,7 @@ import {Test...", range: { end...</code></summary>
 
 **Responses:**
 
-**mmsaki** (9.3ms, 264.5 MB) — 1082 hints (name:, hooks:, _manager:)
+**mmsaki** (13.4ms, 262.1 MB) — 1082 hints (name:, hooks:, _manager:)
 
 <details>
 <summary>Summary: <code>Array(1082) [{ kind: 2, label: "name:", paddingRight: true, position: { character: 40, line: 76 } }, { kind: 2, label...</code></summary>
@@ -1406,7 +1323,7 @@ import {Test...", range: { end...</code></summary>
 
 **Responses:**
 
-**mmsaki** (9.9ms, 263.2 MB) — 1512 tokens
+**mmsaki** (11.2ms, 10.4 MB) — 1512 tokens
 
 <details>
 <summary>Summary: <code>{ data: Array(7560) [0, 0, 38, ... 7557 more], resultId: "2" }</code></summary>
@@ -1456,7 +1373,7 @@ import {Test...", range: { end...</code></summary>
 
 **Responses:**
 
-**mmsaki** (6.6ms, 262.4 MB) — 417 tokens
+**mmsaki** (7.5ms, 10.4 MB) — 417 tokens
 
 <details>
 <summary>Summary: <code>{ data: Array(2085) [0, 0, 38, ... 2082 more] }</code></summary>
@@ -1493,7 +1410,7 @@ import {Test...", range: { end...</code></summary>
 
 **Responses:**
 
-**mmsaki** (6.0ms, 262.8 MB) — 90 symbols
+**mmsaki** (7.5ms, 260.3 MB) — 90 symbols
 
 <details>
 <summary>Summary: <code>Array(90) [{ kind: 5, location: { range: { end: { character: 1, line: 1261 }, start: { character: 0, line: 37 } }, ur...</code></summary>
@@ -1617,7 +1534,7 @@ import {Test...", range: { end...</code></summary>
 
 **Responses:**
 
-**mmsaki** (242.3ms, 263.0 MB) — 12 edits in 12 files
+**mmsaki** (231.7ms, 260.7 MB) — 12 edits in 12 files
 
 <details>
 <summary>Summary: <code>{ changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/PoolManager.sol: Array(1) [{ ne...</code></summary>
@@ -1832,7 +1749,7 @@ import {Test...", range: { end...</code></summary>
 
 **Responses:**
 
-**mmsaki** (0.3ms, 263.6 MB) — null (valid)
+**mmsaki** (0.4ms, 261.0 MB) — null (valid)
 
 ---
 
@@ -1856,7 +1773,7 @@ import {Test...", range: { end...</code></summary>
 
 **Responses:**
 
-**mmsaki** (225.7ms, 262.2 MB) — {"changes":{"file:///Users/meek/develope...
+**mmsaki** (237.6ms, 260.2 MB) — {"changes":{"file:///Users/meek/develope...
 
 <details>
 <summary>Summary: <code>{ changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/PoolManager.sol: Array(1) [{ ne...</code></summary>
@@ -2068,7 +1985,7 @@ import {Test...", range: { end...</code></summary>
 
 **Responses:**
 
-**mmsaki** (0.1ms, 263.7 MB) — {"success":true}
+**mmsaki** (0.1ms, 10.6 MB) — {"success":true}
 
 <details>
 <summary>Summary: <code>{ success: true }</code></summary>
@@ -2088,7 +2005,7 @@ import {Test...", range: { end...</code></summary>
 
 **Responses:**
 
-**mmsaki** (27.7ms, 263.1 MB) — [{"diagnostics":[{"code":"unused-import"...
+**mmsaki** (29.8ms, 260.2 MB) — [{"diagnostics":[{"code":"unused-import"...
 
 <details>
 <summary>Summary: <code>Array(5) [{ diagnostics: Array(1) [{ code: "unused-import", message: "unused imports should be removed", range: { end...</code></summary>

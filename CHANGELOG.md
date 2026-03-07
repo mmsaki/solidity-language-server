@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.30
 
 ### Features
 
@@ -14,10 +14,14 @@
 - Two-phase project index — phase 1 compiles src-closure for fast time-to-first-reference, phase 2 compiles full closure (src + test + script) in background (#189)
 - Parallel sub-cache compilation — library sub-projects now build concurrently via `JoinSet` instead of sequentially; Asyncswap benchmark: 53.5s to 15.8s (3.4x speedup) (#190)
 - `solidity/subCachesLoaded` progress token — emitted when all library sub-caches are built and loaded, allowing benchmarks and editors to detect full pipeline completion (#190)
+- AST-only sub-cache compilation — sub-cache builds request only AST output (no codegen settings, no contract outputs), letting solc skip codegen entirely (#190)
+- Semaphore-based concurrency cap for parallel sub-cache builds — limits parallelism to `available_parallelism()` to avoid thrashing on smaller machines (#190)
+- `Display` impl for `PragmaConstraint` — log messages now show `>=0.8.0 <0.9.0` instead of debug-format dumps (#190)
 
 ### Performance
 
 - Remove `evm.gasEstimates` from solc output selection — gas estimation consumed 88% of compile time (SmarDex 510-file project: 56s to 6s). Removed `gas.rs`, `GasKey`, `gas_index`, gas inlay hints, gas hover, and `gasEstimates` setting (#189, #190)
+- Clean up LSP log messages — remove redundant/noisy logs (per-lib build/load lines, discovered N files, compiled with no mismatches, cache saved, path interner count), simplify cache hit/miss messages, suppress zero-count diagnostic messages (#190)
 
 ### Fixes
 
@@ -34,8 +38,8 @@
 
 | Project | Files | Before | After | Speedup |
 |---|---|---|---|---|
-| SmarDex | 510 | ~56s | 14.1s | 4x |
-| Asyncswap | 108 + 1108 lib | ~57s | 21.1s | 2.7x |
+| SmarDex | 510 | ~56s | 8.9s | 6.3x |
+| Asyncswap | 108 + 1108 lib | ~57s | 22.1s | 2.6x |
 
 ## v0.1.29
 

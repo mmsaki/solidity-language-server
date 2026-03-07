@@ -15,7 +15,7 @@ Benchmarked against `v4-core` — `test/PoolManager.t.sol`.
 
 | Server | Version |
 |--------|---------|
-| [mmsaki](https://github.com/mmsaki/solidity-language-server/releases/tag/v0.1.25) | `0.1.25` |
+| [mmsaki](https://github.com/mmsaki/solidity-language-server/releases/tag/v0.1.30) | `0.1.30` |
 
 ---
 
@@ -23,15 +23,15 @@ Benchmarked against `v4-core` — `test/PoolManager.t.sol`.
 
 | Method | mmsaki |
 |--------|--------|
-| [workspace/willRenameFiles](#workspacewillrenamefiles) | 103.8ms ⚡ |
-| [workspace/willCreateFiles](#workspacewillcreatefiles) | 0.7ms |
-| [workspace/willDeleteFiles](#workspacewilldeletefiles) | 84.8ms ⚡ |
+| [workspace/willRenameFiles](#workspacewillrenamefiles) | 471.9ms ⚡ |
+| [workspace/willCreateFiles](#workspacewillcreatefiles) | 0.3ms ⚡ |
+| [workspace/willDeleteFiles](#workspacewilldeletefiles) | 233.6ms ⚡ |
 
 ### Scorecard
 
 | Server | Wins | Out of |
 |--------|------|--------|
-| **mmsaki** | **2** | **3** |
+| **mmsaki** | **3** | **3** |
 
 ---
 
@@ -41,20 +41,20 @@ Benchmarked against `v4-core` — `test/PoolManager.t.sol`.
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki** | 103.8ms ⚡ | **10.5 MB** | 12 edits in 12 files |
+| **mmsaki** | 471.9ms ⚡ | **259.9 MB** | 12 edits in 12 files |
 
 ### workspace/willCreateFiles
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki** | 0.7ms | 10.5 MB | null |
+| **mmsaki** | 0.3ms ⚡ | **260.1 MB** | null (valid) |
 
 ### workspace/willDeleteFiles
 
 | Server | p95 | RSS | Result |
 |--------|-----|-----|--------|
-| **mmsaki** | 84.8ms ⚡ | **10.5 MB** | {"changes":{"file:///Users/meek/develope... |
+| **mmsaki** | 233.6ms ⚡ | **261.9 MB** | {"changes":{"file:///Users/meek/develope... |
 
 ---
 
-*Benchmark run: 2026-02-24T21:45:08Z*
+*Benchmark run: 2026-03-07T20:37:44Z*

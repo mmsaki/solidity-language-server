@@ -424,6 +424,23 @@ impl ForgeLsp {
         });
     }
 
+    /// If any of the given absolute paths fall under a `libs` directory
+    /// (typically `lib/`), clear the in-memory sub-caches and re-trigger the
+    /// background sub-cache load so stale lib references are replaced.
+    async fn invalidate_lib_sub_caches_if_affected(&self, changed_paths: &[std::path::PathBuf]) {
+        let config = self.foundry_config.read().await.clone();
+        let affected = changed_paths.iter().any(|p| {
+            config
+                .libs
+                .iter()
+                .any(|lib_name| p.starts_with(config.root.join(lib_name)))
+        });
+        if affected {
+            self.sub_caches.write().await.clear();
+            self.spawn_load_lib_sub_caches();
+        }
+    }
+
     /// Ensure project-wide cached build is available for cross-file features.
     ///
     /// Fast path: return in-memory root build if present.
@@ -5439,13 +5456,46 @@ impl LanguageServer for ForgeLsp {
                 cc.remove(old_key);
             }
         }
-
-        // Invalidate the project index cache and rebuild so subsequent
-        // willRenameFiles requests see the updated file layout.
-        let root_key = self.project_cache_key().await;
-        if let Some(ref key) = root_key {
-            self.ast_cache.write().await.remove(key);
+        {
+            let mut sc = self.semantic_token_cache.write().await;
+            for (old_key, _) in &file_renames {
+                sc.remove(old_key);
+            }
         }
+        {
+            let mut pending = self.pending_create_scaffold.write().await;
+            for (old_key, _) in &file_renames {
+                pending.remove(old_key);
+            }
+        }
+
+        // Invalidate lib sub-caches if any renamed files are under lib/.
+        {
+            let affected_paths: Vec<std::path::PathBuf> = file_renames
+                .iter()
+                .flat_map(|(old_key, new_key)| {
+                    let mut paths = Vec::new();
+                    if let Ok(u) = Url::parse(old_key) {
+                        if let Ok(p) = u.to_file_path() {
+                            paths.push(p);
+                        }
+                    }
+                    if let Ok(u) = Url::parse(new_key) {
+                        if let Ok(p) = u.to_file_path() {
+                            paths.push(p);
+                        }
+                    }
+                    paths
+                })
+                .collect();
+            self.invalidate_lib_sub_caches_if_affected(&affected_paths)
+                .await;
+        }
+
+        // Re-index in the background.  Keep the old project index entry
+        // alive so cross-file features (goto-def, references) keep working
+        // with slightly-stale data until the new build replaces it.
+        let root_key = self.project_cache_key().await;
 
         let foundry_config = self.foundry_config.read().await.clone();
         let ast_cache = self.ast_cache.clone();
@@ -5807,10 +5857,21 @@ impl LanguageServer for ForgeLsp {
             )
             .await;
 
-        let root_key = self.project_cache_key().await;
-        if let Some(ref key) = root_key {
-            self.ast_cache.write().await.remove(key);
+        // Invalidate lib sub-caches if any deleted files are under lib/.
+        {
+            let affected_paths: Vec<std::path::PathBuf> = deleted_keys
+                .iter()
+                .filter_map(|k| Url::parse(k).ok())
+                .filter_map(|u| u.to_file_path().ok())
+                .collect();
+            self.invalidate_lib_sub_caches_if_affected(&affected_paths)
+                .await;
         }
+
+        // Re-index in the background.  Keep the old project index entry
+        // alive so cross-file features keep working with slightly-stale
+        // data until the new build replaces it.
+        let root_key = self.project_cache_key().await;
 
         let foundry_config = self.foundry_config.read().await.clone();
         let ast_cache = self.ast_cache.clone();
@@ -6089,11 +6150,22 @@ impl LanguageServer for ForgeLsp {
             .await;
         }
 
-        // Trigger background re-index so new symbols become discoverable.
-        let root_key = self.project_cache_key().await;
-        if let Some(ref key) = root_key {
-            self.ast_cache.write().await.remove(key);
+        // Invalidate lib sub-caches if any created files are under lib/.
+        {
+            let affected_paths: Vec<std::path::PathBuf> = params
+                .files
+                .iter()
+                .filter_map(|f| Url::parse(&f.uri).ok())
+                .filter_map(|u| u.to_file_path().ok())
+                .collect();
+            self.invalidate_lib_sub_caches_if_affected(&affected_paths)
+                .await;
         }
+
+        // Re-index in the background.  Keep the old project index entry
+        // alive so cross-file features keep working with slightly-stale
+        // data until the new build replaces it.
+        let root_key = self.project_cache_key().await;
 
         let foundry_config = self.foundry_config.read().await.clone();
         let ast_cache = self.ast_cache.clone();
