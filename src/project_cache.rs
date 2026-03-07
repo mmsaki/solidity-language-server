@@ -3,6 +3,7 @@ use crate::config::ProjectIndexCacheMode;
 use crate::goto::{CachedBuild, NodeInfo};
 use crate::types::{AbsPath, NodeId, RelPath};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::io::Write;
@@ -14,6 +15,7 @@ const CACHE_SCHEMA_VERSION_V2: u32 = 3;
 const CACHE_DIR: &str = ".solidity-language-server";
 const CACHE_FILE_V2: &str = "solidity-lsp-schema-v2.json";
 const CACHE_SHARDS_DIR_V2: &str = "reference-index-v2";
+const CACHE_SOLC_INPUT_FILE: &str = "last-solc-input.json";
 const CACHE_GITIGNORE_FILE: &str = ".gitignore";
 const CACHE_GITIGNORE_CONTENTS: &str = "*\n";
 
@@ -79,6 +81,10 @@ fn cache_file_path_v2(root: &Path) -> PathBuf {
 
 fn cache_shards_dir_v2(root: &Path) -> PathBuf {
     root.join(CACHE_DIR).join(CACHE_SHARDS_DIR_V2)
+}
+
+fn cache_solc_input_path(root: &Path) -> PathBuf {
+    root.join(CACHE_DIR).join(CACHE_SOLC_INPUT_FILE)
 }
 
 fn ensure_cache_dir_layout(root: &Path) -> Result<(PathBuf, PathBuf), String> {
@@ -813,4 +819,30 @@ pub fn load_reference_cache_with_report(
         0,
         started.elapsed().as_millis(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_save_last_solc_input_writes_cache_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let input = serde_json::json!({
+            "language": "Solidity",
+            "sources": {
+                "src/Foo.sol": { "urls": ["src/Foo.sol"] }
+            },
+            "settings": { "outputSelection": { "*": { "": ["ast"] } } }
+        });
+
+        save_last_solc_input(dir.path(), &input).unwrap();
+
+        let saved_path = cache_solc_input_path(dir.path());
+        assert!(saved_path.is_file());
+
+        let bytes = std::fs::read(saved_path).unwrap();
+        let parsed: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(parsed, input);
+    }
 }

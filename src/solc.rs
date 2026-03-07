@@ -632,6 +632,7 @@ pub async fn run_solc(
     input: &Value,
     project_root: &Path,
 ) -> Result<Value, RunnerError> {
+    let _ = crate::project_cache::save_last_solc_input(project_root, input);
     let input_str = serde_json::to_string(input)?;
 
     let mut child = Command::new(solc_binary)

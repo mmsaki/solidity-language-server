@@ -11,10 +11,10 @@ pub fn all_references(
 ) -> HashMap<NodeId, Vec<NodeId>> {
     let mut all_refs: HashMap<NodeId, Vec<NodeId>> = HashMap::new();
     for file_nodes in nodes.values() {
-        for (id, node_info) in file_nodes {
-            if let Some(ref_id) = node_info.referenced_declaration {
-                all_refs.entry(ref_id).or_default().push(*id);
-                all_refs.entry(*id).or_default().push(ref_id);
+        for (node_id, node_info) in file_nodes {
+            if let Some(reference_id) = node_info.referenced_declaration {
+                all_refs.entry(reference_id).or_default().push(*node_id);
+                all_refs.entry(*node_id).or_default().push(reference_id);
             }
         }
     }
