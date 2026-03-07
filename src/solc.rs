@@ -88,10 +88,7 @@ pub async fn resolve_solc_binary(
             if let Some(c) = client {
                 c.log_message(
                     tower_lsp::lsp_types::MessageType::INFO,
-                    format!(
-                        "solc: pragma {constraint:?} → {version} → {}",
-                        path.display()
-                    ),
+                    format!("using solc {version}"),
                 )
                 .await;
             }
@@ -576,26 +573,16 @@ pub async fn resolve_remappings(config: &FoundryConfig) -> Vec<String> {
 /// - `via_ir` → `settings.viaIR`
 /// - `evm_version` → `settings.evmVersion`
 ///
-/// Note: `optimizer` is intentionally excluded — it adds ~3s and doesn't
-/// affect AST/ABI/doc quality.
-///
-/// `evm.gasEstimates` is conditionally included: when `via_ir` is **off**,
-/// gas estimates cost only ~0.7s (legacy pipeline) and enable gas inlay
-/// hints. When `via_ir` is **on**, requesting gas estimates forces solc
-/// through the full Yul IR codegen pipeline, inflating cold start from
-/// ~1.8s to ~14s — so they are excluded.
+/// Note: `optimizer` and `evm.gasEstimates` are intentionally excluded.
+/// The optimizer adds ~3s and doesn't affect AST/doc quality.
+/// Gas estimates force solc through full EVM codegen — benchmarking on
+/// a 510-file project showed 56s with vs 6s without (88% of cost).
 pub fn build_standard_json_input(
     file_path: &str,
     remappings: &[String],
     config: &FoundryConfig,
 ) -> Value {
-    // Base contract-level outputs: docs, method selectors.
-    // ABI is omitted — no code path consumes it, and it adds ~overhead.
-    // Gas estimates are only included when viaIR is off (see doc comment).
-    let mut contract_outputs = vec!["devdoc", "userdoc", "evm.methodIdentifiers"];
-    if !config.via_ir {
-        contract_outputs.push("evm.gasEstimates");
-    }
+    let contract_outputs = vec!["devdoc", "userdoc", "evm.methodIdentifiers"];
 
     let mut settings = json!({
         "remappings": remappings,
@@ -1150,10 +1137,7 @@ pub fn build_batch_standard_json_input_with_cache(
     config: &FoundryConfig,
     content_cache: Option<&HashMap<crate::types::DocumentUri, (i32, String)>>,
 ) -> Value {
-    let mut contract_outputs = vec!["devdoc", "userdoc", "evm.methodIdentifiers"];
-    if !config.via_ir {
-        contract_outputs.push("evm.gasEstimates");
-    }
+    let contract_outputs = vec!["devdoc", "userdoc", "evm.methodIdentifiers"];
 
     let mut settings = json!({
         "remappings": remappings,
@@ -1465,9 +1449,8 @@ async fn solc_project_index_from_files(
         c.log_message(
             tower_lsp::lsp_types::MessageType::INFO,
             format!(
-                "project index: discovered {} source files in {}",
-                source_files.len(),
-                config.root.display()
+                "project index: discovered {} source files",
+                source_files.len()
             ),
         )
         .await;
@@ -1736,9 +1719,6 @@ mod tests {
                         "evm": {
                             "methodIdentifiers": {
                                 "bar(uint256)": "abcd1234"
-                            },
-                            "gasEstimates": {
-                                "external": {"bar(uint256)": "200"}
                             }
                         }
                     }
@@ -1859,10 +1839,10 @@ mod tests {
         assert!(settings.get("viaIR").is_none());
         assert!(settings.get("evmVersion").is_none());
 
-        // Without viaIR, gasEstimates is included (~0.7s, enables gas hints)
+        // gasEstimates is never requested — forces full EVM codegen (88% of compile time)
         let outputs = settings["outputSelection"]["*"]["*"].as_array().unwrap();
         let output_names: Vec<&str> = outputs.iter().map(|v| v.as_str().unwrap()).collect();
-        assert!(output_names.contains(&"evm.gasEstimates"));
+        assert!(!output_names.contains(&"evm.gasEstimates"));
         assert!(!output_names.contains(&"abi")); // ABI is intentionally omitted — no consumer
         assert!(output_names.contains(&"devdoc"));
         assert!(output_names.contains(&"userdoc"));
@@ -1888,7 +1868,7 @@ mod tests {
         // viaIR IS passed when config has it (some contracts require it to compile)
         assert!(settings.get("viaIR").unwrap().as_bool().unwrap());
 
-        // With viaIR, gasEstimates is excluded (would cause 14s cold start)
+        // gasEstimates is never requested regardless of viaIR
         let outputs = settings["outputSelection"]["*"]["*"].as_array().unwrap();
         let output_names: Vec<&str> = outputs.iter().map(|v| v.as_str().unwrap()).collect();
         assert!(!output_names.contains(&"evm.gasEstimates"));

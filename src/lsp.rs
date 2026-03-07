@@ -150,12 +150,16 @@ fn spawn_load_lib_sub_caches_task(
         let sub_caches_start = std::time::Instant::now();
         for sub_root in &discovered.uncached {
             let sub_start = std::time::Instant::now();
+            let sub_name = sub_root
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| sub_root.display().to_string());
             let sub_config =
                 crate::config::load_foundry_config_from_toml(&sub_root.join("foundry.toml"));
             client
                 .log_message(
                     MessageType::INFO,
-                    format!("sub-cache: building {} ...", sub_root.display()),
+                    format!("sub-cache: building {sub_name} ..."),
                 )
                 .await;
             match crate::solc::solc_project_index(&sub_config, Some(&client), None).await {
@@ -167,10 +171,7 @@ fn spawn_load_lib_sub_caches_task(
                         client
                             .log_message(
                                 MessageType::WARNING,
-                                format!(
-                                    "sub-cache: build produced 0 sources for {}",
-                                    sub_root.display()
-                                ),
+                                format!("sub-cache: {sub_name} produced 0 sources"),
                             )
                             .await;
                         continue;
@@ -190,9 +191,7 @@ fn spawn_load_lib_sub_caches_task(
                         .log_message(
                             MessageType::INFO,
                             format!(
-                                "sub-cache: built and saved {} (sources={}, {:.1}s)",
-                                sub_root.display(),
-                                source_count,
+                                "sub-cache: {sub_name} built (sources={source_count}, {:.1}s)",
                                 sub_start.elapsed().as_secs_f64(),
                             ),
                         )
@@ -203,10 +202,8 @@ fn spawn_load_lib_sub_caches_task(
                         .log_message(
                             MessageType::WARNING,
                             format!(
-                                "sub-cache: build failed for {} ({:.1}s): {}",
-                                sub_root.display(),
+                                "sub-cache: {sub_name} failed ({:.1}s): {e}",
                                 sub_start.elapsed().as_secs_f64(),
-                                e,
                             ),
                         )
                         .await;
@@ -244,13 +241,15 @@ fn spawn_load_lib_sub_caches_task(
                         interner.intern(path);
                     }
                 }
+                let load_name = sub_root
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| sub_root.display().to_string());
                 client
                     .log_message(
                         MessageType::INFO,
                         format!(
-                            "sub-cache loaded: {} (sources={}, {:.0}ms)",
-                            sub_root.display(),
-                            source_count,
+                            "sub-cache: {load_name} loaded (sources={source_count}, {:.0}ms)",
                             load_start.elapsed().as_secs_f64() * 1000.0,
                         ),
                     )
@@ -1517,11 +1516,6 @@ fn merge_scoped_cached_build(
     existing
         .hint_index
         .retain(|abs_path, _| !affected_abs_paths.contains(abs_path));
-    existing.gas_index.retain(|k, _| {
-        k.path()
-            .map(|path| !affected_paths.contains(path))
-            .unwrap_or(true)
-    });
     existing.doc_index.retain(|k, _| {
         doc_key_path(k)
             .map(|p| !affected_paths.contains(p))
@@ -1536,7 +1530,6 @@ fn merge_scoped_cached_build(
     existing
         .node_id_to_source_path
         .extend(scoped.node_id_to_source_path);
-    existing.gas_index.extend(scoped.gas_index);
     existing.hint_index.extend(scoped.hint_index);
     existing.doc_index.extend(scoped.doc_index);
 
@@ -2099,8 +2092,8 @@ impl LanguageServer for ForgeLsp {
                 .log_message(
                     MessageType::INFO,
                     format!(
-                        "settings: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.templateOnCreate={}, fileOperations.updateImportsOnRename={}, fileOperations.updateImportsOnDelete={}, projectIndex.fullProjectScan={}, projectIndex.cacheMode={:?}, projectIndex.incrementalEditReindex={}",
-                        s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.template_on_create, s.file_operations.update_imports_on_rename, s.file_operations.update_imports_on_delete, s.project_index.full_project_scan, s.project_index.cache_mode, s.project_index.incremental_edit_reindex,
+                        "settings: inlayHints.parameters={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.templateOnCreate={}, fileOperations.updateImportsOnRename={}, fileOperations.updateImportsOnDelete={}, projectIndex.fullProjectScan={}, projectIndex.cacheMode={:?}, projectIndex.incrementalEditReindex={}",
+                        s.inlay_hints.parameters, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.template_on_create, s.file_operations.update_imports_on_rename, s.file_operations.update_imports_on_delete, s.project_index.full_project_scan, s.project_index.cache_mode, s.project_index.incremental_edit_reindex,
                     ),
                 )
                 .await;
@@ -2141,20 +2134,12 @@ impl LanguageServer for ForgeLsp {
                 .log_message(
                     MessageType::INFO,
                     format!(
-                        "loaded foundry.toml project config: solc_version={:?}, remappings={}",
-                        foundry_cfg.solc_version,
+                        "loaded foundry.toml: solc={}, remappings={}",
+                        foundry_cfg.solc_version.as_deref().unwrap_or("auto"),
                         foundry_cfg.remappings.len()
                     ),
                 )
                 .await;
-            if foundry_cfg.via_ir {
-                self.client
-                    .log_message(
-                        MessageType::WARNING,
-                        "via_ir is enabled in foundry.toml — gas estimate inlay hints are disabled to avoid slow compilation",
-                    )
-                    .await;
-            }
             let mut fc = self.foundry_config.write().await;
             *fc = foundry_cfg;
         }
@@ -3510,8 +3495,8 @@ impl LanguageServer for ForgeLsp {
                 .log_message(
                     MessageType::INFO,
                     format!(
-                        "settings updated: inlayHints.parameters={}, inlayHints.gasEstimates={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.templateOnCreate={}, fileOperations.updateImportsOnRename={}, fileOperations.updateImportsOnDelete={}, projectIndex.fullProjectScan={}, projectIndex.cacheMode={:?}, projectIndex.incrementalEditReindex={}",
-                    s.inlay_hints.parameters, s.inlay_hints.gas_estimates, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.template_on_create, s.file_operations.update_imports_on_rename, s.file_operations.update_imports_on_delete, s.project_index.full_project_scan, s.project_index.cache_mode, s.project_index.incremental_edit_reindex,
+                        "settings updated: inlayHints.parameters={}, lint.enabled={}, lint.severity={:?}, lint.only={:?}, lint.exclude={:?}, fileOperations.templateOnCreate={}, fileOperations.updateImportsOnRename={}, fileOperations.updateImportsOnDelete={}, projectIndex.fullProjectScan={}, projectIndex.cacheMode={:?}, projectIndex.incrementalEditReindex={}",
+                    s.inlay_hints.parameters, s.lint.enabled, s.lint.severity, s.lint.only, s.lint.exclude, s.file_operations.template_on_create, s.file_operations.update_imports_on_rename, s.file_operations.update_imports_on_delete, s.project_index.full_project_scan, s.project_index.cache_mode, s.project_index.incremental_edit_reindex,
                 ),
             )
             .await;
@@ -3564,8 +3549,8 @@ impl LanguageServer for ForgeLsp {
                     .log_message(
                         MessageType::INFO,
                         format!(
-                            "reloaded foundry.toml project config: solc_version={:?}, remappings={}",
-                            foundry_cfg.solc_version,
+                            "reloaded foundry.toml: solc={}, remappings={}",
+                            foundry_cfg.solc_version.as_deref().unwrap_or("auto"),
                             foundry_cfg.remappings.len()
                         ),
                     )
@@ -4947,10 +4932,6 @@ impl LanguageServer for ForgeLsp {
         if !settings.inlay_hints.parameters {
             hints.retain(|h| h.kind != Some(InlayHintKind::PARAMETER));
         }
-        if !settings.inlay_hints.gas_estimates {
-            hints.retain(|h| h.kind != Some(InlayHintKind::TYPE));
-        }
-
         if hints.is_empty() {
             self.client
                 .log_message(MessageType::INFO, "no inlay hints found")
