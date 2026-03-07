@@ -112,9 +112,6 @@ pub struct CachedBuild {
     /// Built from `typed_ast` during construction. Replaces the O(N)
     /// `find_source_path_for_node()` that walked raw JSON.
     pub node_id_to_source_path: HashMap<NodeId, AbsPath>,
-    /// Pre-built gas index from contract output. Built once, reused by
-    /// hover, inlay hints, and code lens.
-    pub gas_index: crate::gas::GasIndex,
     /// Pre-built hint lookup per file. Built once, reused on every
     /// inlay hint request (avoids O(n²) declaration resolution per request).
     pub hint_index: crate::inlay_hints::HintIndex,
@@ -205,8 +202,6 @@ impl CachedBuild {
             (solc_id_to_path, None)
         };
 
-        let gas_index = crate::gas::build_gas_index(&ast);
-
         let doc_index = crate::hover::build_doc_index(&ast);
 
         // Extract declaration nodes directly from the raw sources JSON.
@@ -275,7 +270,6 @@ impl CachedBuild {
             id_to_path_map,
             decl_index,
             node_id_to_source_path,
-            gas_index,
             hint_index,
             doc_index,
             completion_cache,
@@ -362,7 +356,6 @@ impl CachedBuild {
             id_to_path_map,
             decl_index: HashMap::new(),
             node_id_to_source_path: HashMap::new(),
-            gas_index: HashMap::new(),
             hint_index: HashMap::new(),
             doc_index: HashMap::new(),
             completion_cache,

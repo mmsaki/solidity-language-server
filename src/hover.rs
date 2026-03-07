@@ -5,14 +5,13 @@ use tower_lsp::lsp_types::{
     ParameterLabel, Position, SignatureHelp, SignatureInformation, Url,
 };
 
-use crate::gas::{self, GasIndex};
 #[cfg(test)]
 use crate::goto::CHILD_KEYS;
 use crate::goto::pos_to_bytes;
 use crate::references::{byte_to_decl_via_external_refs, byte_to_id};
 #[cfg(test)]
 use crate::types::NodeId;
-use crate::types::{EventSelector, FuncSelector, MethodId, Selector};
+use crate::types::{EventSelector, FuncSelector, Selector};
 
 // ── DocIndex — pre-built userdoc/devdoc lookup ─────────────────────────────
 
@@ -1223,125 +1222,6 @@ pub fn signature_help(
     })
 }
 
-/// Check if the source text has the gas sentinel comment above a declaration.
-///
-/// Looks at the lines preceding the declaration's byte offset in the source
-/// for a comment containing `@lsp-enable gas-estimates`.
-fn source_has_gas_sentinel(source: &str, src_field: &str) -> bool {
-    let offset = src_field
-        .split(':')
-        .next()
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or(0);
-
-    // Look at the text before this declaration for the sentinel
-    let preceding = &source[..offset.min(source.len())];
-    // Check last few lines before the declaration
-    for line in preceding.lines().rev().take(10) {
-        let trimmed = line.trim();
-        if trimmed.contains(gas::GAS_SENTINEL) {
-            return true;
-        }
-        // Stop if we hit a non-comment, non-empty line
-        if !trimmed.is_empty()
-            && !trimmed.starts_with("///")
-            && !trimmed.starts_with("//")
-            && !trimmed.starts_with('*')
-            && !trimmed.starts_with("/*")
-        {
-            break;
-        }
-    }
-    false
-}
-
-/// Typed version of `gas_hover_for_function` using `DeclNode`.
-fn gas_hover_for_function_typed(
-    decl: &crate::solc_ast::DeclNode,
-    gas_index: &GasIndex,
-    decl_index: &std::collections::HashMap<crate::types::NodeId, crate::solc_ast::DeclNode>,
-    node_id_to_source_path: &std::collections::HashMap<crate::types::NodeId, crate::types::AbsPath>,
-) -> Option<String> {
-    use crate::solc_ast::DeclNode;
-
-    let func = match decl {
-        DeclNode::FunctionDefinition(f) => f,
-        _ => return None,
-    };
-
-    // Try by selector first (external/public functions)
-    if let Some(sel) = &func.function_selector
-        && let Some((_contract, cost)) = gas::gas_by_selector(gas_index, &FuncSelector::new(sel))
-    {
-        return Some(format!("Gas: `{}`", gas::format_gas(cost)));
-    }
-
-    // Try by name (internal functions)
-    let contract_key =
-        gas::resolve_contract_key_typed(decl, gas_index, decl_index, node_id_to_source_path)?;
-    let contract_gas = gas_index.get(&contract_key)?;
-
-    let prefix = format!("{}(", func.name);
-    for (sig, cost) in &contract_gas.internal {
-        if sig.starts_with(&prefix) {
-            return Some(format!("Gas: `{}`", gas::format_gas(cost)));
-        }
-    }
-
-    None
-}
-
-/// Typed version of `gas_hover_for_contract` using `DeclNode`.
-fn gas_hover_for_contract_typed(
-    decl: &crate::solc_ast::DeclNode,
-    gas_index: &GasIndex,
-    decl_index: &std::collections::HashMap<crate::types::NodeId, crate::solc_ast::DeclNode>,
-    node_id_to_source_path: &std::collections::HashMap<crate::types::NodeId, crate::types::AbsPath>,
-) -> Option<String> {
-    use crate::solc_ast::DeclNode;
-
-    if !matches!(decl, DeclNode::ContractDefinition(_)) {
-        return None;
-    }
-
-    let contract_key =
-        gas::resolve_contract_key_typed(decl, gas_index, decl_index, node_id_to_source_path)?;
-    let contract_gas = gas_index.get(&contract_key)?;
-
-    let mut lines = Vec::new();
-
-    if !contract_gas.creation.is_empty() {
-        lines.push("**Deploy Cost**".to_string());
-        if let Some(cost) = contract_gas.creation.get("totalCost") {
-            lines.push(format!("- Total: `{}`", gas::format_gas(cost)));
-        }
-        if let Some(cost) = contract_gas.creation.get("codeDepositCost") {
-            lines.push(format!("- Code deposit: `{}`", gas::format_gas(cost)));
-        }
-        if let Some(cost) = contract_gas.creation.get("executionCost") {
-            lines.push(format!("- Execution: `{}`", gas::format_gas(cost)));
-        }
-    }
-
-    if !contract_gas.external_by_sig.is_empty() {
-        lines.push(String::new());
-        lines.push("**Function Gas**".to_string());
-
-        let mut fns: Vec<(&MethodId, &String)> = contract_gas.external_by_sig.iter().collect();
-        fns.sort_by_key(|(k, _)| k.as_str().to_string());
-
-        for (sig, cost) in fns {
-            lines.push(format!("- `{}`: `{}`", sig.name(), gas::format_gas(cost)));
-        }
-    }
-
-    if lines.is_empty() {
-        return None;
-    }
-
-    Some(lines.join("\n"))
-}
-
 /// Produce hover information for the symbol at the given position.
 pub fn hover_info(
     cached_build: &crate::goto::CachedBuild,
@@ -1353,7 +1233,6 @@ pub fn hover_info(
     let path_to_abs = &cached_build.path_to_abs;
     let external_refs = &cached_build.external_refs;
     let id_to_path = &cached_build.id_to_path_map;
-    let gas_index = &cached_build.gas_index;
     let doc_index = &cached_build.doc_index;
     let hint_index = &cached_build.hint_index;
 
@@ -1415,24 +1294,6 @@ pub fn hover_info(
 
     let di = &cached_build.decl_index;
     let id_to_path = &cached_build.node_id_to_source_path;
-
-    // Gas estimates — only shown when `@lsp-enable gas-estimates` is present
-    if !gas_index.is_empty() {
-        let source_str = String::from_utf8_lossy(source_bytes);
-        if let Some(d) = typed_decl
-            && source_has_gas_sentinel(&source_str, d.src())
-        {
-            if let Some(gas_text) =
-                typed_decl.and_then(|d| gas_hover_for_function_typed(d, gas_index, di, id_to_path))
-            {
-                parts.push(gas_text);
-            } else if let Some(gas_text) =
-                typed_decl.and_then(|d| gas_hover_for_contract_typed(d, gas_index, di, id_to_path))
-            {
-                parts.push(gas_text);
-            }
-        }
-    }
 
     // Documentation
     if let Some(doc_entry) =

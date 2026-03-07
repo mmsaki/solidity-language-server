@@ -4,7 +4,6 @@ pub mod completion;
 pub mod config;
 pub mod file_operations;
 pub mod folding;
-pub mod gas;
 pub mod goto;
 pub mod highlight;
 pub mod hover;

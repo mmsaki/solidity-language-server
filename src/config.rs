@@ -38,18 +38,11 @@ pub struct InlayHintsSettings {
     /// Show parameter-name hints on function/event/struct calls.
     #[serde(default = "default_true")]
     pub parameters: bool,
-    /// Show gas estimate hints on functions/contracts annotated with
-    /// `@custom:lsp-enable gas-estimates`.
-    #[serde(default = "default_true")]
-    pub gas_estimates: bool,
 }
 
 impl Default for InlayHintsSettings {
     fn default() -> Self {
-        Self {
-            parameters: true,
-            gas_estimates: true,
-        }
+        Self { parameters: true }
     }
 }
 
@@ -991,7 +984,6 @@ src = "contracts"
         let value = serde_json::json!({});
         let s = parse_settings(&value);
         assert!(s.inlay_hints.parameters);
-        assert!(s.inlay_hints.gas_estimates);
         assert!(s.lint.enabled);
         assert!(s.file_operations.template_on_create);
         assert!(s.file_operations.update_imports_on_rename);
@@ -1008,7 +1000,7 @@ src = "contracts"
     fn test_parse_settings_wrapped() {
         let value = serde_json::json!({
             "solidity-language-server": {
-                "inlayHints": { "parameters": false, "gasEstimates": false },
+                "inlayHints": { "parameters": false },
                 "lint": {
                     "enabled": true,
                     "severity": ["high", "med"],
@@ -1029,7 +1021,6 @@ src = "contracts"
         });
         let s = parse_settings(&value);
         assert!(!s.inlay_hints.parameters);
-        assert!(!s.inlay_hints.gas_estimates);
         assert!(s.lint.enabled);
         assert!(!s.file_operations.template_on_create);
         assert!(!s.file_operations.update_imports_on_rename);
@@ -1082,7 +1073,6 @@ src = "contracts"
         let s = parse_settings(&value);
         // inlayHints not specified → defaults to true
         assert!(s.inlay_hints.parameters);
-        assert!(s.inlay_hints.gas_estimates);
         // lint.enabled not specified → defaults to true
         assert!(s.lint.enabled);
         assert!(s.file_operations.template_on_create);
@@ -1103,7 +1093,6 @@ src = "contracts"
         });
         let s = parse_settings(&value);
         assert!(s.inlay_hints.parameters);
-        assert!(s.inlay_hints.gas_estimates);
         assert!(s.lint.enabled);
         assert!(s.file_operations.template_on_create);
         assert!(s.file_operations.update_imports_on_rename);
