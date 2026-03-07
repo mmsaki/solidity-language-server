@@ -22,32 +22,32 @@ Benchmarked against `v4-core` — `test/PoolManager.t.sol` (`v0.1.30`, p95 laten
 
 | Method | [mmsaki v0.1.30](https://github.com/mmsaki/solidity-language-server/releases/tag/v0.1.30) |
 |--------|--------|
-| initialize | 35.4ms ⚡ |
+| initialize | 22.4ms ⚡ |
 | textDocument/diagnostic | 2.8ms ⚡ |
-| textDocument/semanticTokens/full/delta | 13.3ms ⚡ |
-| textDocument/definition | 8.0ms ⚡ |
+| textDocument/semanticTokens/full/delta | 11.1ms ⚡ |
+| textDocument/definition | 8.3ms ⚡ |
 | textDocument/declaration | 1.6ms ⚡ |
-| textDocument/hover | 11.6ms ⚡ |
-| textDocument/references | 6.7ms ⚡ |
-| textDocument/completion | 53.3ms ⚡ |
-| textDocument/signatureHelp | 8.1ms ⚡ |
-| textDocument/rename | 17.3ms ⚡ |
+| textDocument/hover | 7.3ms ⚡ |
+| textDocument/references | 5.3ms ⚡ |
+| textDocument/completion | 59.9ms ⚡ |
+| textDocument/signatureHelp | 6.2ms ⚡ |
+| textDocument/rename | 15.1ms ⚡ |
 | textDocument/prepareRename | 0.2ms ⚡ |
-| textDocument/documentSymbol | 7.4ms ⚡ |
-| textDocument/documentHighlight | 9.2ms ⚡ |
-| textDocument/documentLink | 2.7ms ⚡ |
-| textDocument/formatting | 35.9ms ⚡ |
-| textDocument/foldingRange | 8.2ms ⚡ |
-| textDocument/selectionRange | 7.8ms ⚡ |
-| textDocument/inlayHint | 13.4ms ⚡ |
-| textDocument/semanticTokens/full | 11.2ms ⚡ |
-| textDocument/semanticTokens/range | 7.5ms ⚡ |
-| workspace/symbol | 7.5ms ⚡ |
-| workspace/willRenameFiles | 231.7ms ⚡ |
-| workspace/willCreateFiles | 0.4ms ⚡ |
-| workspace/willDeleteFiles | 237.6ms ⚡ |
-| workspace/executeCommand | 0.1ms ⚡ |
-| textDocument/codeAction | 29.8ms ⚡ |
+| textDocument/documentSymbol | 7.7ms ⚡ |
+| textDocument/documentHighlight | 8.4ms ⚡ |
+| textDocument/documentLink | 2.6ms ⚡ |
+| textDocument/formatting | 43.4ms ⚡ |
+| textDocument/foldingRange | 10.4ms ⚡ |
+| textDocument/selectionRange | 6.6ms ⚡ |
+| textDocument/inlayHint | 11.4ms ⚡ |
+| textDocument/semanticTokens/full | 18.5ms ⚡ |
+| textDocument/semanticTokens/range | 8.9ms ⚡ |
+| workspace/symbol | 7.2ms ⚡ |
+| workspace/willRenameFiles | 240.6ms ⚡ |
+| workspace/willCreateFiles | 1.6ms ⚡ |
+| workspace/willDeleteFiles | 230.5ms ⚡ |
+| workspace/executeCommand | 5.3ms ⚡ |
+| textDocument/codeAction | 28.7ms ⚡ |
 
 - Full benchmark report: [PoolManager.t.sol results](benchmarks/poolmanager-t/README.md)
 

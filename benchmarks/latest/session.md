@@ -6,7 +6,7 @@
 
 **Responses:**
 
-**latest** (18.2ms, 9.7 MB) — ok
+**latest** (19.6ms, 9.7 MB) — ok
 
 <details>
 <summary>Summary: <code>"ok"</code></summary>
@@ -24,7 +24,7 @@
 
 **Responses:**
 
-**latest** (2.1ms, 10.6 MB) — 0 diagnostics
+**latest** (2.5ms, 10.2 MB) — 0 diagnostics
 
 <details>
 <summary>Summary: <code>{ diagnostics: [], uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol" }</code></summary>
@@ -45,7 +45,7 @@
 
 **Responses:**
 
-**latest** (1.5ms, 11.0 MB) — delta
+**latest** (2.2ms, 10.1 MB) — delta
 
 <details>
 <summary>Summary: <code>{ edits: [], resultId: "3" }</code></summary>
@@ -82,7 +82,7 @@
 
 **Responses:**
 
-**latest** (1.3ms, 15.2 MB) — `Shop.sol:41`
+**latest** (1.3ms, 15.3 MB) — `Shop.sol:41`
 
 <details>
 <summary>Summary: <code>{ range: { end: { character: 19, line: 41 }, start: { character: 13, line: 41 } }, uri: "file:///Users/meek/developer...</code></summary>
@@ -128,7 +128,7 @@
 
 **Responses:**
 
-**latest** (0.3ms, 15.3 MB) — `Shop.sol:41`
+**latest** (0.3ms, 15.2 MB) — `Shop.sol:41`
 
 <details>
 <summary>Summary: <code>{ range: { end: { character: 19, line: 41 }, start: { character: 13, line: 41 } }, uri: "file:///Users/meek/developer...</code></summary>
@@ -174,7 +174,7 @@
 
 **Responses:**
 
-**latest** (1.2ms, 15.5 MB) — function addTax(uint256 amount, uint16 tax, uint16...
+**latest** (1.2ms, 15.1 MB) — function addTax(uint256 amount, uint16 tax, uint16...
 
 <details>
 <summary>Summary: <code>{ contents: { kind: "markdown", value: "```solidity
@@ -184,7 +184,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
 {
   "contents": {
     "kind": "markdown",
-    "value": "```solidity\nfunction addTax(uint256 amount, uint16 tax, uint16 base) internal pure returns (uint256)\n```\n\n---\nCalculates the total amount with tax applied.\n\n**Parameters:**\n- `amount` — The base amount before tax.\n- `tax` — The tax numerator.\n- `base` — The tax denominator.\n\n**Returns:**\n- `The` — total amount including tax."
+    "value": "```solidity\nfunction addTax(uint256 amount, uint16 tax, uint16 base) internal pure returns (uint256)\n```\n\nNodeId: `306` referencedDeclaration: `36`\n\n---\nCalculates the total amount with tax applied.\n\n**Parameters:**\n- `amount` — The base amount before tax.\n- `tax` — The tax numerator.\n- `base` — The tax denominator.\n\n**Returns:**\n- `The` — total amount including tax."
   }
 }
 ```
@@ -217,7 +217,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
 
 **Responses:**
 
-**latest** (0.6ms, 15.4 MB) — 2 references
+**latest** (0.7ms, 15.2 MB) — 2 references
 
 <details>
 <summary>Summary: <code>Array(2) [{ range: { end: { character: 19, line: 41 }, start: { character: 13, line: 41 } }, uri: "file:///Users/meek...</code></summary>
@@ -282,7 +282,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
 
 **Responses:**
 
-**latest** (6.8ms, 15.4 MB) — 2 items (addTax, getRefund)
+**latest** (7.1ms, 15.3 MB) — 2 items (addTax, getRefund)
 
 <details>
 <summary>Summary: <code>{ isIncomplete: false, items: Array(2) [{ detail: "function addTax(uint256 amount, uint16 tax, uint16 base) internal ...</code></summary>
@@ -330,7 +330,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
 
 **Responses:**
 
-**latest** (0.9ms, 15.2 MB) — function addTax(uint256 amount, uint16 tax, uint16...
+**latest** (1.2ms, 15.2 MB) — function addTax(uint256 amount, uint16 tax, uint16...
 
 <details>
 <summary>Summary: <code>{ activeParameter: 1, activeSignature: 0, signatures: Array(1) [{ activeParameter: 1, label: "function addTax(uint256...</code></summary>
@@ -394,7 +394,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
 
 **Responses:**
 
-**latest** (2.1ms, 15.3 MB) — 2 edits in 1 files
+**latest** (2.3ms, 15.2 MB) — 2 edits in 1 files
 
 <details>
 <summary>Summary: <code>{ changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol: Array(2) [{ newText: "__l...</code></summary>
@@ -407,12 +407,12 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
         "newText": "__lsp_bench_rename__",
         "range": {
           "end": {
-            "character": 19,
-            "line": 41
+            "character": 44,
+            "line": 136
           },
           "start": {
-            "character": 13,
-            "line": 41
+            "character": 38,
+            "line": 136
           }
         }
       },
@@ -420,12 +420,12 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
         "newText": "__lsp_bench_rename__",
         "range": {
           "end": {
-            "character": 44,
-            "line": 136
+            "character": 19,
+            "line": 41
           },
           "start": {
-            "character": 38,
-            "line": 136
+            "character": 13,
+            "line": 41
           }
         }
       }
@@ -459,7 +459,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
 
 **Responses:**
 
-**latest** (0.1ms, 15.3 MB) — ready (line 136)
+**latest** (0.2ms, 15.2 MB) — ready (line 136)
 
 <details>
 <summary>Summary: <code>{ end: { character: 44, line: 136 }, start: { character: 38, line: 136 } }</code></summary>
@@ -498,7 +498,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
 
 **Responses:**
 
-**latest** (1.3ms, 10.1 MB) — 4 symbols
+**latest** (1.9ms, 10.1 MB) — 4 symbols
 
 <details>
 <summary>Summary: <code>Array(4) [{ kind: 15, name: "pragma solidity ^0.8.0", range: { end: { character: 23, line: 1 }, start: { character: 0...</code></summary>
@@ -950,7 +950,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
 
 **Responses:**
 
-**latest** (3.9ms, 15.3 MB) — [{"kind":3,"range":{"end":{"character":1...
+**latest** (1.8ms, 15.2 MB) — [{"kind":3,"range":{"end":{"character":1...
 
 <details>
 <summary>Summary: <code>Array(2) [{ kind: 3, range: { end: { character: 19, line: 41 }, start: { character: 13, line: 41 } } }, { kind: 2, ra...</code></summary>
@@ -1007,7 +1007,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
 
 **Responses:**
 
-**latest** (0.2ms, 15.4 MB) — 1 links
+**latest** (0.2ms, 15.2 MB) — 1 links
 
 <details>
 <summary>Summary: <code>Array(1) [{ range: { end: { character: 27, line: 265 }, start: { character: 20, line: 265 } }, target: "file:///Users...</code></summary>
@@ -1056,7 +1056,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
 
 **Responses:**
 
-**latest** (13.4ms, 10.1 MB) — 1 edits
+**latest** (12.4ms, 10.0 MB) — 1 edits
 
 <details>
 <summary>Summary: <code>Array(1) [{ newText: "// SPDX-License-Identifier: MIT
@@ -1104,7 +1104,7 @@ pragma solidity ^0.8.0;
 
 **Responses:**
 
-**latest** (1.9ms, 11.0 MB) — [{"endCharacter":1,"endLine":53,"startCh...
+**latest** (2.2ms, 10.1 MB) — [{"endCharacter":1,"endLine":53,"startCh...
 
 <details>
 <summary>Summary: <code>Array(32) [{ endCharacter: 1, endLine: 53, startCharacter: 20, startLine: 21 }, { endCharacter: 5, endLine: 34, start...</code></summary>
@@ -1172,7 +1172,7 @@ pragma solidity ^0.8.0;
 
 **Responses:**
 
-**latest** (1.7ms, 10.0 MB) — [{"parent":{"parent":{"parent":{"parent"...
+**latest** (2.1ms, 10.0 MB) — [{"parent":{"parent":{"parent":{"parent"...
 
 <details>
 <summary>Summary: <code>Array(1) [{ parent: { parent: { parent: { parent: { parent: { parent: { parent: { range: { end: { character: 0, line:...</code></summary>
@@ -1309,10 +1309,10 @@ pragma solidity ^0.8.0;
 
 **Responses:**
 
-**latest** (1.6ms, 15.3 MB) — 24 hints (tax:, base:, buyer:)
+**latest** (1.5ms, 15.1 MB) — 22 hints (tax:, base:, buyer:)
 
 <details>
-<summary>Summary: <code>Array(24) [{ kind: 2, label: "tax:", paddingRight: true, position: { character: 45, line: 136 } }, { kind: 2, label: ...</code></summary>
+<summary>Summary: <code>Array(22) [{ kind: 2, label: "tax:", paddingRight: true, position: { character: 45, line: 136 } }, { kind: 2, label: ...</code></summary>
 
 ```json
 [
@@ -1361,7 +1361,7 @@ pragma solidity ^0.8.0;
       "line": 142
     }
   },
-  "... 19 more (24 total)"
+  "... 17 more (22 total)"
 ]
 ```
 </details>
@@ -1386,7 +1386,7 @@ pragma solidity ^0.8.0;
 
 **Responses:**
 
-**latest** (2.2ms, 10.1 MB) — 455 tokens
+**latest** (2.1ms, 10.0 MB) — 455 tokens
 
 <details>
 <summary>Summary: <code>{ data: Array(2275) [0, 0, 31, ... 2272 more], resultId: "2" }</code></summary>
@@ -1436,7 +1436,7 @@ pragma solidity ^0.8.0;
 
 **Responses:**
 
-**latest** (1.5ms, 10.3 MB) — 160 tokens
+**latest** (1.7ms, 10.1 MB) — 160 tokens
 
 <details>
 <summary>Summary: <code>{ data: Array(800) [0, 0, 31, ... 797 more] }</code></summary>
@@ -1473,7 +1473,7 @@ pragma solidity ^0.8.0;
 
 **Responses:**
 
-**latest** (1.1ms, 15.2 MB) — 61 symbols
+**latest** (1.4ms, 15.2 MB) — 61 symbols
 
 <details>
 <summary>Summary: <code>Array(61) [{ kind: 3, location: { range: { end: { character: 1, line: 53 }, start: { character: 0, line: 21 } }, uri:...</code></summary>
@@ -1597,7 +1597,7 @@ pragma solidity ^0.8.0;
 
 **Responses:**
 
-**latest** (5.8ms, 15.2 MB) — null (valid)
+**latest** (8.6ms, 15.2 MB) — null (valid)
 
 ---
 
@@ -1621,7 +1621,7 @@ pragma solidity ^0.8.0;
 
 **Responses:**
 
-**latest** (0.2ms, 10.1 MB) — null (valid)
+**latest** (0.1ms, 10.1 MB) — null (valid)
 
 ---
 
@@ -1645,7 +1645,7 @@ pragma solidity ^0.8.0;
 
 **Responses:**
 
-**latest** (5.9ms, 15.4 MB) — null (valid)
+**latest** (7.6ms, 15.0 MB) — null (valid)
 
 ---
 
@@ -1666,7 +1666,7 @@ pragma solidity ^0.8.0;
 
 **Responses:**
 
-**latest** (0.1ms, 10.1 MB) — {"success":true}
+**latest** (0.3ms, 10.1 MB) — {"success":true}
 
 <details>
 <summary>Summary: <code>{ success: true }</code></summary>
@@ -1686,7 +1686,7 @@ pragma solidity ^0.8.0;
 
 **Responses:**
 
-**latest** (1.0ms, 15.3 MB) — [{"diagnostics":[{"code":"unused-import"...
+**latest** (1.1ms, 15.1 MB) — [{"diagnostics":[{"code":"unused-import"...
 
 <details>
 <summary>Summary: <code>Array(1) [{ diagnostics: Array(1) [{ code: "unused-import", message: "unused imports should be removed", range: { end...</code></summary>
