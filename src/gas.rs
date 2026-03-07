@@ -36,7 +36,7 @@ pub type GasIndex = HashMap<GasKey, ContractGas>;
 /// For external functions, gas is also indexed by 4-byte selector for fast lookup
 /// from AST nodes that have `functionSelector`.
 ///
-/// Expects the canonical shape: `contracts[path][name] = { abi, evm, ... }`.
+/// Expects the canonical shape: `contracts[path][name] = { evm, devdoc, ... }`.
 pub fn build_gas_index(ast_data: &Value) -> GasIndex {
     let mut index = GasIndex::new();
 

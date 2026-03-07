@@ -146,7 +146,7 @@ impl CachedBuild {
     ///
     /// Canonical shape:
     /// - `sources[path] = { id, ast }`
-    /// - `contracts[path][name] = { abi, evm, ... }`
+    /// - `contracts[path][name] = { evm, devdoc, ... }`
     /// - `source_id_to_path = { "0": "path", ... }`
     ///
     /// When `interner` is provided, solc's per-compilation file IDs in all

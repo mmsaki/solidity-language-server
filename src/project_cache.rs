@@ -89,12 +89,27 @@ fn cache_solc_input_path(root: &Path) -> PathBuf {
 
 /// Persist the last solc standard-JSON input to the cache directory so it can
 /// be inspected for debugging.
+///
+/// Source entries that use `"content"` (in-memory editor buffers with unsaved
+/// changes) are rewritten to `"urls"` in the debug file to keep it small.
+/// The actual solc invocation still receives the real content.
 pub fn save_last_solc_input(root: &Path, input: &Value) -> Result<(), String> {
     let cache_root = root.join(CACHE_DIR);
     fs::create_dir_all(&cache_root)
         .map_err(|e| format!("failed to create cache dir {}: {e}", cache_root.display()))?;
     let path = cache_solc_input_path(root);
-    let bytes = serde_json::to_vec_pretty(input)
+
+    // Replace "content" entries with "urls" so the debug file stays small.
+    let mut sanitised = input.clone();
+    if let Some(sources) = sanitised.get_mut("sources").and_then(|s| s.as_object_mut()) {
+        for (rel_path, entry) in sources.iter_mut() {
+            if entry.get("content").is_some() {
+                *entry = serde_json::json!({ "urls": [rel_path.clone()] });
+            }
+        }
+    }
+
+    let bytes = serde_json::to_vec_pretty(&sanitised)
         .map_err(|e| format!("failed to serialize solc input: {e}"))?;
     let mut file =
         fs::File::create(&path).map_err(|e| format!("failed to create {}: {e}", path.display()))?;

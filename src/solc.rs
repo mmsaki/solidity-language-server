@@ -589,9 +589,10 @@ pub fn build_standard_json_input(
     remappings: &[String],
     config: &FoundryConfig,
 ) -> Value {
-    // Base contract-level outputs: ABI, docs, method selectors.
+    // Base contract-level outputs: docs, method selectors.
+    // ABI is omitted — no code path consumes it, and it adds ~overhead.
     // Gas estimates are only included when viaIR is off (see doc comment).
-    let mut contract_outputs = vec!["abi", "devdoc", "userdoc", "evm.methodIdentifiers"];
+    let mut contract_outputs = vec!["devdoc", "userdoc", "evm.methodIdentifiers"];
     if !config.via_ir {
         contract_outputs.push("evm.gasEstimates");
     }
@@ -932,8 +933,67 @@ pub async fn solc_build(
 ///
 /// Includes `.t.sol` (test) and `.s.sol` (script) files so that
 /// find-references and rename work across the full project.
+/// Discover the project's own source files by walking only the directories
+/// configured in `foundry.toml`: `src`, `test`, and `script`.
+///
+/// This mirrors how Forge discovers compilable files — it never walks
+/// directories outside these three (plus libs).  Stray directories like
+/// `certora/` or `hardhat/` are ignored, preventing broken imports from
+/// poisoning the solc batch.
 pub fn discover_source_files(config: &FoundryConfig) -> Vec<PathBuf> {
     discover_source_files_inner(config, false)
+}
+
+/// Discover only the `src` directory files (no test, no script).
+///
+/// Used as the seed set for phase-1 of two-phase project indexing, where
+/// we want to compile only the production source closure first for fast
+/// time-to-first-reference.
+pub fn discover_src_only_files(config: &FoundryConfig) -> Vec<PathBuf> {
+    let root = &config.root;
+    if !root.is_dir() {
+        return Vec::new();
+    }
+    let mut files = Vec::new();
+    let dir = root.join(&config.sources_dir);
+    if dir.is_dir() {
+        discover_recursive(&dir, &[], &mut files);
+    }
+    files.sort();
+    files
+}
+
+/// Discover the compilation closure seeded only from `src` files.
+///
+/// Like [`discover_compilation_closure`] but seeds only from
+/// [`discover_src_only_files`] instead of all project directories.
+/// This produces the minimal set of files needed to compile the
+/// production source code, excluding test and script files.
+pub fn discover_src_only_closure(config: &FoundryConfig, remappings: &[String]) -> Vec<PathBuf> {
+    let seeds = discover_src_only_files(config);
+    let mut visited: HashSet<PathBuf> = HashSet::new();
+    let mut queue: std::collections::VecDeque<PathBuf> = seeds.into_iter().collect();
+
+    while let Some(file) = queue.pop_front() {
+        if !visited.insert(file.clone()) {
+            continue;
+        }
+        let source = match std::fs::read_to_string(&file) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+        for imp in links::ts_find_imports(source.as_bytes()) {
+            if let Some(abs) = resolve_import_to_abs(&config.root, &file, &imp.path, remappings) {
+                if abs.exists() && !visited.contains(&abs) {
+                    queue.push_back(abs);
+                }
+            }
+        }
+    }
+
+    let mut result: Vec<PathBuf> = visited.into_iter().collect();
+    result.sort();
+    result
 }
 
 /// Discover source files including library directories.
@@ -951,9 +1011,31 @@ fn discover_source_files_inner(config: &FoundryConfig, include_libs: bool) -> Ve
     if !root.is_dir() {
         return Vec::new();
     }
-    let skip_libs = if include_libs { &[][..] } else { &config.libs };
+
     let mut files = Vec::new();
-    discover_recursive(root, skip_libs, &mut files);
+    let no_skip: &[String] = &[];
+
+    // Walk only the configured source directories (src, test, script).
+    // This matches Forge's behaviour: only files under these three directories
+    // are considered project sources.  Directories like `certora/`, `hardhat/`,
+    // etc. are never seeded.
+    for dir_name in [&config.sources_dir, &config.test_dir, &config.script_dir] {
+        let dir = root.join(dir_name);
+        if dir.is_dir() {
+            discover_recursive(&dir, no_skip, &mut files);
+        }
+    }
+
+    // When include_libs is requested, also walk lib directories.
+    if include_libs {
+        for lib_name in &config.libs {
+            let lib_dir = root.join(lib_name);
+            if lib_dir.is_dir() {
+                discover_recursive(&lib_dir, no_skip, &mut files);
+            }
+        }
+    }
+
     files.sort();
     files
 }
@@ -1068,7 +1150,7 @@ pub fn build_batch_standard_json_input_with_cache(
     config: &FoundryConfig,
     content_cache: Option<&HashMap<crate::types::DocumentUri, (i32, String)>>,
 ) -> Value {
-    let mut contract_outputs = vec!["abi", "devdoc", "userdoc", "evm.methodIdentifiers"];
+    let mut contract_outputs = vec!["devdoc", "userdoc", "evm.methodIdentifiers"];
     if !config.via_ir {
         contract_outputs.push("evm.gasEstimates");
     }
@@ -1781,7 +1863,7 @@ mod tests {
         let outputs = settings["outputSelection"]["*"]["*"].as_array().unwrap();
         let output_names: Vec<&str> = outputs.iter().map(|v| v.as_str().unwrap()).collect();
         assert!(output_names.contains(&"evm.gasEstimates"));
-        assert!(output_names.contains(&"abi"));
+        assert!(!output_names.contains(&"abi")); // ABI is intentionally omitted — no consumer
         assert!(output_names.contains(&"devdoc"));
         assert!(output_names.contains(&"userdoc"));
         assert!(output_names.contains(&"evm.methodIdentifiers"));

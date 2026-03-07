@@ -120,6 +120,7 @@ fn spawn_load_lib_sub_caches_task(
     foundry_config: crate::config::FoundryConfig,
     sub_caches: Arc<RwLock<Vec<Arc<goto::CachedBuild>>>>,
     loading_flag: Arc<std::sync::atomic::AtomicBool>,
+    path_interner: Arc<RwLock<crate::types::PathInterner>>,
     client: Client,
 ) {
     // Atomic guard: only one task runs at a time.
@@ -146,7 +147,9 @@ fn spawn_load_lib_sub_caches_task(
         });
 
         // Build missing caches first (compile each sub-project).
+        let sub_caches_start = std::time::Instant::now();
         for sub_root in &discovered.uncached {
+            let sub_start = std::time::Instant::now();
             let sub_config =
                 crate::config::load_foundry_config_from_toml(&sub_root.join("foundry.toml"));
             client
@@ -157,7 +160,8 @@ fn spawn_load_lib_sub_caches_task(
                 .await;
             match crate::solc::solc_project_index(&sub_config, Some(&client), None).await {
                 Ok(ast_data) => {
-                    let build = crate::goto::CachedBuild::new(ast_data, 0, None);
+                    let mut interner = path_interner.write().await;
+                    let build = crate::goto::CachedBuild::new(ast_data, 0, Some(&mut interner));
                     let source_count = build.nodes.len();
                     if source_count == 0 {
                         client
@@ -186,9 +190,10 @@ fn spawn_load_lib_sub_caches_task(
                         .log_message(
                             MessageType::INFO,
                             format!(
-                                "sub-cache: built and saved {} (sources={})",
+                                "sub-cache: built and saved {} (sources={}, {:.1}s)",
                                 sub_root.display(),
-                                source_count
+                                source_count,
+                                sub_start.elapsed().as_secs_f64(),
                             ),
                         )
                         .await;
@@ -197,7 +202,12 @@ fn spawn_load_lib_sub_caches_task(
                     client
                         .log_message(
                             MessageType::WARNING,
-                            format!("sub-cache: build failed for {}: {}", sub_root.display(), e),
+                            format!(
+                                "sub-cache: build failed for {} ({:.1}s): {}",
+                                sub_root.display(),
+                                sub_start.elapsed().as_secs_f64(),
+                                e,
+                            ),
                         )
                         .await;
                 }
@@ -217,6 +227,7 @@ fn spawn_load_lib_sub_caches_task(
 
         let mut loaded = Vec::new();
         for sub_root in &all_cached {
+            let load_start = std::time::Instant::now();
             let root = sub_root.clone();
             let build =
                 tokio::task::spawn_blocking(move || crate::project_cache::load_lib_cache(&root))
@@ -225,13 +236,22 @@ fn spawn_load_lib_sub_caches_task(
                     .flatten();
             if let Some(build) = build {
                 let source_count = build.nodes.len();
+                // Register loaded paths in the project-wide interner so
+                // file IDs stay consistent when merging or replacing builds.
+                {
+                    let mut interner = path_interner.write().await;
+                    for (_solc_id, path) in &build.id_to_path_map {
+                        interner.intern(path);
+                    }
+                }
                 client
                     .log_message(
                         MessageType::INFO,
                         format!(
-                            "sub-cache loaded: {} (sources={})",
+                            "sub-cache loaded: {} (sources={}, {:.0}ms)",
                             sub_root.display(),
-                            source_count
+                            source_count,
+                            load_start.elapsed().as_secs_f64() * 1000.0,
                         ),
                     )
                     .await;
@@ -245,9 +265,10 @@ fn spawn_load_lib_sub_caches_task(
                 .log_message(
                     MessageType::INFO,
                     format!(
-                        "sub-caches: loaded {} lib caches ({} total sources)",
+                        "sub-caches: loaded {} lib caches ({} total sources, {:.1}s total)",
                         loaded.len(),
-                        total
+                        total,
+                        sub_caches_start.elapsed().as_secs_f64(),
                     ),
                 )
                 .await;
@@ -347,10 +368,11 @@ impl ForgeLsp {
         let foundry_config = self.foundry_config.clone();
         let sub_caches = self.sub_caches.clone();
         let loading_flag = self.sub_caches_loading.clone();
+        let path_interner = self.path_interner.clone();
         let client = self.client.clone();
         tokio::spawn(async move {
             let cfg = foundry_config.read().await.clone();
-            spawn_load_lib_sub_caches_task(cfg, sub_caches, loading_flag, client);
+            spawn_load_lib_sub_caches_task(cfg, sub_caches, loading_flag, path_interner, client);
         });
     }
 
@@ -2519,6 +2541,31 @@ impl LanguageServer for ForgeLsp {
                     })
                     .await;
 
+                // Pre-populate the path interner with all discoverable .sol
+                // files (src + test + script + libs).  This assigns canonical
+                // file IDs upfront so every CachedBuild — root, sub-caches,
+                // and future parallel compilations — shares the same ID space.
+                {
+                    let cfg_for_discover = foundry_config.clone();
+                    let all_files = tokio::task::spawn_blocking(move || {
+                        crate::solc::discover_source_files_with_libs(&cfg_for_discover)
+                    })
+                    .await
+                    .unwrap_or_default();
+                    let mut interner = path_interner.write().await;
+                    for file in &all_files {
+                        if let Some(path_str) = file.to_str() {
+                            interner.intern(path_str);
+                        }
+                    }
+                    client
+                        .log_message(
+                            MessageType::INFO,
+                            format!("path interner: pre-registered {} file IDs", interner.len()),
+                        )
+                        .await;
+                }
+
                 // Try persisted reference index first (fast warm start).
                 let cfg_for_load = foundry_config.clone();
                 let cache_mode_for_load = cache_mode.clone();
@@ -2558,6 +2605,7 @@ impl LanguageServer for ForgeLsp {
                                     foundry_config.clone(),
                                     sub_caches_arc.clone(),
                                     sub_caches_loading_flag.clone(),
+                                    path_interner.clone(),
                                     client.clone(),
                                 );
                                 client
@@ -2602,7 +2650,75 @@ impl LanguageServer for ForgeLsp {
                     }
                 }
 
-                match crate::solc::solc_project_index(&foundry_config, Some(&client), None).await {
+                // ── Two-phase project index ──────────────────────────
+                //
+                // Phase 1: compile only the src-closure (production code
+                // + its transitive dependencies).  This is much faster
+                // than the full closure because test/script files are
+                // excluded.  After phase 1 completes, cross-file
+                // features (references, goto, hover) work for all src
+                // code and $/progress end is sent.
+                //
+                // Phase 2: compile the full closure (src + test + script
+                // + all deps) in the background.  When done, the cache
+                // entry is replaced with the complete build so
+                // references into test files also work.
+
+                // Discover the src-only closure for phase 1.
+                let remappings = crate::solc::resolve_remappings(&foundry_config).await;
+                let cfg_for_src = foundry_config.clone();
+                let remappings_for_src = remappings.clone();
+                let src_files = tokio::task::spawn_blocking(move || {
+                    crate::solc::discover_src_only_closure(&cfg_for_src, &remappings_for_src)
+                })
+                .await
+                .unwrap_or_default();
+
+                // Discover the full closure for phase 2 (can overlap
+                // with phase 1 compile since it's just import tracing).
+                let cfg_for_full = foundry_config.clone();
+                let remappings_for_full = remappings.clone();
+                let full_files = tokio::task::spawn_blocking(move || {
+                    crate::solc::discover_compilation_closure(&cfg_for_full, &remappings_for_full)
+                })
+                .await
+                .unwrap_or_default();
+
+                let src_count = src_files.len();
+                let full_count = full_files.len();
+                client
+                    .log_message(
+                        MessageType::INFO,
+                        format!(
+                            "project index: src-closure={} files, full-closure={} files",
+                            src_count, full_count,
+                        ),
+                    )
+                    .await;
+
+                // ── Phase 1: src-only compile ──
+                let phase1_start = std::time::Instant::now();
+                client
+                    .send_notification::<notification::Progress>(ProgressParams {
+                        token: token.clone(),
+                        value: ProgressParamsValue::WorkDone(WorkDoneProgress::Report(
+                            WorkDoneProgressReport {
+                                message: Some(format!("Compiling {} src files...", src_count,)),
+                                cancellable: Some(false),
+                                percentage: None,
+                            },
+                        )),
+                    })
+                    .await;
+
+                let phase1_ok = match crate::solc::solc_project_index_scoped(
+                    &foundry_config,
+                    Some(&client),
+                    None,
+                    &src_files,
+                )
+                .await
+                {
                     Ok(ast_data) => {
                         let mut new_build = crate::goto::CachedBuild::new(
                             ast_data,
@@ -2613,109 +2729,238 @@ impl LanguageServer for ForgeLsp {
                             new_build.merge_missing_from(prev);
                         }
                         let source_count = new_build.nodes.len();
-                        let cached_build = Arc::new(new_build);
-                        let build_for_save = (*cached_build).clone();
                         ast_cache
                             .write()
                             .await
-                            .insert(cache_key.clone().into(), cached_build);
+                            .insert(cache_key.clone().into(), Arc::new(new_build));
                         client
                             .log_message(
                                 MessageType::INFO,
                                 format!(
-                                    "project index (eager): cached {} source files",
-                                    source_count
+                                    "project index: phase 1 complete — {} source files indexed in {:.1}s",
+                                    source_count,
+                                    phase1_start.elapsed().as_secs_f64(),
                                 ),
                             )
                             .await;
 
-                        // Pre-load lib sub-caches after full build too.
-                        spawn_load_lib_sub_caches_task(
-                            foundry_config.clone(),
-                            sub_caches_arc.clone(),
-                            sub_caches_loading_flag.clone(),
-                            client.clone(),
-                        );
-
-                        let cfg_for_save = foundry_config.clone();
-                        let client_for_save = client.clone();
-                        tokio::spawn(async move {
-                            let res = tokio::task::spawn_blocking(move || {
-                                crate::project_cache::save_reference_cache_with_report(
-                                    &cfg_for_save,
-                                    &build_for_save,
-                                    None,
-                                )
-                            })
-                            .await;
-                            match res {
-                                Ok(Ok(report)) => {
-                                    client_for_save
-                                        .log_message(
-                                            MessageType::INFO,
-                                            format!(
-                                                "project index (eager): cache save complete (hashed_files={}, duration={}ms)",
-                                                report.file_count_hashed, report.duration_ms
-                                            ),
-                                        )
-                                        .await;
-                                }
-                                Ok(Err(e)) => {
-                                    client_for_save
-                                        .log_message(
-                                            MessageType::WARNING,
-                                            format!(
-                                                "project index (eager): failed to persist cache: {e}"
-                                            ),
-                                        )
-                                        .await;
-                                }
-                                Err(e) => {
-                                    client_for_save
-                                        .log_message(
-                                            MessageType::WARNING,
-                                            format!(
-                                                "project index (eager): cache save task failed: {e}"
-                                            ),
-                                        )
-                                        .await;
-                                }
-                            }
-                        });
-
+                        // Signal that src references are ready.
                         client
                             .send_notification::<notification::Progress>(ProgressParams {
                                 token: token.clone(),
                                 value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(
                                     WorkDoneProgressEnd {
                                         message: Some(format!(
-                                            "Indexed {} source files",
-                                            source_count
+                                            "Indexed {} source files (full index in background)",
+                                            source_count,
                                         )),
                                     },
                                 )),
                             })
                             .await;
+                        true
                     }
                     Err(e) => {
                         client
                             .log_message(
                                 MessageType::WARNING,
-                                format!("project index (eager): failed: {e}"),
+                                format!("project index: phase 1 failed: {e}"),
                             )
                             .await;
-
-                        client
-                            .send_notification::<notification::Progress>(ProgressParams {
-                                token,
-                                value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(
-                                    WorkDoneProgressEnd {
-                                        message: Some(format!("Index failed: {e}")),
-                                    },
-                                )),
-                            })
-                            .await;
+                        // Fall through — phase 2 will attempt the full compile.
+                        false
                     }
+                };
+
+                // ── Phase 2: full compile (background) ──
+                //
+                // If phase 1 succeeded, this runs in the background so
+                // the user isn't blocked.  If phase 1 failed, run
+                // synchronously so we at least get something indexed.
+                let phase2_foundry_config = foundry_config.clone();
+                let phase2_client = client.clone();
+                let phase2_cache_key = cache_key.clone();
+                let phase2_ast_cache = ast_cache.clone();
+                let phase2_path_interner = path_interner.clone();
+                let phase2_sub_caches = sub_caches_arc.clone();
+                let phase2_loading_flag = sub_caches_loading_flag.clone();
+                let phase2 = async move {
+                    let phase2_start = std::time::Instant::now();
+                    // Create a new progress token for phase 2.
+                    let token2 = NumberOrString::String("solidity/projectIndexFull".to_string());
+                    let _ = phase2_client
+                        .send_request::<request::WorkDoneProgressCreate>(
+                            WorkDoneProgressCreateParams {
+                                token: token2.clone(),
+                            },
+                        )
+                        .await;
+                    phase2_client
+                        .send_notification::<notification::Progress>(ProgressParams {
+                            token: token2.clone(),
+                            value: ProgressParamsValue::WorkDone(WorkDoneProgress::Begin(
+                                WorkDoneProgressBegin {
+                                    title: "Full project index".to_string(),
+                                    message: Some(format!(
+                                        "Compiling {} files (src + test + script)...",
+                                        full_count,
+                                    )),
+                                    cancellable: Some(false),
+                                    percentage: None,
+                                },
+                            )),
+                        })
+                        .await;
+
+                    match crate::solc::solc_project_index_scoped(
+                        &phase2_foundry_config,
+                        Some(&phase2_client),
+                        None,
+                        &full_files,
+                    )
+                    .await
+                    {
+                        Ok(ast_data) => {
+                            let mut new_build = crate::goto::CachedBuild::new(
+                                ast_data,
+                                0,
+                                Some(&mut *phase2_path_interner.write().await),
+                            );
+                            // Merge any data from the phase-1 build that
+                            // might not be in the full closure (shouldn't
+                            // happen, but defensive).
+                            if let Some(prev) = phase2_ast_cache.read().await.get(&phase2_cache_key)
+                            {
+                                new_build.merge_missing_from(prev);
+                            }
+                            let source_count = new_build.nodes.len();
+                            let cached_build = Arc::new(new_build);
+                            let build_for_save = (*cached_build).clone();
+                            phase2_ast_cache
+                                .write()
+                                .await
+                                .insert(phase2_cache_key.clone().into(), cached_build);
+                            phase2_client
+                                .log_message(
+                                    MessageType::INFO,
+                                    format!(
+                                         "project index: phase 2 complete — {} source files indexed in {:.1}s",
+                                        source_count,
+                                        phase2_start.elapsed().as_secs_f64(),
+                                    ),
+                                )
+                                .await;
+
+                            // Pre-load lib sub-caches after full build.
+                            spawn_load_lib_sub_caches_task(
+                                phase2_foundry_config.clone(),
+                                phase2_sub_caches,
+                                phase2_loading_flag,
+                                phase2_path_interner,
+                                phase2_client.clone(),
+                            );
+
+                            // Persist the full build to disk.
+                            let cfg_for_save = phase2_foundry_config.clone();
+                            let client_for_save = phase2_client.clone();
+                            tokio::spawn(async move {
+                                let res = tokio::task::spawn_blocking(move || {
+                                    crate::project_cache::save_reference_cache_with_report(
+                                        &cfg_for_save,
+                                        &build_for_save,
+                                        None,
+                                    )
+                                })
+                                .await;
+                                match res {
+                                    Ok(Ok(report)) => {
+                                        client_for_save
+                                            .log_message(
+                                                MessageType::INFO,
+                                                format!(
+                                                    "project index: cache saved (files={}, duration={}ms)",
+                                                    report.file_count_hashed, report.duration_ms
+                                                ),
+                                            )
+                                            .await;
+                                    }
+                                    Ok(Err(e)) => {
+                                        client_for_save
+                                            .log_message(
+                                                MessageType::WARNING,
+                                                format!("project index: cache save failed: {e}"),
+                                            )
+                                            .await;
+                                    }
+                                    Err(e) => {
+                                        client_for_save
+                                            .log_message(
+                                                MessageType::WARNING,
+                                                format!(
+                                                    "project index: cache save task failed: {e}"
+                                                ),
+                                            )
+                                            .await;
+                                    }
+                                }
+                            });
+
+                            phase2_client
+                                .send_notification::<notification::Progress>(ProgressParams {
+                                    token: token2,
+                                    value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(
+                                        WorkDoneProgressEnd {
+                                            message: Some(format!(
+                                                "Indexed {} source files in {:.1}s",
+                                                source_count,
+                                                phase2_start.elapsed().as_secs_f64(),
+                                            )),
+                                        },
+                                    )),
+                                })
+                                .await;
+                        }
+                        Err(e) => {
+                            phase2_client
+                                .log_message(
+                                    MessageType::WARNING,
+                                    format!("project index: phase 2 failed: {e}"),
+                                )
+                                .await;
+                            phase2_client
+                                .send_notification::<notification::Progress>(ProgressParams {
+                                    token: token2,
+                                    value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(
+                                        WorkDoneProgressEnd {
+                                            message: Some(format!("Full index failed: {e}",)),
+                                        },
+                                    )),
+                                })
+                                .await;
+                        }
+                    }
+                };
+
+                if phase1_ok {
+                    // Phase 1 succeeded — run phase 2 in background.
+                    tokio::spawn(phase2);
+                } else {
+                    // Phase 1 failed — run phase 2 synchronously so we
+                    // don't leave the user with no index at all.
+                    phase2.await;
+
+                    // Send progress end for the original token if phase 1
+                    // didn't send it.
+                    client
+                        .send_notification::<notification::Progress>(ProgressParams {
+                            token,
+                            value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(
+                                WorkDoneProgressEnd {
+                                    message: Some("Index complete (phase 1 skipped)".to_string()),
+                                },
+                            )),
+                        })
+                        .await;
                 }
             });
         }

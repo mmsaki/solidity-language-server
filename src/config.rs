@@ -238,6 +238,12 @@ pub struct FoundryConfig {
     pub ignored_error_codes: Vec<u64>,
     /// Source directory relative to `root` (default: `src` for Foundry, `contracts` for Hardhat).
     pub sources_dir: String,
+    /// Test directory relative to `root` (default: `test`).
+    /// Parsed from `test = "test"` in foundry.toml.
+    pub test_dir: String,
+    /// Script directory relative to `root` (default: `script`).
+    /// Parsed from `script = "script"` in foundry.toml.
+    pub script_dir: String,
     /// Library directories to exclude from project-wide indexing.
     /// Parsed from `libs = ["lib"]` in foundry.toml (default: `["lib"]`).
     pub libs: Vec<String>,
@@ -255,6 +261,8 @@ impl Default for FoundryConfig {
             evm_version: None,
             ignored_error_codes: Vec::new(),
             sources_dir: "src".to_string(),
+            test_dir: "test".to_string(),
+            script_dir: "script".to_string(),
             libs: vec!["lib".to_string()],
         }
     }
@@ -369,6 +377,18 @@ fn load_foundry_config_from_toml_with_profile_name(
         .map(|s| s.to_string())
         .unwrap_or_else(|| "src".to_string());
 
+    // Parse test: `test = "test"` (default: "test")
+    let test_dir = get_profile_value(active_profile, default_profile, "test")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "test".to_string());
+
+    // Parse script: `script = "script"` (default: "script")
+    let script_dir = get_profile_value(active_profile, default_profile, "script")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "script".to_string());
+
     // Parse libs: `libs = ["lib", "node_modules"]` (default: ["lib"])
     let libs = get_profile_value(active_profile, default_profile, "libs")
         .and_then(|v| v.as_array())
@@ -402,6 +422,8 @@ fn load_foundry_config_from_toml_with_profile_name(
         evm_version,
         ignored_error_codes,
         sources_dir,
+        test_dir,
+        script_dir,
         libs,
     }
 }
