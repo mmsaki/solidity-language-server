@@ -122,7 +122,7 @@ fn parse_diagnostic(
         severity,
         code,
         code_description: None,
-        source: Some("forge-build".to_string()),
+        source: Some("solc".to_string()),
         message: message.to_string(),
         related_information: None,
         tags: None,
