@@ -224,20 +224,6 @@ pub fn save_reference_cache(config: &FoundryConfig, build: &CachedBuild) -> Resu
     save_reference_cache_with_report(config, build, None).map(|_| ())
 }
 
-/// Save the most recent `solc --standard-json` input payload to disk.
-///
-/// The payload is written to:
-/// `<project_root>/.solidity-language-server/last-solc-input.json`
-///
-/// This file is overwritten on each solc invocation and is intended for
-/// debugging/repro of AST-generation issues.
-pub fn save_last_solc_input(project_root: &Path, input: &Value) -> Result<(), String> {
-    let _ = ensure_cache_dir_layout(project_root)?;
-    let payload =
-        serde_json::to_vec_pretty(input).map_err(|e| format!("serialize solc input: {e}"))?;
-    write_atomic_json(&cache_solc_input_path(project_root), &payload)
-}
-
 /// Incrementally upsert v2 cache shards for changed files, serializing
 /// global metadata (`path_to_abs`, `id_to_path_map`, `external_refs`) from
 /// the **merged in-memory `CachedBuild`** (root-key entry in `ast_cache`).
