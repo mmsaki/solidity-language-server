@@ -146,67 +146,82 @@ fn spawn_load_lib_sub_caches_task(
             uncached: Vec::new(),
         });
 
-        // Build missing caches first (compile each sub-project).
+        // Build missing caches concurrently (spawn all solc processes at once).
         let sub_caches_start = std::time::Instant::now();
-        for sub_root in &discovered.uncached {
-            let sub_start = std::time::Instant::now();
-            let sub_name = sub_root
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_else(|| sub_root.display().to_string());
-            let sub_config =
-                crate::config::load_foundry_config_from_toml(&sub_root.join("foundry.toml"));
-            client
-                .log_message(
-                    MessageType::INFO,
-                    format!("sub-cache: building {sub_name} ..."),
-                )
-                .await;
-            match crate::solc::solc_project_index(&sub_config, Some(&client), None).await {
-                Ok(ast_data) => {
-                    let mut interner = path_interner.write().await;
-                    let build = crate::goto::CachedBuild::new(ast_data, 0, Some(&mut interner));
-                    let source_count = build.nodes.len();
-                    if source_count == 0 {
+        if !discovered.uncached.is_empty() {
+            let mut join_set = tokio::task::JoinSet::new();
+            for sub_root in discovered.uncached {
+                let sub_name = sub_root
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| sub_root.display().to_string());
+                let sub_config =
+                    crate::config::load_foundry_config_from_toml(&sub_root.join("foundry.toml"));
+                let build_client = client.clone();
+                join_set.spawn(async move {
+                    let sub_start = std::time::Instant::now();
+                    build_client
+                        .log_message(
+                            MessageType::INFO,
+                            format!("sub-cache: building {sub_name} ..."),
+                        )
+                        .await;
+                    let result =
+                        crate::solc::solc_project_index(&sub_config, Some(&build_client), None)
+                            .await;
+                    let elapsed = sub_start.elapsed().as_secs_f64();
+                    (sub_name, sub_config, result, elapsed)
+                });
+            }
+
+            // Collect results as they complete.
+            while let Some(join_result) = join_set.join_next().await {
+                let Ok((sub_name, sub_config, result, elapsed)) = join_result else {
+                    continue;
+                };
+                match result {
+                    Ok(ast_data) => {
+                        let mut interner = path_interner.write().await;
+                        let build = crate::goto::CachedBuild::new(ast_data, 0, Some(&mut interner));
+                        drop(interner);
+                        let source_count = build.nodes.len();
+                        if source_count == 0 {
+                            client
+                                .log_message(
+                                    MessageType::WARNING,
+                                    format!("sub-cache: {sub_name} produced 0 sources"),
+                                )
+                                .await;
+                            continue;
+                        }
+                        // Persist to disk so next startup can load from cache.
+                        let cfg_for_save = sub_config.clone();
+                        let build_for_save = build.clone();
+                        let _ = tokio::task::spawn_blocking(move || {
+                            crate::project_cache::save_reference_cache_with_report(
+                                &cfg_for_save,
+                                &build_for_save,
+                                None,
+                            )
+                        })
+                        .await;
+                        client
+                            .log_message(
+                                MessageType::INFO,
+                                format!(
+                                    "sub-cache: {sub_name} built (sources={source_count}, {elapsed:.1}s)",
+                                ),
+                            )
+                            .await;
+                    }
+                    Err(e) => {
                         client
                             .log_message(
                                 MessageType::WARNING,
-                                format!("sub-cache: {sub_name} produced 0 sources"),
+                                format!("sub-cache: {sub_name} failed ({elapsed:.1}s): {e}"),
                             )
                             .await;
-                        continue;
                     }
-                    // Persist to disk so next startup can load from cache.
-                    let cfg_for_save = sub_config.clone();
-                    let build_for_save = build.clone();
-                    let _ = tokio::task::spawn_blocking(move || {
-                        crate::project_cache::save_reference_cache_with_report(
-                            &cfg_for_save,
-                            &build_for_save,
-                            None,
-                        )
-                    })
-                    .await;
-                    client
-                        .log_message(
-                            MessageType::INFO,
-                            format!(
-                                "sub-cache: {sub_name} built (sources={source_count}, {:.1}s)",
-                                sub_start.elapsed().as_secs_f64(),
-                            ),
-                        )
-                        .await;
-                }
-                Err(e) => {
-                    client
-                        .log_message(
-                            MessageType::WARNING,
-                            format!(
-                                "sub-cache: {sub_name} failed ({:.1}s): {e}",
-                                sub_start.elapsed().as_secs_f64(),
-                            ),
-                        )
-                        .await;
                 }
             }
         }
@@ -219,6 +234,8 @@ fn spawn_load_lib_sub_caches_task(
                 .unwrap_or_default();
 
         if all_cached.is_empty() {
+            emit_sub_caches_loaded(&client, 0, 0, sub_caches_start.elapsed().as_secs_f64()).await;
+            loading_flag.store(false, std::sync::atomic::Ordering::SeqCst);
             return;
         }
 
@@ -258,22 +275,58 @@ fn spawn_load_lib_sub_caches_task(
             }
         }
 
+        let count = loaded.len();
+        let total: usize = loaded.iter().map(|b| b.nodes.len()).sum();
+        let elapsed = sub_caches_start.elapsed().as_secs_f64();
+
         if !loaded.is_empty() {
-            let total: usize = loaded.iter().map(|b| b.nodes.len()).sum();
             client
                 .log_message(
                     MessageType::INFO,
                     format!(
                         "sub-caches: loaded {} lib caches ({} total sources, {:.1}s total)",
-                        loaded.len(),
-                        total,
-                        sub_caches_start.elapsed().as_secs_f64(),
+                        count, total, elapsed,
                     ),
                 )
                 .await;
             *sub_caches.write().await = loaded;
         }
+
+        emit_sub_caches_loaded(&client, count, total, elapsed).await;
+        loading_flag.store(false, std::sync::atomic::Ordering::SeqCst);
     });
+}
+
+/// Emit the `solidity/subCachesLoaded` progress begin+end tokens so
+/// benchmarks and editors can detect when all library sub-caches are ready.
+async fn emit_sub_caches_loaded(client: &Client, count: usize, total: usize, elapsed: f64) {
+    let token = NumberOrString::String("solidity/subCachesLoaded".to_string());
+    let _ = client
+        .send_request::<request::WorkDoneProgressCreate>(WorkDoneProgressCreateParams {
+            token: token.clone(),
+        })
+        .await;
+    client
+        .send_notification::<notification::Progress>(ProgressParams {
+            token: token.clone(),
+            value: ProgressParamsValue::WorkDone(WorkDoneProgress::Begin(WorkDoneProgressBegin {
+                title: "Sub-caches loaded".to_string(),
+                message: Some(format!(
+                    "{count} lib caches ({total} sources) in {elapsed:.1}s",
+                )),
+                cancellable: Some(false),
+                percentage: None,
+            })),
+        })
+        .await;
+    client
+        .send_notification::<notification::Progress>(ProgressParams {
+            token,
+            value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(WorkDoneProgressEnd {
+                message: Some(format!("Loaded {count} lib caches ({total} sources)",)),
+            })),
+        })
+        .await;
 }
 
 impl ForgeLsp {
