@@ -23,9 +23,9 @@ pub struct LspArgs {
     pub stdio: bool,
     #[arg(long)]
     pub use_solar: bool,
-    /// Use forge build for AST generation instead of solc.
-    /// By default, the LSP uses solc directly for faster AST generation
-    /// and falls back to forge automatically if solc fails.
+    /// Fall back to forge build for AST generation instead of solc.
+    /// By default, the LSP uses solc directly for faster AST generation.
+    /// This flag forces the forge-based pipeline.
     #[arg(long)]
     pub use_forge: bool,
     /// Deprecated: scope-aware completions are now always enabled.

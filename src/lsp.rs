@@ -44,7 +44,7 @@ pub struct ForgeLsp {
     client_capabilities: Arc<RwLock<Option<ClientCapabilities>>>,
     /// Editor-provided settings (from `initializationOptions` / `didChangeConfiguration`).
     settings: Arc<RwLock<Settings>>,
-    /// Whether to use solc directly for AST generation (with forge fallback).
+    /// Whether to use solc directly for AST generation.
     use_solc: bool,
     /// Cache of semantic tokens per document for delta support.
     semantic_token_cache: Arc<RwLock<SemanticTokenCache>>,
@@ -659,8 +659,7 @@ impl ForgeLsp {
         };
 
         // When use_solc is enabled, run solc once for both AST and diagnostics.
-        // This avoids running `forge build` separately (~27s on large projects).
-        // On solc failure, fall back to the forge-based pipeline.
+        // This is the default path — fast and direct.
         let (lint_result, build_result, ast_result) = if self.use_solc {
             let foundry_cfg = self.foundry_config_for_file(&file_path).await;
             let solc_future = crate::solc::solc_ast(path_str, &foundry_cfg, Some(&self.client));
@@ -694,7 +693,7 @@ impl ForgeLsp {
                         self.client
                             .log_message(
                                 MessageType::WARNING,
-                                format!("solc failed, falling back to forge: {e}"),
+                                format!("solc failed, falling back to forge build: {e}"),
                             )
                             .await;
                         let (build, ast) = tokio::join!(
@@ -734,7 +733,7 @@ impl ForgeLsp {
                         self.client
                             .log_message(
                                 MessageType::WARNING,
-                                format!("solc failed, falling back to forge: {e}"),
+                                format!("solc failed, falling back to forge build: {e}"),
                             )
                             .await;
                         let (build, ast) = tokio::join!(
@@ -746,7 +745,7 @@ impl ForgeLsp {
                 }
             }
         } else {
-            // forge-only pipeline (--use-forge)
+            // forge build pipeline (--use-forge)
             if should_lint {
                 let (lint, build, ast) = tokio::join!(
                     self.compiler.get_lint_diagnostics(&uri, &lint_settings),

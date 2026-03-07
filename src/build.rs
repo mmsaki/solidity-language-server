@@ -32,12 +32,12 @@ pub fn ignored_error_code_warning(value: &serde_json::Value, extra_codes: &[u64]
 }
 
 pub fn build_output_to_diagnostics(
-    forge_output: &serde_json::Value,
+    solc_output: &serde_json::Value,
     path: impl AsRef<Path>,
     content: &str,
     ignored_error_codes: &[u64],
 ) -> Vec<Diagnostic> {
-    let Some(errors) = forge_output.get("errors").and_then(|v| v.as_array()) else {
+    let Some(errors) = solc_output.get("errors").and_then(|v| v.as_array()) else {
         return Vec::new();
     };
     let path = path.as_ref();
@@ -47,13 +47,13 @@ pub fn build_output_to_diagnostics(
         .collect()
 }
 
-/// Check whether the source path from forge's error output refers to the same
+/// Check whether the source path from solc's error output refers to the same
 /// file the editor has open.
 ///
-/// Forge reports error paths relative to its working directory (wherever the
+/// Solc reports error paths relative to its working directory (wherever the
 /// LSP process runs from), e.g. `example/Shop.sol` or just `Shop.sol`.  The
 /// editor provides the full absolute path.  We simply check whether the
-/// absolute path ends with the relative path forge reported.
+/// absolute path ends with the relative path solc reported.
 fn source_location_matches(source_path: &str, path: &Path) -> bool {
     let source_path = Path::new(source_path);
     if source_path.is_absolute() {
