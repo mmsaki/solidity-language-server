@@ -76,6 +76,16 @@ During references:
 
 This is why references work inside inline assembly rather than only in high-level Solidity syntax.
 
+## Canonical file IDs via PathInterner
+
+Solc assigns file IDs sequentially based on input order — the same file gets different IDs in different compilations. This caused cross-compilation reference bugs where `src` strings (format `offset:length:fileId`) from one build could not be compared to another.
+
+The server uses a project-wide `PathInterner` (stored on `ForgeLsp` behind `Arc<RwLock<PathInterner>>`) to assign deterministic canonical file IDs. During `CachedBuild::new()`, all `src` strings in `NodeInfo` fields (`src`, `name_location`, `name_locations`, `member_location`) are rewritten via `remap_src_canonical()` to use the interner's IDs instead of solc's.
+
+Sub-caches (library sub-projects) pass `None` for the interner since they have isolated ID spaces and are matched by file path + byte offset, not by file ID.
+
+The `CompletionCache` is also canonicalized: `build_completion_cache()` accepts a `file_id_remap` to translate `path_to_file_id` and `ScopeRange.file_id` entries through the same canonical mapping.
+
 ## Cross-file behavior: stable identity, not unstable node IDs
 
 Node IDs are not stable across independent builds.  
@@ -89,6 +99,14 @@ Instead, the server derives a stable identity:
 Then each other cached build re-resolves that location locally via `byte_to_id(&build.nodes, def_abs_path, def_byte_offset)` — note that `byte_to_id` takes the unwrapped `nodes` map from the build, not a full `CachedBuild` — and collects matching references in that build.
 
 One important detail: resolution prefers `name_location` over `src` for declarations when available, so cross-file matching lands on the symbol name itself rather than a broader declaration span.
+
+## Stale-offset exclusion
+
+After editing a file, the project-level cache may still hold stale AST byte offsets for that file from the previous compilation. When `id_to_location_with_index` converts those stale offsets to line/column positions using the current file content from disk, the shifted offsets produce wrong positions. These wrong positions don't deduplicate against the correct positions from the fresh file-level build, causing duplicate references to appear.
+
+To prevent this, `goto_references_for_target()` accepts an `exclude_abs_path: Option<&str>` parameter. When the references handler scans the project-level cache for cross-file results, it passes the current file's absolute path as the exclusion — skipping all nodes (including Yul external refs) that belong to the current file. The fresh file-level build already provides correct references for the current file with up-to-date byte offsets.
+
+The same exclusion pattern is applied in `rename.rs` for cross-file rename scans.
 
 ## includeDeclaration behavior
 

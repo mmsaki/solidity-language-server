@@ -3,7 +3,7 @@
 - **Go to Definition** / **Go to Declaration** — jump to any symbol across files
 - **Find References** — all usages of a symbol across the project
 - **Rename** — project-wide symbol rename with prepare support
-- **Hover** — signatures, NatSpec docs, function/error/event selectors, `@inheritdoc` resolution
+- **Hover** — signatures, NatSpec docs, function/error/event selectors, `@inheritdoc` resolution, AST node ID for debugging
 - **Completions** — scope-aware with two modes (fast cache vs full recomputation)
 - **Document Links** — clickable imports, type names, function calls
 - **Document Symbols** / **Workspace Symbols** — outline and search

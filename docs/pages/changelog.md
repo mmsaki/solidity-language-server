@@ -2,6 +2,23 @@
 
 # Changelog
 
+## Unreleased
+
+### Features
+
+- Project-wide `PathInterner` for canonical file IDs — solc assigns file IDs sequentially based on input order, causing cross-compilation reference bugs; the interner assigns deterministic IDs so all builds share the same ID space (#185)
+- `textDocument/hover` — show AST node ID (``NodeId: `<id>` ``) in hover tooltips for debugging; references show ``NodeId: `<id>` referencedDeclaration: `<decl_id>` ``
+
+### Fixes
+
+- Fix stale-offset duplicate references after editing — "Find All References" no longer produces bogus duplicates (e.g. 734 instead of 729 results) when the project cache has stale byte offsets for the current file; `goto_references_for_target()` now excludes the current file from the project-cache scan since the fresh file-level build already covers it (#185)
+- `CompletionCache` file IDs are now canonicalized through the `PathInterner` remap, preventing scope-range mismatches across compilations (#185)
+- Removed dead `remap_src_file_id` and `remap_node_info_file_ids` functions; simplified `merge_scoped_cached_build()` by removing ~50 lines of `id_remap` machinery (#185)
+
+### Tests
+
+- 450 total tests (318 unit + 132 integration), 0 failures
+
 ## v0.1.29
 
 ### Features
