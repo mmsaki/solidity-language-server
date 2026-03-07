@@ -44,6 +44,19 @@ Key = `DocumentUri`. Populated immediately after a successful build in `on_chang
 
 Key = `DocumentUri`. Value = `(result_id, token_list)`. The `result_id` is a monotonically increasing string from `semantic_token_id: Arc<AtomicU64>`. Populated on `textDocument/semanticTokens/full`; used for delta computation on `textDocument/semanticTokens/full/delta`. Evicted on `didDeleteFiles`.
 
+### `path_interner`
+
+`Arc<RwLock<PathInterner>>`
+
+Project-wide file ID interner. Solc assigns file IDs sequentially based on input order, so the same file gets different IDs in different compilations. `PathInterner` assigns deterministic canonical IDs by mapping `(file_id, id_to_path_map)` pairs to stable `FileId` values.
+
+Used during `CachedBuild::new()` to rewrite all `src` strings (`offset:length:fileId` format) in `NodeInfo` fields to use canonical IDs. Also seeds from persisted `id_to_path_map` during warm-load via `from_reference_index()`. Sub-caches (library sub-projects) pass `None` for the interner since they have isolated ID spaces.
+
+Key methods:
+- `intern(path) -> FileId` — returns existing canonical ID or assigns the next one
+- `resolve(file_id) -> Option<&str>` — look up path by canonical ID
+- `build_remap(solc_id_to_path_map) -> HashMap<u64, FileId>` — builds a translation table from solc IDs to canonical IDs for a given compilation
+
 ### Process-static: `INSTALLED_VERSIONS`
 
 `static OnceLock<Mutex<Vec<SemVer>>>` in `src/solc.rs`.
@@ -54,7 +67,7 @@ Caches the list of solc versions installed by svm-rs. Populated lazily on first 
 
 ## `CachedBuild` — field reference
 
-`CachedBuild` in `src/goto.rs` is the pre-built AST index. The raw solc JSON is consumed in `CachedBuild::new()` and then dropped — nothing is retained in raw form.
+`CachedBuild` in `src/goto.rs` is the pre-built AST index. The raw solc JSON is consumed in `CachedBuild::new()` and then dropped — nothing is retained in raw form. `CachedBuild::new()` accepts an optional `&mut PathInterner` — when provided, all `src` strings in `NodeInfo` fields are canonicalized through the interner so file IDs are deterministic across compilations.
 
 | Field | Type | Built by | Purpose |
 |---|---|---|---|
@@ -308,11 +321,12 @@ See the setup schema in [Setup Overview](/setup).
 
 | File | Role |
 |---|---|
-| `src/goto.rs` | `CachedBuild`, `NodeInfo`, `cache_ids()`, `from_reference_index()` |
+| `src/goto.rs` | `CachedBuild`, `NodeInfo`, `cache_ids()`, `from_reference_index()`, `remap_src_canonical()`, `canonicalize_node_info()` |
 | `src/project_cache.rs` | All on-disk v2 persistence: save, load, upsert, shard logic |
 | `src/lsp.rs` | Owns all in-memory caches; drives lifecycle via LSP events; both async workers |
 | `src/completion.rs` | `CompletionCache`, `build_completion_cache()` |
 | `src/inlay_hints.rs` | `HintIndex`, `HintLookup`, `build_hint_index()` |
 | `src/hover.rs` | `DocIndex`, `DocEntry`, `build_doc_index()` |
 | `src/gas.rs` | `GasIndex`, `ContractGas`, `build_gas_index()` |
+| `src/types.rs` | `PathInterner`, `NodeId`, `FileId`, `SrcLocation`, `AbsPath`, `RelPath` newtypes |
 | `src/solc.rs` | `INSTALLED_VERSIONS` static cache; `solc_ast()`, `solc_project_index()` |
