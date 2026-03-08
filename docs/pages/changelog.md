@@ -1,5 +1,3 @@
-{/* This file mirrors the root CHANGELOG.md — keep both in sync when releasing. */}
-
 # Changelog
 
 ## v0.1.30
