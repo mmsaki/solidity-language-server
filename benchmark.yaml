@@ -12,6 +12,10 @@ index_timeout: 15
 output: benchmarks/latest
 report: README.md
 
+initializeSettings:
+  projectIndex:
+    fullProjectScan: true
+
 # Exclude unimplemented methods
 exclude:
   - textDocument/typeDefinition

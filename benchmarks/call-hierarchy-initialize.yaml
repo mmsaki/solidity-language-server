@@ -7,22 +7,24 @@ line: 116
 col: 13
 output: benchmarks/call-hierarchy-initialize
 report: README.md
+response: full
 iterations: 1
 warmup: 0
+index_timeout: 60
 
 benchmarks:
   - textDocument/prepareCallHierarchy
   - callHierarchy/incomingCalls
   - callHierarchy/outgoingCalls
 
+initializeSettings:
+  projectIndex:
+    fullProjectScan: true
+
 servers:
   - mmsaki@latest
 
 methods:
-  textDocument/prepareCallHierarchy:
-    line: 116
-    col: 13
-
   callHierarchy/incomingCalls:
     line: 116
     col: 13

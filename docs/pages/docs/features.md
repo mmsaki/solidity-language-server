@@ -36,7 +36,7 @@
 - [x] `callHierarchy/incomingCalls` - Find all callers of a function/modifier/contract
 - [x] `callHierarchy/outgoingCalls` - Find all callees from a function/modifier/contract
 - [ ] `textDocument/typeDefinition` - Go to type definition
-- [ ] `textDocument/implementation` - Go to implementation
+- [x] `textDocument/implementation` - Go to implementation (interface → concrete implementations via baseFunctions)
 - [x] `textDocument/documentHighlight` - Document highlighting (read/write classification)
 - [x] `textDocument/codeAction` - Code actions (unused-import quickfix via forge-lint diagnostics)
 - [ ] `textDocument/codeLens` - Code lens

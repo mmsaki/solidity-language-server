@@ -7,47 +7,22 @@ line: 386
 col: 13
 output: benchmarks/call-hierarchy-getpool
 report: README.md
+response: full
+index_timeout: 60
 
-exclude:
-  - textDocument/diagnostic
-  - textDocument/definition
-  - textDocument/declaration
-  - textDocument/typeDefinition
-  - textDocument/implementation
-  - textDocument/hover
-  - textDocument/references
-  - textDocument/completion
-  - textDocument/signatureHelp
-  - textDocument/rename
-  - textDocument/prepareRename
-  - textDocument/documentSymbol
-  - textDocument/documentHighlight
-  - textDocument/documentLink
-  - textDocument/formatting
-  - textDocument/foldingRange
-  - textDocument/selectionRange
-  - textDocument/codeLens
-  - textDocument/inlayHint
-  - textDocument/semanticTokens/full
-  - textDocument/semanticTokens/range
-  - textDocument/semanticTokens/full/delta
-  - textDocument/documentColor
-  - textDocument/codeAction
-  - workspace/symbol
-  - workspace/willRenameFiles
-  - workspace/willCreateFiles
-  - workspace/willDeleteFiles
-  - workspace/executeCommand
+benchmarks:
+  - textDocument/prepareCallHierarchy
+  - callHierarchy/incomingCalls
+  - callHierarchy/outgoingCalls
+
+initializeSettings:
+  projectIndex:
+    fullProjectScan: true
 
 servers:
   - mmsaki@latest
 
 methods:
-  textDocument/prepareCallHierarchy:
-    line: 386
-    col: 13
-    # _getPool — internal view function, called from modifyLiquidity, swap, donate
-
   callHierarchy/incomingCalls:
     line: 386
     col: 13

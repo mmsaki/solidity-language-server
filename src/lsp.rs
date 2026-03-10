@@ -105,9 +105,13 @@ pub struct ForgeLsp {
     sub_caches: Arc<RwLock<Vec<Arc<goto::CachedBuild>>>>,
     /// Guards against multiple concurrent sub-cache loading tasks.
     sub_caches_loading: Arc<std::sync::atomic::AtomicBool>,
-    /// Project-wide path interner that assigns canonical file IDs from
-    /// file paths, ensuring all `CachedBuild` instances share the same
-    /// file-ID space regardless of which solc compilation produced them.
+    /// Global file-ID-to-path index.  Assigns canonical file IDs from
+    /// file paths so every `CachedBuild` shares a single ID space.
+    /// Each solc compilation produces its own per-build file IDs;
+    /// `CachedBuild::new()` translates them into this global space via
+    /// `build_remap()`, then rewrites all `src` strings in `NodeInfo`
+    /// to use the canonical IDs.  At query time any build's
+    /// `id_to_path_map` can resolve any canonical file ID.
     path_interner: Arc<RwLock<crate::types::PathInterner>>,
 }
 
@@ -1576,13 +1580,6 @@ fn merge_scoped_cached_build(
             .map(|p| !affected_paths.contains(p))
             .unwrap_or(true)
     });
-    existing
-        .call_sites
-        .retain(|abs_path, _| !affected_abs_paths.contains(abs_path));
-    existing
-        .container_callables
-        .retain(|abs_path, _| !affected_abs_paths.contains(abs_path));
-
     existing.nodes.extend(scoped.nodes);
     existing.path_to_abs.extend(scoped.path_to_abs);
     existing.external_refs.extend(scoped.external_refs);
@@ -1593,10 +1590,6 @@ fn merge_scoped_cached_build(
         .extend(scoped.node_id_to_source_path);
     existing.hint_index.extend(scoped.hint_index);
     existing.doc_index.extend(scoped.doc_index);
-    existing.call_sites.extend(scoped.call_sites);
-    existing
-        .container_callables
-        .extend(scoped.container_callables);
 
     Ok(affected_paths.len())
 }
@@ -2248,6 +2241,7 @@ impl LanguageServer for ForgeLsp {
                 }),
                 definition_provider: Some(OneOf::Left(true)),
                 declaration_provider: Some(DeclarationCapability::Simple(true)),
+                implementation_provider: Some(ImplementationProviderCapability::Simple(true)),
                 references_provider: Some(OneOf::Left(true)),
                 rename_provider: Some(OneOf::Right(RenameOptions {
                     prepare_provider: Some(true),
@@ -4042,6 +4036,161 @@ impl LanguageServer for ForgeLsp {
                 .log_message(MessageType::INFO, "no declaration found")
                 .await;
             Ok(None)
+        }
+    }
+
+    async fn goto_implementation(
+        &self,
+        params: request::GotoImplementationParams,
+    ) -> tower_lsp::jsonrpc::Result<Option<request::GotoImplementationResponse>> {
+        self.client
+            .log_message(MessageType::INFO, "got textDocument/implementation request")
+            .await;
+
+        let uri = params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        let file_path = match uri.to_file_path() {
+            Ok(path) => path,
+            Err(_) => {
+                self.client
+                    .log_message(MessageType::ERROR, "invalid file uri")
+                    .await;
+                return Ok(None);
+            }
+        };
+
+        let source_bytes = match self.get_source_bytes(&uri, &file_path).await {
+            Some(bytes) => bytes,
+            None => return Ok(None),
+        };
+
+        let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
+        let cached_build = match cached_build {
+            Some(cb) => cb,
+            None => return Ok(None),
+        };
+
+        let byte_position = goto::pos_to_bytes(&source_bytes, position);
+        let abs_path = uri.as_ref().strip_prefix("file://").unwrap_or(uri.as_ref());
+
+        // Resolve node ID at cursor and follow referencedDeclaration
+        let target_id = match references::byte_to_id(&cached_build.nodes, abs_path, byte_position) {
+            Some(id) => {
+                if let Some(file_nodes) = cached_build.nodes.get(abs_path) {
+                    if let Some(node_info) = file_nodes.get(&id) {
+                        node_info.referenced_declaration.unwrap_or(id)
+                    } else {
+                        id
+                    }
+                } else {
+                    id
+                }
+            }
+            None => return Ok(None),
+        };
+
+        // Collect implementations from all builds: file build, project build, sub_caches
+        let mut impl_ids: Vec<crate::types::NodeId> = Vec::new();
+
+        // Check file-level build
+        if let Some(impls) = cached_build.base_function_implementation.get(&target_id) {
+            for &impl_id in impls {
+                if !impl_ids.contains(&impl_id) {
+                    impl_ids.push(impl_id);
+                }
+            }
+        }
+
+        // Check project build
+        if let Some(project_build) = self.ensure_project_cached_build().await {
+            if let Some(impls) = project_build.base_function_implementation.get(&target_id) {
+                for &impl_id in impls {
+                    if !impl_ids.contains(&impl_id) {
+                        impl_ids.push(impl_id);
+                    }
+                }
+            }
+        }
+
+        // Check sub_caches (library builds)
+        {
+            let sub_caches = self.sub_caches.read().await;
+            for sub_build in sub_caches.iter() {
+                if let Some(impls) = sub_build.base_function_implementation.get(&target_id) {
+                    for &impl_id in impls {
+                        if !impl_ids.contains(&impl_id) {
+                            impl_ids.push(impl_id);
+                        }
+                    }
+                }
+            }
+        }
+
+        if impl_ids.is_empty() {
+            self.client
+                .log_message(MessageType::INFO, "no implementations found")
+                .await;
+            return Ok(None);
+        }
+
+        // Resolve each implementation ID to a Location, searching all builds
+        let mut locations: Vec<Location> = Vec::new();
+        for impl_id in &impl_ids {
+            // Try file build
+            if let Some(loc) = references::id_to_location(
+                &cached_build.nodes,
+                &cached_build.id_to_path_map,
+                *impl_id,
+            ) {
+                locations.push(loc);
+                continue;
+            }
+            // Try project build
+            if let Some(ref project_build) = self.ensure_project_cached_build().await {
+                if let Some(loc) = references::id_to_location(
+                    &project_build.nodes,
+                    &project_build.id_to_path_map,
+                    *impl_id,
+                ) {
+                    locations.push(loc);
+                    continue;
+                }
+            }
+            // Try sub_caches
+            let sub_caches = self.sub_caches.read().await;
+            for sub_build in sub_caches.iter() {
+                if let Some(loc) = references::id_to_location(
+                    &sub_build.nodes,
+                    &sub_build.id_to_path_map,
+                    *impl_id,
+                ) {
+                    locations.push(loc);
+                    break;
+                }
+            }
+        }
+
+        if locations.is_empty() {
+            self.client
+                .log_message(MessageType::INFO, "no implementations found")
+                .await;
+            return Ok(None);
+        }
+
+        self.client
+            .log_message(
+                MessageType::INFO,
+                format!("found {} implementation(s)", locations.len()),
+            )
+            .await;
+
+        if locations.len() == 1 {
+            Ok(Some(request::GotoImplementationResponse::Scalar(
+                locations.into_iter().next().unwrap(),
+            )))
+        } else {
+            Ok(Some(request::GotoImplementationResponse::Array(locations)))
         }
     }
 
@@ -6386,87 +6535,126 @@ impl LanguageServer for ForgeLsp {
             builds.push(sc);
         }
 
-        // Determine if target is a container across all builds.
-        let is_container = builds.iter().any(|b| {
-            b.decl_index
-                .get(&node_id)
-                .map(|d| matches!(d, crate::solc_ast::DeclNode::ContractDefinition(_)))
-                .unwrap_or_else(|| {
-                    crate::call_hierarchy::find_node_info(&b.nodes, node_id)
-                        .and_then(|info| info.node_type.as_deref())
-                        .map(|nt| nt == "ContractDefinition")
-                        .unwrap_or(false)
-                })
-        });
+        // Node IDs differ between compilations (single-file vs. project-wide).
+        // For each build, resolve the target within THAT build's node ID space,
+        // expand with base_function_implementation, then search only that build.
+        // This prevents cross-build ID collisions (e.g. ID 41897 meaning
+        // PoolManager.swap in the project build but something unrelated in a
+        // sub-cache).
+        let target_name = &item.name;
+        let target_sel = &item.selection_range;
+        let target_abs = item
+            .uri
+            .as_ref()
+            .strip_prefix("file://")
+            .unwrap_or(item.uri.as_ref());
 
-        // Collect raw call edges from ALL builds (file + project + sub-caches).
-        let mut raw_calls: Vec<(crate::types::NodeId, String)> = Vec::new();
+        // Compute the name byte offset once (stable across builds).
+        // This converts the LSP selection_range start position to a byte
+        // offset in the source file, which is the cross-build-safe anchor.
+        let target_name_offset = {
+            let source_bytes = std::fs::read(target_abs).unwrap_or_default();
+            goto::pos_to_bytes(&source_bytes, target_sel.start)
+        };
+
+        // Resolve incoming calls per-build.  The caller_id returned by
+        // `incoming_calls()` belongs to the producing build's node-ID space,
+        // so we must resolve the caller `CallHierarchyItem` using the SAME
+        // build's indexes to avoid cross-build node-ID collisions.
+        let mut resolved_incoming: Vec<(CallHierarchyItem, (u32, u32), Range)> = Vec::new();
+
         for build in &builds {
-            let calls = if is_container {
-                crate::call_hierarchy::incoming_calls_for_container(
-                    &build.call_sites,
-                    &build.container_callables,
-                    node_id,
-                )
-            } else {
-                crate::call_hierarchy::incoming_calls_for(&build.call_sites, node_id)
-            };
-            raw_calls.extend(calls);
+            // Resolve the target within this build's node ID space.
+            // verify_node_identity() checks file + byte offset + name;
+            // falls back to byte_to_id() if the numeric ID doesn't match.
+            let mut build_target_ids = crate::call_hierarchy::resolve_target_in_build(
+                build,
+                node_id,
+                target_abs,
+                target_name,
+                target_name_offset,
+            );
+
+            // Expand with interface ↔ implementation IDs within THIS build only.
+            let snapshot: Vec<crate::types::NodeId> = build_target_ids.clone();
+            for id in &snapshot {
+                if let Some(related) = build.base_function_implementation.get(id) {
+                    for &related_id in related {
+                        if !build_target_ids.contains(&related_id) {
+                            build_target_ids.push(related_id);
+                        }
+                    }
+                }
+            }
+
+            if build_target_ids.is_empty() {
+                continue;
+            }
+
+            let calls = crate::call_hierarchy::incoming_calls(&build.nodes, &build_target_ids);
+            for (caller_id, call_src) in calls {
+                let call_range = match crate::call_hierarchy::call_src_to_range(
+                    &call_src,
+                    &build.id_to_path_map,
+                ) {
+                    Some(r) => r,
+                    None => continue,
+                };
+                // Resolve caller item from THIS build only — node IDs
+                // are per-compilation and must not leak across builds.
+                let caller_item = if let Some(decl) = build.decl_index.get(&caller_id) {
+                    crate::call_hierarchy::decl_to_hierarchy_item(
+                        decl,
+                        caller_id,
+                        &build.node_id_to_source_path,
+                        &build.id_to_path_map,
+                        &build.nodes,
+                    )
+                } else if let Some(info) =
+                    crate::call_hierarchy::find_node_info(&build.nodes, caller_id)
+                {
+                    crate::call_hierarchy::node_info_to_hierarchy_item(
+                        caller_id,
+                        info,
+                        &build.id_to_path_map,
+                    )
+                } else {
+                    None
+                };
+                let Some(caller_item) = caller_item else {
+                    continue;
+                };
+                let pos = (
+                    caller_item.selection_range.start.line,
+                    caller_item.selection_range.start.character,
+                );
+                resolved_incoming.push((caller_item, pos, call_range));
+            }
         }
 
-        // Deduplicate: same (caller_id, call_src) pair from overlapping builds.
-        raw_calls.sort_by(|a, b| a.0.0.cmp(&b.0.0).then_with(|| a.1.cmp(&b.1)));
-        raw_calls.dedup();
-
-        if raw_calls.is_empty() {
+        if resolved_incoming.is_empty() {
             self.client
                 .log_message(MessageType::INFO, "no incoming calls found")
                 .await;
             return Ok(Some(vec![]));
         }
 
-        // Group by caller_id: each unique caller becomes one IncomingCall with
-        // fromRanges listing all call-site ranges.
-        // Use id_to_path_map from whichever build can resolve the src.
-        let mut grouped: HashMap<crate::types::NodeId, Vec<Range>> = HashMap::new();
-        for (caller_id, call_src) in &raw_calls {
-            let range = builds.iter().find_map(|b| {
-                crate::call_hierarchy::call_src_to_range(call_src, &b.id_to_path_map)
-            });
-            if let Some(range) = range {
-                grouped.entry(*caller_id).or_default().push(range);
+        // Group by caller source position to merge duplicates from
+        // overlapping builds (same function, different node IDs).
+        let mut grouped: HashMap<(u32, u32), (CallHierarchyItem, Vec<Range>)> = HashMap::new();
+        for (caller_item, pos, call_range) in resolved_incoming {
+            let entry = grouped
+                .entry(pos)
+                .or_insert_with(|| (caller_item, Vec::new()));
+            if !entry.1.contains(&call_range) {
+                entry.1.push(call_range);
             }
         }
 
-        let mut results = Vec::new();
-        for (caller_id, from_ranges) in grouped {
-            // Build a CallHierarchyItem for the caller — search all builds.
-            let caller_item = builds.iter().find_map(|b| {
-                if let Some(decl) = b.decl_index.get(&caller_id) {
-                    crate::call_hierarchy::decl_to_hierarchy_item(
-                        decl,
-                        caller_id,
-                        &b.node_id_to_source_path,
-                        &b.id_to_path_map,
-                        &b.nodes,
-                    )
-                } else if let Some(info) =
-                    crate::call_hierarchy::find_node_info(&b.nodes, caller_id)
-                {
-                    crate::call_hierarchy::node_info_to_hierarchy_item(
-                        caller_id,
-                        info,
-                        &b.id_to_path_map,
-                    )
-                } else {
-                    None
-                }
-            });
-
-            if let Some(from) = caller_item {
-                results.push(CallHierarchyIncomingCall { from, from_ranges });
-            }
-        }
+        let results: Vec<CallHierarchyIncomingCall> = grouped
+            .into_values()
+            .map(|(from, from_ranges)| CallHierarchyIncomingCall { from, from_ranges })
+            .collect();
 
         self.client
             .log_message(
@@ -6529,93 +6717,125 @@ impl LanguageServer for ForgeLsp {
             builds.push(sc);
         }
 
-        // Determine if target is a container across all builds.
-        let is_container = builds.iter().any(|b| {
-            b.decl_index
-                .get(&node_id)
-                .map(|d| matches!(d, crate::solc_ast::DeclNode::ContractDefinition(_)))
-                .unwrap_or_else(|| {
-                    crate::call_hierarchy::find_node_info(&b.nodes, node_id)
-                        .and_then(|info| info.node_type.as_deref())
-                        .map(|nt| nt == "ContractDefinition")
-                        .unwrap_or(false)
-                })
-        });
+        // Node IDs differ between compilations (single-file vs. project-wide).
+        // For each build, resolve the caller within THAT build's node ID space,
+        // then search only that build for outgoing calls.
+        let target_name = &item.name;
+        let target_sel = &item.selection_range;
+        let target_abs = item
+            .uri
+            .as_ref()
+            .strip_prefix("file://")
+            .unwrap_or(item.uri.as_ref());
 
-        // Collect raw call edges from ALL builds (file + project + sub-caches).
-        let mut raw_calls: Vec<(crate::types::NodeId, String)> = Vec::new();
+        // Compute the name byte offset once (stable across builds).
+        let target_name_offset = {
+            let source_bytes = std::fs::read(target_abs).unwrap_or_default();
+            goto::pos_to_bytes(&source_bytes, target_sel.start)
+        };
+
+        // Resolve outgoing calls per-build.  Both the callee_id and the
+        // call_src come from a specific build's node-ID space, so we must
+        // resolve the callee `CallHierarchyItem` using the SAME build's
+        // indexes.  Deferring resolution to a later `builds.iter().find_map()`
+        // would hit cross-build node-ID collisions (e.g. ID 5344 meaning
+        // `checkPoolInitialized` in the file build but something unrelated
+        // in the project build).
+        let mut resolved_outgoing: Vec<(CallHierarchyItem, (u32, u32), Range)> = Vec::new();
+
         for build in &builds {
-            let calls = if is_container {
-                crate::call_hierarchy::outgoing_calls_for_container(
-                    &build.call_sites,
-                    &build.container_callables,
-                    node_id,
-                )
-            } else {
-                crate::call_hierarchy::outgoing_calls_for(&build.call_sites, node_id)
-            };
-            raw_calls.extend(calls);
+            // Resolve the caller within this build's node ID space.
+            // verify_node_identity() checks file + byte offset + name;
+            // falls back to byte_to_id() if the numeric ID doesn't match.
+            let build_caller_ids = crate::call_hierarchy::resolve_target_in_build(
+                build,
+                node_id,
+                target_abs,
+                target_name,
+                target_name_offset,
+            );
+
+            for &cid in &build_caller_ids {
+                let calls = crate::call_hierarchy::outgoing_calls(&build.nodes, cid);
+                for (callee_id, call_src) in calls {
+                    let call_range = match crate::call_hierarchy::call_src_to_range(
+                        &call_src,
+                        &build.id_to_path_map,
+                    ) {
+                        Some(r) => r,
+                        None => continue,
+                    };
+                    // Resolve callee item from THIS build only — node IDs
+                    // are per-compilation and must not leak across builds.
+                    let callee_item = if let Some(decl) = build.decl_index.get(&callee_id) {
+                        crate::call_hierarchy::decl_to_hierarchy_item(
+                            decl,
+                            callee_id,
+                            &build.node_id_to_source_path,
+                            &build.id_to_path_map,
+                            &build.nodes,
+                        )
+                    } else if let Some(info) =
+                        crate::call_hierarchy::find_node_info(&build.nodes, callee_id)
+                    {
+                        crate::call_hierarchy::node_info_to_hierarchy_item(
+                            callee_id,
+                            info,
+                            &build.id_to_path_map,
+                        )
+                    } else {
+                        None
+                    };
+                    let Some(callee_item) = callee_item else {
+                        continue;
+                    };
+                    let pos = (
+                        callee_item.selection_range.start.line,
+                        callee_item.selection_range.start.character,
+                    );
+                    resolved_outgoing.push((callee_item, pos, call_range));
+                }
+            }
         }
 
-        // Deduplicate: same (callee_id, call_src) pair from overlapping builds.
-        raw_calls.sort_by(|a, b| a.0.0.cmp(&b.0.0).then_with(|| a.1.cmp(&b.1)));
-        raw_calls.dedup();
-
-        if raw_calls.is_empty() {
-            self.client
-                .log_message(MessageType::INFO, "no outgoing calls found")
-                .await;
+        if resolved_outgoing.is_empty() {
             return Ok(Some(vec![]));
         }
 
-        // Group by callee_id: each unique callee becomes one OutgoingCall with
-        // fromRanges listing all call-site ranges.
-        let mut grouped: HashMap<crate::types::NodeId, Vec<Range>> = HashMap::new();
-        for (callee_id, call_src) in &raw_calls {
-            let range = builds.iter().find_map(|b| {
-                crate::call_hierarchy::call_src_to_range(call_src, &b.id_to_path_map)
-            });
-            if let Some(range) = range {
-                grouped.entry(*callee_id).or_default().push(range);
+        // Group by callee source position to merge duplicates from
+        // overlapping builds (same function, different node IDs).
+        let mut grouped: HashMap<(u32, u32), (CallHierarchyItem, Vec<Range>)> = HashMap::new();
+        for (callee_item, pos, call_range) in resolved_outgoing {
+            let entry = grouped
+                .entry(pos)
+                .or_insert_with(|| (callee_item, Vec::new()));
+            if !entry.1.contains(&call_range) {
+                entry.1.push(call_range);
             }
         }
 
-        let mut results = Vec::new();
-        for (callee_id, from_ranges) in grouped {
-            // Build a CallHierarchyItem for the callee — search all builds.
-            let callee_item = builds.iter().find_map(|b| {
-                if let Some(decl) = b.decl_index.get(&callee_id) {
-                    crate::call_hierarchy::decl_to_hierarchy_item(
-                        decl,
-                        callee_id,
-                        &b.node_id_to_source_path,
-                        &b.id_to_path_map,
-                        &b.nodes,
-                    )
-                } else if let Some(info) =
-                    crate::call_hierarchy::find_node_info(&b.nodes, callee_id)
-                {
-                    crate::call_hierarchy::node_info_to_hierarchy_item(
-                        callee_id,
-                        info,
-                        &b.id_to_path_map,
-                    )
-                } else {
-                    None
-                }
-            });
+        let mut results: Vec<CallHierarchyOutgoingCall> = grouped
+            .into_values()
+            .map(|(to, from_ranges)| CallHierarchyOutgoingCall { to, from_ranges })
+            .collect();
 
-            if let Some(to) = callee_item {
-                results.push(CallHierarchyOutgoingCall { to, from_ranges });
+        // Sort by the earliest call-site position so results follow
+        // the function body order (first call, second call, ...).
+        results.sort_by(|a, b| {
+            let a_first = a.from_ranges.first();
+            let b_first = b.from_ranges.first();
+            match (a_first, b_first) {
+                (Some(a_r), Some(b_r)) => a_r
+                    .start
+                    .line
+                    .cmp(&b_r.start.line)
+                    .then_with(|| a_r.start.character.cmp(&b_r.start.character)),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => std::cmp::Ordering::Equal,
             }
-        }
+        });
 
-        self.client
-            .log_message(
-                MessageType::INFO,
-                format!("found {} outgoing callees", results.len()),
-            )
-            .await;
         Ok(Some(results))
     }
 }

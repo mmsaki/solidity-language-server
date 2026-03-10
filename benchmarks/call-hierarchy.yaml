@@ -7,51 +7,27 @@ line: 186
 col: 13
 output: benchmarks/call-hierarchy
 report: README.md
+response: full
+index_timeout: 120
 
-exclude:
-  - textDocument/diagnostic
-  - textDocument/definition
-  - textDocument/declaration
-  - textDocument/typeDefinition
-  - textDocument/implementation
-  - textDocument/hover
-  - textDocument/references
-  - textDocument/completion
-  - textDocument/signatureHelp
-  - textDocument/rename
-  - textDocument/prepareRename
-  - textDocument/documentSymbol
-  - textDocument/documentHighlight
-  - textDocument/documentLink
-  - textDocument/formatting
-  - textDocument/foldingRange
-  - textDocument/selectionRange
-  - textDocument/codeLens
-  - textDocument/inlayHint
-  - textDocument/semanticTokens/full
-  - textDocument/semanticTokens/range
-  - textDocument/semanticTokens/full/delta
-  - textDocument/documentColor
-  - textDocument/codeAction
-  - workspace/symbol
-  - workspace/willRenameFiles
-  - workspace/willCreateFiles
-  - workspace/willDeleteFiles
-  - workspace/executeCommand
+initializeSettings:
+  projectIndex:
+    fullProjectScan: true
+
+benchmarks:
+  - textDocument/prepareCallHierarchy
+  - callHierarchy/incomingCalls
+  - callHierarchy/outgoingCalls
 
 servers:
   - mmsaki@latest
 
 methods:
-  textDocument/prepareCallHierarchy:
-    line: 186
-    col: 13
-    # swap — external function in PoolManager, many callers & callees
-
   callHierarchy/incomingCalls:
     line: 186
     col: 13
-    # incoming callers of swap
+    # incoming callers of swap — requires full project index (test files)
+    waitForProgressToken: "solidity/projectIndexFull"
 
   callHierarchy/outgoingCalls:
     line: 186

@@ -24,6 +24,14 @@ pub struct NodeInfo {
     /// on the `State` struct points to the `Pool` library.
     #[serde(default)]
     pub scope: Option<NodeId>,
+    /// The AST `baseFunctions` field — node IDs of interface/parent
+    /// function declarations that this function implements or overrides.
+    /// Present on `FunctionDefinition`, `ModifierDefinition`, and
+    /// `VariableDeclaration` nodes. Used to build the bidirectional
+    /// `base_function_implementation` index for interface ↔ implementation
+    /// equivalence in references and call hierarchy.
+    #[serde(default)]
+    pub base_functions: Vec<NodeId>,
 }
 
 /// All AST child keys to traverse (Solidity + Yul).
@@ -136,12 +144,17 @@ pub struct CachedBuild {
     /// `IdentifierPath` nodes to their declaration, then reading the declaration's
     /// `scope` field to find the container.
     pub qualifier_refs: HashMap<NodeId, Vec<NodeId>>,
-    /// Pre-built call hierarchy index: per-file list of call-site edges.
-    /// Built from the raw AST during `new()`. Empty in warm-loaded builds.
-    pub call_sites: crate::call_hierarchy::CallSiteIndex,
-    /// Per-file container-to-callables map (contract → [function/modifier IDs]).
-    /// Built from the raw AST during `new()`. Empty in warm-loaded builds.
-    pub container_callables: crate::call_hierarchy::ContainerCallables,
+    /// Bidirectional implementation index built from `baseFunctions`/`baseModifiers`.
+    ///
+    /// Maps each declaration ID to the set of IDs that are semantically
+    /// equivalent (interface ↔ implementation). For example, if
+    /// `PoolManager.swap` (616) has `baseFunctions: [2036]` (IPoolManager.swap),
+    /// this will contain `616 → [2036]` and `2036 → [616]`.
+    ///
+    /// Used by `textDocument/implementation`, `textDocument/references`, and
+    /// `callHierarchy/incomingCalls` to unify interface and implementation IDs.
+    /// Empty in warm-loaded builds (`from_reference_index`).
+    pub base_function_implementation: HashMap<NodeId, Vec<NodeId>>,
 }
 
 impl CachedBuild {
@@ -266,17 +279,10 @@ impl CachedBuild {
         // container (contract/library/interface). Map container_id → [node_id].
         let qualifier_refs = build_qualifier_refs(&nodes);
 
-        // Build call hierarchy index from the raw sources AST.
-        let (mut call_sites, container_callables) = if let Some(sources) = ast.get("sources") {
-            crate::call_hierarchy::build_call_hierarchy_index(sources)
-        } else {
-            (HashMap::new(), HashMap::new())
-        };
-
-        // Canonicalize call_src file IDs to match id_to_path_map.
-        if let Some(ref remap) = canonical_remap {
-            crate::call_hierarchy::canonicalize_call_sites(&mut call_sites, remap);
-        }
+        // Build the bidirectional implementation index from base_functions on NodeInfo.
+        // Works uniformly on both fresh and warm-loaded builds since NodeInfo
+        // now persists the base_functions field.
+        let base_function_implementation = build_base_function_implementation(&nodes);
 
         // The raw AST JSON is fully consumed — all data has been extracted
         // into the pre-built indexes above. `ast` is dropped here.
@@ -294,8 +300,7 @@ impl CachedBuild {
             build_version,
             content_hash: 0,
             qualifier_refs,
-            call_sites,
-            container_callables,
+            base_function_implementation,
         }
     }
 
@@ -334,16 +339,18 @@ impl CachedBuild {
                 }
             }
         }
-        // Merge call hierarchy indexes for files not already covered.
-        for (abs_path, sites) in &other.call_sites {
-            self.call_sites
-                .entry(abs_path.clone())
-                .or_insert_with(|| sites.clone());
-        }
-        for (abs_path, containers) in &other.container_callables {
-            self.container_callables
-                .entry(abs_path.clone())
-                .or_insert_with(|| containers.clone());
+        // Merge base_function_implementation: add any equivalences from `other`
+        // that aren't already present in `self`.
+        for (node_id, other_impls) in &other.base_function_implementation {
+            let entry = self
+                .base_function_implementation
+                .entry(*node_id)
+                .or_default();
+            for &impl_id in other_impls {
+                if !entry.contains(&impl_id) {
+                    entry.push(impl_id);
+                }
+            }
         }
     }
 
@@ -380,6 +387,10 @@ impl CachedBuild {
         // Build qualifier refs from the warm-loaded nodes.
         let qualifier_refs = build_qualifier_refs(&nodes);
 
+        // Build base_function_implementation from the warm-loaded nodes.
+        // NodeInfo now persists `base_functions`, so this works on warm loads.
+        let base_function_implementation = build_base_function_implementation(&nodes);
+
         Self {
             nodes,
             path_to_abs,
@@ -393,8 +404,7 @@ impl CachedBuild {
             build_version,
             content_hash: 0,
             qualifier_refs,
-            call_sites: HashMap::new(),
-            container_callables: HashMap::new(),
+            base_function_implementation,
         }
     }
 }
@@ -439,6 +449,45 @@ fn build_qualifier_refs(
     }
 
     qualifier_refs
+}
+
+/// Build the bidirectional `base_function_implementation` index from nodes.
+///
+/// Scans all nodes for entries with non-empty `base_functions` (these are
+/// implementing/overriding function declarations). Creates bidirectional
+/// mappings: `impl_id → [base_ids]` (forward) and `base_id → [impl_id]`
+/// (reverse), so lookups work in both directions.
+///
+/// This function works on both fresh and warm-loaded builds because
+/// `base_functions` is persisted as part of `NodeInfo`.
+fn build_base_function_implementation(
+    nodes: &HashMap<AbsPath, HashMap<NodeId, NodeInfo>>,
+) -> HashMap<NodeId, Vec<NodeId>> {
+    let mut index: HashMap<NodeId, Vec<NodeId>> = HashMap::new();
+
+    for file_nodes in nodes.values() {
+        for (id, info) in file_nodes {
+            if info.base_functions.is_empty() {
+                continue;
+            }
+            // Forward: impl_id → base_ids
+            for &base_id in &info.base_functions {
+                index.entry(*id).or_default().push(base_id);
+            }
+            // Reverse: base_id → impl_id
+            for &base_id in &info.base_functions {
+                index.entry(base_id).or_default().push(*id);
+            }
+        }
+    }
+
+    // Deduplicate values.
+    for ids in index.values_mut() {
+        ids.sort_unstable();
+        ids.dedup();
+    }
+
+    index
 }
 
 /// Return type of [`cache_ids`]: `(nodes, path_to_abs, external_refs)`.
@@ -538,6 +587,7 @@ pub fn cache_ids(sources: &Value) -> CachedIds {
                                 .and_then(|v| v.as_str())
                                 .map(|s| s.to_string()),
                             scope: ast.get("scope").and_then(|v| v.as_i64()).map(NodeId),
+                            base_functions: vec![],
                         },
                     );
                 }
@@ -614,6 +664,13 @@ pub fn cache_ids(sources: &Value) -> CachedIds {
                                 .and_then(|v| v.as_str())
                                 .map(|s| s.to_string()),
                             scope: tree.get("scope").and_then(|v| v.as_i64()).map(NodeId),
+                            base_functions: tree
+                                .get("baseFunctions")
+                                .and_then(|v| v.as_array())
+                                .map(|arr| {
+                                    arr.iter().filter_map(|v| v.as_i64().map(NodeId)).collect()
+                                })
+                                .unwrap_or_default(),
                         };
 
                         nodes.get_mut(&abs_path).unwrap().insert(id, node_info);

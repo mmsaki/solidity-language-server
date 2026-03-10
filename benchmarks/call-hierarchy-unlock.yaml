@@ -1,0 +1,58 @@
+# Call hierarchy benchmark — PoolManager.sol unlock function
+#   lsp-bench -c benchmarks/call-hierarchy-unlock.yaml
+#
+# Note: incoming calls for `unlock` require the project-wide index since
+# all callers are in test files (PoolSwapTest, ActionsRouter, etc.).
+# textDocument/definition runs first and triggers ensure_project_cached_build()
+# which warm-loads the project index. Without this, incoming calls returns empty.
+
+project: v4-core
+file: src/PoolManager.sol
+line: 103
+col: 13
+output: benchmarks/call-hierarchy-unlock
+report: README.md
+iterations: 1
+warmup: 0
+timeout: 120
+index_timeout: 120
+response: full
+
+benchmarks:
+  - textDocument/prepareCallHierarchy
+  - callHierarchy/incomingCalls
+  - callHierarchy/outgoingCalls
+
+
+initializeSettings:
+  projectIndex:
+    fullProjectScan: true
+
+servers:
+  - mmsaki@latest
+
+methods:
+  textDocument/definition:
+    line: 103
+    col: 13
+    waitForProgressToken: "solidity/projectIndexFull"
+
+  textDocument/references:
+    line: 103
+    col: 13
+    waitForProgressToken: "solidity/projectIndexFull"
+
+  textDocument/prepareCallHierarchy:
+    line: 103
+    col: 13
+    waitForProgressToken: "solidity/projectIndexFull"
+
+  callHierarchy/incomingCalls:
+    line: 103
+    col: 13
+    waitForProgressToken: "solidity/projectIndexFull"
+
+  callHierarchy/outgoingCalls:
+    line: 103
+    col: 13
+    waitForProgressToken: "solidity/projectIndexFull"
