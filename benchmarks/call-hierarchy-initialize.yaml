@@ -1,0 +1,32 @@
+# Call hierarchy benchmark — PoolManager.sol initialize function
+#   lsp-bench -c benchmarks/call-hierarchy-initialize.yaml
+
+project: v4-core
+file: src/PoolManager.sol
+line: 116
+col: 13
+output: benchmarks/call-hierarchy-initialize
+report: README.md
+iterations: 1
+warmup: 0
+
+benchmarks:
+  - textDocument/prepareCallHierarchy
+  - callHierarchy/incomingCalls
+  - callHierarchy/outgoingCalls
+
+servers:
+  - mmsaki@latest
+
+methods:
+  textDocument/prepareCallHierarchy:
+    line: 116
+    col: 13
+
+  callHierarchy/incomingCalls:
+    line: 116
+    col: 13
+
+  callHierarchy/outgoingCalls:
+    line: 116
+    col: 13

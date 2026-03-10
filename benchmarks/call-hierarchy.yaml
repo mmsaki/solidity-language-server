@@ -1,0 +1,59 @@
+# Call hierarchy benchmark — PoolManager.sol swap function
+#   lsp-bench -c benchmarks/call-hierarchy.yaml
+
+project: v4-core
+file: src/PoolManager.sol
+line: 186
+col: 13
+output: benchmarks/call-hierarchy
+report: README.md
+
+exclude:
+  - textDocument/diagnostic
+  - textDocument/definition
+  - textDocument/declaration
+  - textDocument/typeDefinition
+  - textDocument/implementation
+  - textDocument/hover
+  - textDocument/references
+  - textDocument/completion
+  - textDocument/signatureHelp
+  - textDocument/rename
+  - textDocument/prepareRename
+  - textDocument/documentSymbol
+  - textDocument/documentHighlight
+  - textDocument/documentLink
+  - textDocument/formatting
+  - textDocument/foldingRange
+  - textDocument/selectionRange
+  - textDocument/codeLens
+  - textDocument/inlayHint
+  - textDocument/semanticTokens/full
+  - textDocument/semanticTokens/range
+  - textDocument/semanticTokens/full/delta
+  - textDocument/documentColor
+  - textDocument/codeAction
+  - workspace/symbol
+  - workspace/willRenameFiles
+  - workspace/willCreateFiles
+  - workspace/willDeleteFiles
+  - workspace/executeCommand
+
+servers:
+  - mmsaki@latest
+
+methods:
+  textDocument/prepareCallHierarchy:
+    line: 186
+    col: 13
+    # swap — external function in PoolManager, many callers & callees
+
+  callHierarchy/incomingCalls:
+    line: 186
+    col: 13
+    # incoming callers of swap
+
+  callHierarchy/outgoingCalls:
+    line: 186
+    col: 13
+    # outgoing calls from swap (e.g., _checkLocker, Pool.swap, etc.)

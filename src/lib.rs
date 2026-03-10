@@ -1,4 +1,5 @@
 pub mod build;
+pub mod call_hierarchy;
 pub mod code_actions;
 pub mod completion;
 pub mod config;

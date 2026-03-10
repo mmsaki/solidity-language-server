@@ -136,6 +136,12 @@ pub struct CachedBuild {
     /// `IdentifierPath` nodes to their declaration, then reading the declaration's
     /// `scope` field to find the container.
     pub qualifier_refs: HashMap<NodeId, Vec<NodeId>>,
+    /// Pre-built call hierarchy index: per-file list of call-site edges.
+    /// Built from the raw AST during `new()`. Empty in warm-loaded builds.
+    pub call_sites: crate::call_hierarchy::CallSiteIndex,
+    /// Per-file container-to-callables map (contract → [function/modifier IDs]).
+    /// Built from the raw AST during `new()`. Empty in warm-loaded builds.
+    pub container_callables: crate::call_hierarchy::ContainerCallables,
 }
 
 impl CachedBuild {
@@ -260,6 +266,18 @@ impl CachedBuild {
         // container (contract/library/interface). Map container_id → [node_id].
         let qualifier_refs = build_qualifier_refs(&nodes);
 
+        // Build call hierarchy index from the raw sources AST.
+        let (mut call_sites, container_callables) = if let Some(sources) = ast.get("sources") {
+            crate::call_hierarchy::build_call_hierarchy_index(sources)
+        } else {
+            (HashMap::new(), HashMap::new())
+        };
+
+        // Canonicalize call_src file IDs to match id_to_path_map.
+        if let Some(ref remap) = canonical_remap {
+            crate::call_hierarchy::canonicalize_call_sites(&mut call_sites, remap);
+        }
+
         // The raw AST JSON is fully consumed — all data has been extracted
         // into the pre-built indexes above. `ast` is dropped here.
 
@@ -276,6 +294,8 @@ impl CachedBuild {
             build_version,
             content_hash: 0,
             qualifier_refs,
+            call_sites,
+            container_callables,
         }
     }
 
@@ -313,6 +333,17 @@ impl CachedBuild {
                     entry.push(qnode_id);
                 }
             }
+        }
+        // Merge call hierarchy indexes for files not already covered.
+        for (abs_path, sites) in &other.call_sites {
+            self.call_sites
+                .entry(abs_path.clone())
+                .or_insert_with(|| sites.clone());
+        }
+        for (abs_path, containers) in &other.container_callables {
+            self.container_callables
+                .entry(abs_path.clone())
+                .or_insert_with(|| containers.clone());
         }
     }
 
@@ -362,6 +393,8 @@ impl CachedBuild {
             build_version,
             content_hash: 0,
             qualifier_refs,
+            call_sites: HashMap::new(),
+            container_callables: HashMap::new(),
         }
     }
 }
@@ -418,7 +451,7 @@ type CachedIds = (
 /// Rewrite the file-ID component of a `"offset:length:fileId"` string using
 /// a canonical remap table.  Returns the original string unchanged if the
 /// file ID is not in the remap or if the format is invalid.
-fn remap_src_canonical(src: &str, remap: &HashMap<u64, FileId>) -> String {
+pub fn remap_src_canonical(src: &str, remap: &HashMap<u64, FileId>) -> String {
     let Some(last_colon) = src.rfind(':') else {
         return src.to_owned();
     };

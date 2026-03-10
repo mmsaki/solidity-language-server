@@ -12,6 +12,7 @@
 - **Signature Help** — parameter info on function calls, event emits, and mapping access
 - **Inlay Hints** — parameter names at call sites
 - **File Operations** — `workspace/willCreateFiles` scaffolding + `workspace/willRenameFiles`/`workspace/willDeleteFiles` import edits + `workspace/didCreateFiles`/`workspace/didRenameFiles`/`workspace/didDeleteFiles` cache migration/re-index (`fileOperations.templateOnCreate`, `fileOperations.updateImportsOnRename`, `fileOperations.updateImportsOnDelete`)
+- **Call Hierarchy** — `textDocument/prepareCallHierarchy`, `callHierarchy/incomingCalls`, `callHierarchy/outgoingCalls` — navigate call graphs across contracts and libraries; tracks function calls, modifier invocations, and base constructor specifiers with narrow call-site ranges
 - **Code Actions** — `textDocument/codeAction` quickfix engine; handles `unused-import` forge-lint diagnostic with "Remove unused import" action; JSON-driven rule table in `data/error_codes.json`
 - **Execute Commands** — `solidity.clearCache` (wipe on-disk cache + in-memory AST, force clean rebuild) · `solidity.reindex` (evict in-memory AST, trigger background reindex from warm disk cache)
 - **Save Performance** — content hash check skips redundant solc rebuilds when file is unchanged; `collect_import_pragmas` runs on blocking thread pool to avoid stalling the async runtime on large projects
@@ -52,6 +53,9 @@ See [FEATURES.md](FEATURES.md) for the full LSP feature set and roadmap.
 - [x] `textDocument/completion` - Code completion
 - [x] `textDocument/hover` - Hover information
 - [x] `textDocument/signatureHelp` - Function signature help (functions, events, mappings)
+- [x] `textDocument/prepareCallHierarchy` - Prepare call hierarchy (resolve callable at cursor)
+- [x] `callHierarchy/incomingCalls` - Find all callers of a function/modifier/contract
+- [x] `callHierarchy/outgoingCalls` - Find all callees from a function/modifier/contract
 - [ ] `textDocument/typeDefinition` - Go to type definition
 - [ ] `textDocument/implementation` - Go to implementation
 - [x] `textDocument/documentHighlight` - Document highlighting (read/write classification)

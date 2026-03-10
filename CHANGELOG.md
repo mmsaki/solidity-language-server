@@ -17,6 +17,7 @@
 - AST-only sub-cache compilation — sub-cache builds request only AST output (no codegen settings, no contract outputs), letting solc skip codegen entirely (#190)
 - Semaphore-based concurrency cap for parallel sub-cache builds — limits parallelism to `available_parallelism()` to avoid thrashing on smaller machines (#190)
 - `Display` impl for `PragmaConstraint` — log messages now show `>=0.8.0 <0.9.0` instead of debug-format dumps (#190)
+- `textDocument/prepareCallHierarchy` + `callHierarchy/incomingCalls` + `callHierarchy/outgoingCalls` — navigate call graphs across contracts and libraries; tracks function calls (`FunctionCall` with `kind == "functionCall"`), modifier invocations, and base constructor specifiers; container aggregation (incoming/outgoing on a contract = union of all its callables); narrow `fromRanges` using `expression.src` for direct calls and `memberLocation` for member-access calls; call hierarchy index built at cache time alongside existing goto/references indexes (#191)
 
 ### Performance
 
