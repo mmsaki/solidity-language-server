@@ -1,0 +1,34 @@
+# Call hierarchy benchmark — PoolManager.sol _getPool function (incoming callers)
+#   lsp-bench -c benchmarks/call-hierarchy-getpool.yaml
+
+project: v4-core
+file: src/PoolManager.sol
+line: 386
+col: 13
+output: benchmarks/call-hierarchy-getpool
+report: README.md
+response: full
+index_timeout: 60
+
+benchmarks:
+  - textDocument/prepareCallHierarchy
+  - callHierarchy/incomingCalls
+  - callHierarchy/outgoingCalls
+
+initializeSettings:
+  projectIndex:
+    fullProjectScan: true
+
+servers:
+  - mmsaki@latest
+
+methods:
+  callHierarchy/incomingCalls:
+    line: 386
+    col: 13
+    # incoming callers: modifyLiquidity, swap, donate
+
+  callHierarchy/outgoingCalls:
+    line: 386
+    col: 13
+    # outgoing calls from _getPool (likely just the mapping access)

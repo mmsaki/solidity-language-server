@@ -1,7 +1,7 @@
 ## Features
 
 - **Go to Definition** / **Go to Declaration** — jump to any symbol across files, including qualifier segments in qualified type paths (e.g., `Pool` in `Pool.State` navigates to the contract/library)
-- **Find References** — all usages of a symbol across the project, including qualified type path references (e.g., `Pool` in `Pool.State`)
+- **Find References** — all usages of a symbol across the project, including qualified type path references (e.g., `Pool` in `Pool.State`); interface/implementation equivalence merges references across interface declarations and their implementing functions
 - **Rename** — project-wide symbol rename with prepare support, including qualifier usages in qualified type paths
 - **Hover** — signatures, NatSpec docs, function/error/event selectors, `@inheritdoc` resolution, AST node ID for debugging
 - **Completions** — scope-aware with two modes (fast cache vs full recomputation)
@@ -12,6 +12,8 @@
 - **Signature Help** — parameter info on function calls, event emits, and mapping access
 - **Inlay Hints** — parameter names at call sites
 - **File Operations** — `workspace/willCreateFiles` scaffolding + `workspace/willRenameFiles`/`workspace/willDeleteFiles` import edits + `workspace/didCreateFiles`/`workspace/didRenameFiles`/`workspace/didDeleteFiles` cache migration/re-index (`fileOperations.templateOnCreate`, `fileOperations.updateImportsOnRename`, `fileOperations.updateImportsOnDelete`)
+- **Go to Implementation** — jump from interface/abstract declarations to their concrete implementations; supports functions, modifiers, and state variables with `baseFunctions`/`baseModifiers`
+- **Call Hierarchy** — `textDocument/prepareCallHierarchy`, `callHierarchy/incomingCalls`, `callHierarchy/outgoingCalls` — navigate call graphs across contracts and libraries; tracks function calls, modifier invocations, and base constructor specifiers with narrow call-site ranges; incoming calls include callers via interface-typed references
 - **Code Actions** — `textDocument/codeAction` quickfix engine; handles `unused-import` forge-lint diagnostic with "Remove unused import" action; JSON-driven rule table in `data/error_codes.json`
 - **Execute Commands** — `solidity.clearCache` (wipe on-disk cache + in-memory AST, force clean rebuild) · `solidity.reindex` (evict in-memory AST, trigger background reindex from warm disk cache)
 - **Save Performance** — content hash check skips redundant solc rebuilds when file is unchanged; `collect_import_pragmas` runs on blocking thread pool to avoid stalling the async runtime on large projects
@@ -52,8 +54,11 @@ See [FEATURES.md](FEATURES.md) for the full LSP feature set and roadmap.
 - [x] `textDocument/completion` - Code completion
 - [x] `textDocument/hover` - Hover information
 - [x] `textDocument/signatureHelp` - Function signature help (functions, events, mappings)
+- [x] `textDocument/prepareCallHierarchy` - Prepare call hierarchy (resolve callable at cursor)
+- [x] `callHierarchy/incomingCalls` - Find all callers of a function/modifier/contract
+- [x] `callHierarchy/outgoingCalls` - Find all callees from a function/modifier/contract
 - [ ] `textDocument/typeDefinition` - Go to type definition
-- [ ] `textDocument/implementation` - Go to implementation
+- [x] `textDocument/implementation` - Go to implementation (interface → concrete implementations via baseFunctions)
 - [x] `textDocument/documentHighlight` - Document highlighting (read/write classification)
 - [x] `textDocument/codeAction` - Code actions (unused-import quickfix via forge-lint diagnostics)
 - [ ] `textDocument/codeLens` - Code lens

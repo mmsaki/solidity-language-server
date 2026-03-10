@@ -510,6 +510,17 @@ pub fn goto_references_for_target(
         None => return vec![],
     };
 
+    // Expand target to include equivalent declarations (interface ↔ implementation).
+    // E.g., if target is PoolManager.swap (616), also search for references to
+    // IPoolManager.swap (2036), and vice versa.
+    let mut target_ids: HashSet<NodeId> = HashSet::new();
+    target_ids.insert(target_node_id);
+    if let Some(related_ids) = build.base_function_implementation.get(&target_node_id) {
+        for &related_id in related_ids {
+            target_ids.insert(related_id);
+        }
+    }
+
     // Check if the target is a container (contract/library/interface) that
     // has qualifier references. When the caller resolved a qualifier cursor
     // (e.g., `Pool` in `Pool.State`), the def_byte_offset points to the
@@ -531,13 +542,19 @@ pub fn goto_references_for_target(
     };
 
     // Collect the definition node + all nodes whose referenced_declaration matches
+    // any of the equivalent target IDs.
     let mut results: HashSet<NodeId> = HashSet::new();
     if include_declaration {
-        results.insert(target_node_id);
+        for &tid in &target_ids {
+            results.insert(tid);
+        }
     }
     for file_nodes in build.nodes.values() {
         for (id, node_info) in file_nodes {
-            if node_info.referenced_declaration == Some(target_node_id) {
+            if node_info
+                .referenced_declaration
+                .is_some_and(|rd| target_ids.contains(&rd))
+            {
                 results.insert(*id);
             }
         }
@@ -578,7 +595,7 @@ pub fn goto_references_for_target(
 
     // Yul external reference use sites
     for (src_str, decl_id) in &build.external_refs {
-        if *decl_id == target_node_id {
+        if target_ids.contains(decl_id) {
             // Skip external refs in the excluded file.
             if let Some(excl) = exclude_abs_path {
                 if let Some(src_loc) = SourceLoc::parse(src_str.as_str()) {

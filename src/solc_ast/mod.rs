@@ -126,6 +126,19 @@ impl DeclNode {
         }
     }
 
+    /// Base functions/modifiers this declaration overrides.
+    ///
+    /// Returns IDs of interface/abstract declarations that this function or
+    /// modifier implements or overrides.
+    pub fn base_functions(&self) -> Option<&[NodeID]> {
+        match self {
+            Self::FunctionDefinition(n) => n.base_functions.as_deref(),
+            Self::ModifierDefinition(n) => n.base_modifiers.as_deref(),
+            Self::VariableDeclaration(n) => n.base_functions.as_deref(),
+            _ => None,
+        }
+    }
+
     /// Documentation attached to the declaration.
     pub fn documentation(&self) -> Option<&Documentation> {
         match self {
@@ -518,8 +531,6 @@ const STRIP_FIELDS: &[&str] = &[
     "modifiers",
     "value",
     "overrides",
-    "baseFunctions",
-    "baseModifiers",
     "nameLocation",
     "implemented",
     "isVirtual",
@@ -541,8 +552,6 @@ const STRIP_CHILD_FIELDS: &[&str] = &[
     "modifiers",
     "value",
     "overrides",
-    "baseFunctions",
-    "baseModifiers",
     "nameLocation",
     "implemented",
     "isVirtual",
@@ -1093,6 +1102,154 @@ mod tests {
             "Declarations without source path ({}):\n{}",
             missing.len(),
             missing.join("\n"),
+        );
+    }
+
+    /// Verify that `baseFunctions` survives stripping and is populated on DeclNode.
+    #[test]
+    fn base_functions_populated_on_decl_nodes() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("poolmanager.json");
+        let json = std::fs::read_to_string(&path).unwrap();
+        let raw: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        let build = crate::goto::CachedBuild::new(raw, 0, None);
+
+        // PoolManager.swap (616) should have baseFunctions: [2036] (IPoolManager.swap)
+        let swap_decl = build
+            .decl_index
+            .get(&crate::types::NodeId(616))
+            .expect("PoolManager.swap (id 616) should exist in decl_index");
+        assert_eq!(swap_decl.name(), "swap");
+        let base = swap_decl
+            .base_functions()
+            .expect("swap should have baseFunctions");
+        assert_eq!(base, &[2036], "swap baseFunctions should be [2036]");
+
+        // IPoolManager.swap (2036) should have no baseFunctions (it's the interface root)
+        let iswap_decl = build
+            .decl_index
+            .get(&crate::types::NodeId(2036))
+            .expect("IPoolManager.swap (id 2036) should exist in decl_index");
+        assert_eq!(iswap_decl.name(), "swap");
+        assert!(
+            iswap_decl.base_functions().is_none()
+                || iswap_decl.base_functions().unwrap().is_empty(),
+            "IPoolManager.swap should have no baseFunctions"
+        );
+
+        // Count total functions with baseFunctions set
+        let with_base: Vec<_> = build
+            .decl_index
+            .values()
+            .filter(|d| d.base_functions().is_some_and(|b| !b.is_empty()))
+            .collect();
+        assert_eq!(
+            with_base.len(),
+            32,
+            "expected 32 declarations with baseFunctions/baseModifiers in poolmanager.json"
+        );
+    }
+
+    /// Verify that `base_function_implementation` bidirectional index is populated.
+    #[test]
+    fn base_function_implementation_index_populated() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("poolmanager.json");
+        let json = std::fs::read_to_string(&path).unwrap();
+        let raw: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        let build = crate::goto::CachedBuild::new(raw, 0, None);
+
+        // Forward: PoolManager.swap (616) → [IPoolManager.swap (2036)]
+        let forward = build
+            .base_function_implementation
+            .get(&crate::types::NodeId(616))
+            .expect("616 should be in base_function_implementation");
+        assert!(
+            forward.contains(&crate::types::NodeId(2036)),
+            "616 → 2036 mapping should exist"
+        );
+
+        // Reverse: IPoolManager.swap (2036) → [PoolManager.swap (616)]
+        let reverse = build
+            .base_function_implementation
+            .get(&crate::types::NodeId(2036))
+            .expect("2036 should be in base_function_implementation");
+        assert!(
+            reverse.contains(&crate::types::NodeId(616)),
+            "2036 → 616 mapping should exist"
+        );
+
+        // The index should not be empty
+        assert!(
+            !build.base_function_implementation.is_empty(),
+            "base_function_implementation should be populated"
+        );
+
+        // PoolManager.initialize (330) → [IPoolManager.initialize (2003)]
+        let init_forward = build
+            .base_function_implementation
+            .get(&crate::types::NodeId(330))
+            .expect("330 should be in base_function_implementation");
+        assert!(
+            init_forward.contains(&crate::types::NodeId(2003)),
+            "330 → 2003 mapping should exist"
+        );
+    }
+
+    /// Verify that `base_function_implementation` is also populated on warm-loaded builds
+    /// (via `from_reference_index`), since `NodeInfo` now persists `base_functions`.
+    #[test]
+    fn base_function_implementation_survives_warm_load() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("poolmanager.json");
+        let json = std::fs::read_to_string(&path).unwrap();
+        let raw: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        // Step 1: Build fresh — this populates base_functions on NodeInfo.
+        let fresh_build = crate::goto::CachedBuild::new(raw, 0, None);
+
+        // Step 2: Simulate warm load by extracting nodes and passing to from_reference_index.
+        let warm_build = crate::goto::CachedBuild::from_reference_index(
+            fresh_build.nodes.clone(),
+            fresh_build.path_to_abs.clone(),
+            fresh_build.external_refs.clone(),
+            fresh_build.id_to_path_map.clone(),
+            0,
+            None,
+        );
+
+        // The warm-loaded build should have the same base_function_implementation as fresh.
+        assert!(
+            !warm_build.base_function_implementation.is_empty(),
+            "base_function_implementation should be populated on warm-loaded build"
+        );
+
+        // Forward: PoolManager.swap (616) → [IPoolManager.swap (2036)]
+        let forward = warm_build
+            .base_function_implementation
+            .get(&crate::types::NodeId(616))
+            .expect("616 should be in warm-loaded base_function_implementation");
+        assert!(
+            forward.contains(&crate::types::NodeId(2036)),
+            "616 → 2036 mapping should exist in warm-loaded build"
+        );
+
+        // Reverse: IPoolManager.swap (2036) → [PoolManager.swap (616)]
+        let reverse = warm_build
+            .base_function_implementation
+            .get(&crate::types::NodeId(2036))
+            .expect("2036 should be in warm-loaded base_function_implementation");
+        assert!(
+            reverse.contains(&crate::types::NodeId(616)),
+            "2036 → 616 mapping should exist in warm-loaded build"
+        );
+
+        // PoolManager.unlock (183) → [IPoolManager.unlock]
+        let unlock_forward = warm_build
+            .base_function_implementation
+            .get(&crate::types::NodeId(183));
+        assert!(
+            unlock_forward.is_some(),
+            "unlock (183) should be in warm-loaded base_function_implementation"
         );
     }
 }

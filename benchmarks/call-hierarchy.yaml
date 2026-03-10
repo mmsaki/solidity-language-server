@@ -1,0 +1,35 @@
+# Call hierarchy benchmark — PoolManager.sol swap function
+#   lsp-bench -c benchmarks/call-hierarchy.yaml
+
+project: v4-core
+file: src/PoolManager.sol
+line: 186
+col: 13
+output: benchmarks/call-hierarchy
+report: README.md
+response: full
+index_timeout: 120
+
+initializeSettings:
+  projectIndex:
+    fullProjectScan: true
+
+benchmarks:
+  - textDocument/prepareCallHierarchy
+  - callHierarchy/incomingCalls
+  - callHierarchy/outgoingCalls
+
+servers:
+  - mmsaki@latest
+
+methods:
+  callHierarchy/incomingCalls:
+    line: 186
+    col: 13
+    # incoming callers of swap — requires full project index (test files)
+    waitForProgressToken: "solidity/projectIndexFull"
+
+  callHierarchy/outgoingCalls:
+    line: 186
+    col: 13
+    # outgoing calls from swap (e.g., _checkLocker, Pool.swap, etc.)
