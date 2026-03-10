@@ -44,9 +44,9 @@ This writes all modified buffers so tools reading from disk (for example `forge`
 
 ## Call Hierarchy
 
-Neovim has built-in call hierarchy support (`vim.lsp.buf.incoming_calls()`, `vim.lsp.buf.outgoing_calls()`). However, the default quickfix rendering uses `fromRanges` (call-site locations in the current file) rather than the target definition location, which can be confusing.
+Neovim has built-in call hierarchy support (`vim.lsp.buf.incoming_calls()`, `vim.lsp.buf.outgoing_calls()`). However, the default quickfix rendering can be confusing because it mixes the target file name with call-site line numbers.
 
-Add custom handlers to show target definitions instead:
+Add custom handlers to jump to **call-site expressions** (`fromRanges`) with just the function name in quickfix text:
 
 ```lua [.config/nvim/plugin/lsp.lua]
 // [!include ~/snippets/setup/neovim-call-hierarchy.lua]

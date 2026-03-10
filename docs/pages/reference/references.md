@@ -136,6 +136,22 @@ The same exclusion pattern is applied in `rename.rs` for cross-file rename scans
 
 This flag is applied in both the current-build pass and cross-file passes.
 
+## Interface/implementation equivalence via `base_function_implementation`
+
+When the target function has entries in `CachedBuild.base_function_implementation`, the references handler expands the search to include equivalent function IDs. This is a bidirectional index built from `NodeInfo.base_functions` (the `baseFunctions`/`baseModifiers` arrays in solc's AST output).
+
+**Concrete example:** `PoolManager.swap` overrides `IPoolManager.swap`. The `base_function_implementation` index maps both:
+- `PoolManager.swap` → `[IPoolManager.swap]`
+- `IPoolManager.swap` → `[PoolManager.swap]`
+
+When you invoke "Find All References" on `PoolManager.swap`, the handler collects references to `PoolManager.swap` AND `IPoolManager.swap`. This means:
+- Test code calling `manager.swap(...)` where `manager` is typed as `IPoolManager` will appear in the results
+- Direct calls to `PoolManager(addr).swap(...)` will also appear
+
+The expansion happens inside `goto_references_for_target()` before the cross-file scan loop, so all builds benefit from the expanded target set.
+
+This same index is used by the call hierarchy incoming calls handler (see [Call Hierarchy](/reference/call-hierarchy)) and the `textDocument/implementation` handler (see [Implementation](/reference/implementation)).
+
 ## What this implementation does not try to do
 
 - It does not treat import string literals as references. Import path navigation is handled by go-to-definition logic.
