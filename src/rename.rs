@@ -354,6 +354,63 @@ pub fn ts_find_alias_names(source_bytes: &[u8]) -> std::collections::HashSet<Str
     names
 }
 
+/// Find the declaration site of an import alias in the source.
+///
+/// Returns the `Range` of the alias identifier in the import directive:
+///   - `import {Test as MyTest}` → range of "MyTest"
+///   - `import "./A.sol" as AFile` → range of "AFile"
+///
+/// Returns `None` if `alias_name` is not declared as an alias in any import.
+pub fn ts_find_alias_declaration(source_bytes: &[u8], alias_name: &str) -> Option<Range> {
+    let source_str = std::str::from_utf8(source_bytes).ok()?;
+    let mut parser = tree_sitter::Parser::new();
+    parser
+        .set_language(&tree_sitter_solidity::LANGUAGE.into())
+        .ok()?;
+    let tree = parser.parse(source_str, None)?;
+
+    fn find_decl(
+        node: tree_sitter::Node,
+        source: &str,
+        source_bytes: &[u8],
+        alias_name: &str,
+    ) -> Option<Range> {
+        if node.kind() == "import_directive" {
+            let count = node.child_count();
+            let mut i = 0;
+            while i < count {
+                if let Some(child) = node.child(i as u32) {
+                    if child.kind() == "as" {
+                        if let Some(next) = node.child((i + 1) as u32) {
+                            if next.kind() == "identifier" {
+                                let text = &source[next.start_byte()..next.end_byte()];
+                                if text == alias_name {
+                                    let start =
+                                        goto::bytes_to_pos(source_bytes, next.start_byte())?;
+                                    let end = goto::bytes_to_pos(source_bytes, next.end_byte())?;
+                                    return Some(Range { start, end });
+                                }
+                            }
+                        }
+                    }
+                }
+                i += 1;
+            }
+            return None;
+        }
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i as u32) {
+                if let Some(result) = find_decl(child, source, source_bytes, alias_name) {
+                    return Some(result);
+                }
+            }
+        }
+        None
+    }
+
+    find_decl(tree.root_node(), source_str, source_bytes, alias_name)
+}
+
 /// Deduplication map: URI → (start_line, start_col, end_line, end_col) → TextEdit.
 type RenameEdits = HashMap<Url, HashMap<(u32, u32, u32, u32), TextEdit>>;
 
@@ -725,6 +782,55 @@ import \"./A.sol\";
         let locations = ts_collect_identifier_locations(ALIAS_SOL, &uri, "Nonexistent");
         assert!(locations.is_empty());
     }
+
+    // =========================================================================
+    // ts_find_alias_declaration
+    // =========================================================================
+
+    #[test]
+    fn test_ts_find_alias_declaration_symbol_alias() {
+        let range = ts_find_alias_declaration(ALIAS_SOL, "MyTest");
+        assert!(range.is_some(), "should find MyTest declaration");
+        let range = range.unwrap();
+        // "MyTest" in `import {Test as MyTest}` → line 3, col 16
+        assert_eq!(range.start.line, 3);
+        assert_eq!(range.start.character, 16);
+        assert_eq!(range.end.character, 22);
+    }
+
+    #[test]
+    fn test_ts_find_alias_declaration_unit_alias() {
+        let range = ts_find_alias_declaration(ALIAS_SOL, "AFile");
+        assert!(range.is_some(), "should find AFile declaration");
+        let range = range.unwrap();
+        // "AFile" in `import "./A.sol" as AFile` → line 4, col 20
+        assert_eq!(range.start.line, 4);
+        assert_eq!(range.start.character, 20);
+        assert_eq!(range.end.character, 25);
+    }
+
+    #[test]
+    fn test_ts_find_alias_declaration_nonexistent() {
+        let range = ts_find_alias_declaration(ALIAS_SOL, "Nonexistent");
+        assert!(range.is_none(), "should not find nonexistent alias");
+    }
+
+    #[test]
+    fn test_ts_find_alias_declaration_original_name() {
+        // "Test" is the original name, not an alias — should not be found
+        let range = ts_find_alias_declaration(ALIAS_SOL, "Test");
+        assert!(range.is_none(), "should not find original name as alias");
+    }
+
+    #[test]
+    fn test_ts_find_alias_declaration_empty_source() {
+        let range = ts_find_alias_declaration(b"", "MyTest");
+        assert!(range.is_none());
+    }
+
+    // =========================================================================
+    // ts_collect_identifier_locations (continued)
+    // =========================================================================
 
     #[test]
     fn test_ts_collect_mytest_does_not_include_test() {

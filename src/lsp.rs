@@ -3938,6 +3938,38 @@ impl LanguageServer for ForgeLsp {
             }
         }
 
+        // Fast path: if cursor is on an import alias name at a usage site,
+        // go to the alias declaration in the import statement.  The AST
+        // would follow referencedDeclaration to the original definition
+        // (e.g. Test in A.sol), but definition/declaration should go to
+        // the local alias (e.g. MyTest in the import line).
+        {
+            let identifier = crate::rename::get_identifier_at_position(&source_bytes, position);
+            if let Some(ref ident) = identifier {
+                let alias_names = crate::rename::ts_find_alias_names(&source_bytes);
+                if alias_names.contains(ident.as_str()) {
+                    if let Some(decl_range) =
+                        crate::rename::ts_find_alias_declaration(&source_bytes, ident)
+                    {
+                        let location = Location {
+                            uri: uri.clone(),
+                            range: decl_range,
+                        };
+                        self.client
+                            .log_message(
+                                MessageType::INFO,
+                                format!(
+                                    "found definition (alias declaration) for '{}' at {}:{}",
+                                    ident, location.uri, decl_range.start.line
+                                ),
+                            )
+                            .await;
+                        return Ok(Some(GotoDefinitionResponse::from(location)));
+                    }
+                }
+            }
+        }
+
         // Extract the identifier name under the cursor for tree-sitter validation.
         let cursor_name = goto::cursor_context(&source_text, position).map(|ctx| ctx.name);
 
@@ -4118,6 +4150,34 @@ impl LanguageServer for ForgeLsp {
             None => return Ok(None),
         };
 
+        // Fast path: alias usage → alias declaration in the import statement.
+        {
+            let identifier = crate::rename::get_identifier_at_position(&source_bytes, position);
+            if let Some(ref ident) = identifier {
+                let alias_names = crate::rename::ts_find_alias_names(&source_bytes);
+                if alias_names.contains(ident.as_str()) {
+                    if let Some(decl_range) =
+                        crate::rename::ts_find_alias_declaration(&source_bytes, ident)
+                    {
+                        let location = Location {
+                            uri: uri.clone(),
+                            range: decl_range,
+                        };
+                        self.client
+                            .log_message(
+                                MessageType::INFO,
+                                format!(
+                                    "found declaration (alias) for '{}' at line {}",
+                                    ident, decl_range.start.line
+                                ),
+                            )
+                            .await;
+                        return Ok(Some(request::GotoDeclarationResponse::from(location)));
+                    }
+                }
+            }
+        }
+
         let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
         let cached_build = match cached_build {
             Some(cb) => cb,
@@ -4171,7 +4231,53 @@ impl LanguageServer for ForgeLsp {
             None => return Ok(None),
         };
 
+        // For aliases, "go to implementation" means "go to the original
+        // definition" (e.g., Test struct in A.sol when cursor is on MyTest).
+        // This uses the AST's referencedDeclaration via goto_declaration_cached.
+        // Check early so we can also handle the no-build case.
+        let is_alias = {
+            let ident = crate::rename::get_identifier_at_position(&source_bytes, position);
+            if let Some(ref name) = ident {
+                let alias_names = crate::rename::ts_find_alias_names(&source_bytes);
+                alias_names.contains(name.as_str())
+            } else {
+                false
+            }
+        };
+
         let cached_build = self.get_or_fetch_build(&uri, &file_path, false).await;
+
+        // If cursor is on an alias name, go directly to the original definition
+        // via the AST's referencedDeclaration chain.  This gives "go to
+        // implementation" the semantics of "go to the real thing" while
+        // "go to definition/declaration" goes to the alias declaration.
+        if is_alias {
+            // For aliases we need the AST — if the fast cache miss returned
+            // None (build not yet ready), trigger a build on demand.
+            let build = match &cached_build {
+                Some(cb) => Some(cb.clone()),
+                None => self.get_or_fetch_build(&uri, &file_path, true).await,
+            };
+            if let Some(ref cb) = build {
+                if let Some(location) =
+                    goto::goto_declaration_cached(cb, &uri, position, &source_bytes)
+                {
+                    let ident = crate::rename::get_identifier_at_position(&source_bytes, position)
+                        .unwrap_or_default();
+                    self.client
+                        .log_message(
+                            MessageType::INFO,
+                            format!(
+                                "found implementation (alias → original) for '{}' at {}:{}",
+                                ident, location.uri, location.range.start.line
+                            ),
+                        )
+                        .await;
+                    return Ok(Some(request::GotoImplementationResponse::Scalar(location)));
+                }
+            }
+        }
+
         let cached_build = match cached_build {
             Some(cb) => cb,
             None => return Ok(None),

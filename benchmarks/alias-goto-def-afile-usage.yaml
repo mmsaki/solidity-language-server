@@ -1,0 +1,26 @@
+# Goto definition for `AFile` unit alias at usage site
+#
+# Alias.sol line 9:     AFile.Test public afileTest;
+#                        ^cursor (col 4)
+#
+# Expected: goes to the alias declaration in the import statement
+#           → Alias.sol line 4, col 20 (`AFile` in `import "./A.sol" as AFile`)
+#
+#   lsp-bench -c benchmarks/alias-goto-def-afile-usage.yaml
+
+project: example
+file: Alias.sol
+line: 9
+col: 4
+output: benchmarks/alias-goto-def-afile-usage
+report: README.md
+
+servers:
+  - mmsaki@latest
+
+benchmarks:
+  - textDocument/definition
+
+methods:
+  textDocument/definition:
+    waitForProgressToken: "solidity/projectIndexFull"

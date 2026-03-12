@@ -1,0 +1,26 @@
+# Goto implementation for `MyTest` alias at usage site
+#
+# Alias.sol line 8:     MyTest public myTest;
+#                        ^cursor (col 4)
+#
+# Expected: goes to the original definition (implementation)
+#           → A.sol line 3 (`struct Test { ... }`)
+#
+#   lsp-bench -c benchmarks/alias-goto-impl-mytest-usage.yaml
+
+project: example
+file: Alias.sol
+line: 8
+col: 4
+output: benchmarks/alias-goto-impl-mytest-usage
+report: README.md
+
+servers:
+  - mmsaki@latest
+
+benchmarks:
+  - textDocument/implementation
+
+methods:
+  textDocument/implementation:
+    waitForProgressToken: "solidity/projectIndexFull"
