@@ -4259,8 +4259,25 @@ impl LanguageServer for ForgeLsp {
                 None => self.get_or_fetch_build(&uri, &file_path, true).await,
             };
             if let Some(ref cb) = build {
+                let byte_pos = goto::pos_to_bytes(&source_bytes, position);
+
+                // At the import site (`import {Test as MyTest}`), the alias name
+                // has nameLocation "-1:-1:-1" so goto_bytes lands on the
+                // ImportDirective and returns offset 0 (top of file).  Redirect
+                // the lookup to the foreign (original) identifier before "as",
+                // which has a valid referencedDeclaration and byte position.
+                let lookup_position = if let Some(foreign_byte) =
+                    crate::rename::ts_alias_foreign_byte_offset(&source_bytes, byte_pos)
+                {
+                    // Symbol alias — redirect to the foreign identifier position.
+                    goto::bytes_to_pos(&source_bytes, foreign_byte).unwrap_or(position)
+                } else {
+                    // Usage site or unit alias — use original cursor position.
+                    position
+                };
+
                 if let Some(location) =
-                    goto::goto_declaration_cached(cb, &uri, position, &source_bytes)
+                    goto::goto_declaration_cached(cb, &uri, lookup_position, &source_bytes)
                 {
                     let ident = crate::rename::get_identifier_at_position(&source_bytes, position)
                         .unwrap_or_default();

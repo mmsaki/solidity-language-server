@@ -411,6 +411,69 @@ pub fn ts_find_alias_declaration(source_bytes: &[u8], alias_name: &str) -> Optio
     find_decl(tree.root_node(), source_str, source_bytes, alias_name)
 }
 
+/// For a symbol alias at the import site (cursor on `MyTest` in
+/// `import {Test as MyTest}`), return the byte offset of the **original**
+/// (foreign) identifier (`Test`).
+///
+/// This lets goto-implementation redirect the AST lookup from the alias
+/// (which has `nameLocation: "-1:-1:-1"`) to the foreign identifier
+/// (which has a valid `referencedDeclaration` and byte position).
+///
+/// Returns `None` if:
+/// - the cursor is not on an alias at the import site
+/// - the alias is a unit alias (`import "file" as AFile`) — no foreign identifier
+pub fn ts_alias_foreign_byte_offset(source_bytes: &[u8], cursor_byte: usize) -> Option<usize> {
+    let source_str = std::str::from_utf8(source_bytes).ok()?;
+    let mut parser = tree_sitter::Parser::new();
+    parser
+        .set_language(&tree_sitter_solidity::LANGUAGE.into())
+        .ok()?;
+    let tree = parser.parse(source_str, None)?;
+
+    fn find_foreign(node: tree_sitter::Node, source: &str, cursor_byte: usize) -> Option<usize> {
+        if node.kind() == "import_directive" {
+            let count = node.child_count();
+            let mut i = 0;
+            while i < count {
+                let child = node.child(i as u32)?;
+                if child.kind() == "as" {
+                    // Check if cursor is on the identifier after "as"
+                    if let Some(next) = node.child((i + 1) as u32) {
+                        if next.kind() == "identifier"
+                            && next.start_byte() <= cursor_byte
+                            && cursor_byte < next.end_byte()
+                        {
+                            // Found alias at cursor — now find the identifier before "as".
+                            // For `{Test as MyTest}`, the identifier before "as" is at index i-1.
+                            if i > 0 {
+                                if let Some(prev) = node.child((i - 1) as u32) {
+                                    if prev.kind() == "identifier" {
+                                        return Some(prev.start_byte());
+                                    }
+                                }
+                            }
+                            // Unit alias (`import "file" as AFile`) — no foreign identifier
+                            return None;
+                        }
+                    }
+                }
+                i += 1;
+            }
+            return None;
+        }
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i as u32) {
+                if let Some(result) = find_foreign(child, source, cursor_byte) {
+                    return Some(result);
+                }
+            }
+        }
+        None
+    }
+
+    find_foreign(tree.root_node(), source_str, cursor_byte)
+}
+
 /// Deduplication map: URI → (start_line, start_col, end_line, end_col) → TextEdit.
 type RenameEdits = HashMap<Url, HashMap<(u32, u32, u32, u32), TextEdit>>;
 
@@ -826,6 +889,41 @@ import \"./A.sol\";
     fn test_ts_find_alias_declaration_empty_source() {
         let range = ts_find_alias_declaration(b"", "MyTest");
         assert!(range.is_none());
+    }
+
+    // =========================================================================
+    // ts_alias_foreign_byte_offset
+    // =========================================================================
+
+    #[test]
+    fn test_ts_alias_foreign_byte_offset_symbol_alias() {
+        // Cursor on "MyTest" (byte 80) → should return byte offset of "Test" (byte 72)
+        let result = ts_alias_foreign_byte_offset(ALIAS_SOL, 80);
+        assert_eq!(
+            result,
+            Some(72),
+            "should return byte offset of foreign 'Test'"
+        );
+    }
+
+    #[test]
+    fn test_ts_alias_foreign_byte_offset_unit_alias() {
+        // Cursor on "AFile" (byte 124) → unit alias, no foreign identifier
+        let result = ts_alias_foreign_byte_offset(ALIAS_SOL, 124);
+        assert_eq!(result, None, "unit alias has no foreign identifier");
+    }
+
+    #[test]
+    fn test_ts_alias_foreign_byte_offset_usage_site() {
+        // Cursor on "MyTest" usage (byte 175) → not in an import
+        let result = ts_alias_foreign_byte_offset(ALIAS_SOL, 175);
+        assert_eq!(result, None, "usage site is not inside import_directive");
+    }
+
+    #[test]
+    fn test_ts_alias_foreign_byte_offset_empty_source() {
+        let result = ts_alias_foreign_byte_offset(b"", 0);
+        assert_eq!(result, None);
     }
 
     // =========================================================================
