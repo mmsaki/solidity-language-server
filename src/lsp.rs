@@ -4390,7 +4390,21 @@ impl LanguageServer for ForgeLsp {
             }
         }
 
+        // Fallback: when no baseFunctions/inheritance implementations are found,
+        // behave like goto-definition so the user always lands somewhere useful.
         if locations.is_empty() {
+            if let Some(location) =
+                goto::goto_declaration_cached(&cached_build, &uri, position, &source_bytes)
+            {
+                self.client
+                    .log_message(
+                        MessageType::INFO,
+                        "no implementations found, falling back to definition",
+                    )
+                    .await;
+                return Ok(Some(request::GotoImplementationResponse::Scalar(location)));
+            }
+
             self.client
                 .log_message(MessageType::INFO, "no implementations found")
                 .await;
