@@ -1,0 +1,26 @@
+# Goto implementation for `MyTest` alias at IMPORT site
+#
+# Alias.sol line 3: import {Test as MyTest} from "./A.sol";
+#                                    ^cursor (col 16)
+#
+# Expected: goes to the original definition
+#           → A.sol line 3 (`struct Test { ... }`)
+#
+#   lsp-bench -c benchmarks/alias-goto-impl-mytest-import.yaml
+
+project: example
+file: Alias.sol
+line: 3
+col: 16
+output: benchmarks/alias-goto-impl-mytest-import
+report: README.md
+
+servers:
+  - mmsaki@latest
+
+benchmarks:
+  - textDocument/implementation
+
+methods:
+  textDocument/implementation:
+    waitForProgressToken: "solidity/projectIndexFull"

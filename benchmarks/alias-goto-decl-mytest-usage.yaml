@@ -1,0 +1,26 @@
+# Goto declaration for `MyTest` alias at usage site
+#
+# Alias.sol line 8:     MyTest public myTest;
+#                        ^cursor (col 4)
+#
+# Expected: goes to the alias declaration in the import statement
+#           → Alias.sol line 3, col 16 (`MyTest` in `import {Test as MyTest}`)
+#
+#   lsp-bench -c benchmarks/alias-goto-decl-mytest-usage.yaml
+
+project: example
+file: Alias.sol
+line: 8
+col: 4
+output: benchmarks/alias-goto-decl-mytest-usage
+report: README.md
+
+servers:
+  - mmsaki@latest
+
+benchmarks:
+  - textDocument/declaration
+
+methods:
+  textDocument/declaration:
+    waitForProgressToken: "solidity/projectIndexFull"
