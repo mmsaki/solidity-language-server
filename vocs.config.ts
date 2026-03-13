@@ -30,8 +30,8 @@ export default defineConfig({
       items: [
         { text: "Overview", link: "/agents" },
         { text: "OpenCode", link: "/agents/opencode" },
-        { text: "Claude Code", link: "/agents/claude" },
-        { text: "Codex", link: "/agents/codex" }
+        { text: "Claude Code (WIP)", link: "/agents/claude" },
+        { text: "Codex (WIP)", link: "/agents/codex" }
       ]
     },
     {
