@@ -38,21 +38,6 @@ export default defineConfig({
       text: "Reference",
       items: [
         { text: "Index", link: "/reference" },
-        { text: "Go To Definition", link: "/reference/goto" },
-        { text: "Implementation", link: "/reference/implementation" },
-        { text: "References", link: "/reference/references" },
-        { text: "Call Hierarchy", link: "/reference/call-hierarchy" },
-        { text: "Hover", link: "/reference/hover" },
-        { text: "Completions", link: "/reference/completions" },
-        { text: "Symbols", link: "/reference/symbols" },
-        { text: "Inlay Hints", link: "/reference/inlay-hints" },
-        { text: "Signature Help", link: "/reference/signature-help" },
-        { text: "Will Rename Files", link: "/reference/will-rename-files" },
-        { text: "Imports and References", link: "/reference/imports-references" },
-        { text: "Diagnostics", link: "/reference/diagnostics" },
-        { text: "Code Actions", link: "/reference/code-actions" },
-        { text: "Caches", link: "/reference/caches" },
-        { text: "Profiling", link: "/reference/profiling" }
       ]
     },
     {
