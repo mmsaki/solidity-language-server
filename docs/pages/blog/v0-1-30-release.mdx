@@ -1,0 +1,73 @@
+# v0.1.30
+
+Call hierarchy, go to implementation, qualifier-aware references, and a massive performance overhaul.
+
+## Call hierarchy
+
+Full call hierarchy support is here: `prepareCallHierarchy`,
+`incomingCalls`, and `outgoingCalls`. Navigate call graphs across
+contracts and libraries.
+
+Tracks function calls, modifier invocations, and base constructor
+specifiers. Container aggregation means incoming/outgoing on a contract
+gives you the union of all its callables. Narrow `fromRanges` use
+`expression.src` for direct calls and `memberLocation` for member-access
+calls.
+
+## Go to implementation
+
+`textDocument/implementation` jumps from interface or abstract function
+declarations to their concrete implementations. Builds a bidirectional
+`base_function_implementation` index from solc's `baseFunctions` /
+`baseModifiers` AST fields at cache time.
+
+## Interface/implementation equivalence
+
+"Find All References" on `PoolManager.swap` now also returns call sites
+that reference `IPoolManager.swap`, and vice versa. Incoming callers via
+interface-typed references (e.g. `manager.swap()` where `manager` is
+`IPoolManager`) are included too.
+
+## Qualifier-aware navigation
+
+Clicking the qualifier in a qualified type path now works:
+
+```solidity
+Pool.State memory state = pool.getState();
+//   ^ Go to Definition on "Pool" navigates to the contract/library
+```
+
+"Find All References" on a container includes qualified type paths where
+it appears as a prefix.
+
+## PathInterner — stable cross-build file IDs
+
+Solc assigns file IDs sequentially based on input order, causing
+cross-compilation reference bugs. The new `PathInterner` assigns
+deterministic canonical IDs so all builds share the same ID space.
+
+## Two-phase project index
+
+Phase 1 compiles the src-closure for fast time-to-first-reference.
+Phase 2 compiles the full closure (src + test + script) in the background.
+
+## Parallel sub-cache compilation
+
+Library sub-projects now build concurrently via `JoinSet`:
+
+| Project | Before | After | Speedup |
+|---------|--------|-------|---------|
+| SmarDex (510 files) | ~56s | 8.9s | 6.3x |
+| Asyncswap (108 + 1108 lib) | ~57s | 22.1s | 2.6x |
+
+## Gas estimates removed
+
+`evm.gasEstimates` consumed 88% of compile time. Removed entirely —
+SmarDex went from 56s to 6s just from dropping gas estimation from solc
+output selection.
+
+## Upgrade
+
+```sh
+cargo install solidity-language-server
+```

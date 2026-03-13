@@ -1,0 +1,39 @@
+# v0.1.31
+
+Precision fixes for call hierarchy and cross-build node ID safety.
+
+## Precise call hierarchy fromRanges
+
+`callHierarchy/incomingCalls` and `callHierarchy/outgoingCalls` now
+prefer `member_location` (the identifier-only span) over `src` (the
+full expression span) for `MemberAccess` nodes.
+
+Before: `fromRanges` pointed at the entire chain
+`slot0.protocolFee().getZeroForOneFee()`.
+
+After: `fromRanges` points at just `protocolFee` and
+`getZeroForOneFee` individually.
+
+## Cross-build node ID fix in implementation
+
+The `textDocument/implementation` handler used the file build's
+`target_id` to look up `base_function_implementation` in the project
+build. Since node IDs are not stable across builds, this could resolve
+to a completely different function.
+
+Now re-resolves the target by `byte_to_id()` per build — the stable
+`(file_path, byte_offset)` anchor pattern documented in AGENTS.md.
+
+## Neovim call hierarchy snippet
+
+Updated the Neovim handler snippet: outgoing calls now use
+`ctx.params.item.uri` for the file path instead of
+`vim.api.nvim_buf_get_name(ctx.bufnr)` (which returns the wrong file
+when `prepareCallHierarchy` resolves to a different file). Both handlers
+sort quickfix items by line then column.
+
+## Upgrade
+
+```sh
+cargo install solidity-language-server
+```
