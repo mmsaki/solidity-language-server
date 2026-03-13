@@ -5398,20 +5398,19 @@ impl LanguageServer for ForgeLsp {
         if !settings.inlay_hints.parameters {
             hints.retain(|h| h.kind != Some(InlayHintKind::PARAMETER));
         }
-        if hints.is_empty() {
-            self.client
-                .log_message(MessageType::INFO, "no inlay hints found")
-                .await;
-            Ok(None)
-        } else {
-            self.client
-                .log_message(
-                    MessageType::INFO,
-                    format!("found {} inlay hints", hints.len()),
-                )
-                .await;
-            Ok(Some(hints))
-        }
+        self.client
+            .log_message(
+                MessageType::INFO,
+                format!("found {} inlay hints", hints.len()),
+            )
+            .await;
+
+        // Always return Some — even when empty.  Returning None serialises
+        // to JSON `null` which LSP clients (notably Neovim) interpret as
+        // "server couldn't compute hints" and keep displaying whatever
+        // stale hints they had.  An empty array tells the client "there
+        // are zero hints" so it clears them.
+        Ok(Some(hints))
     }
 
     async fn code_action(
