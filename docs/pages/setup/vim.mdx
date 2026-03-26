@@ -4,37 +4,30 @@ Credit: `leekt/vimsettings` — [vimrc reference](https://github.com/leekt/vimse
 
 For the full settings schema, see [Setup Overview](/setup).
 
-Minimal `vim-lsp` setup in `.vimrc` (no wrapper):
+## Required plugins
+
+The following plugins are required for LSP support:
+
+- [vim-lsp](https://github.com/prabirshrestha/vim-lsp) — Language Server Protocol client
+- [asyncomplete.vim](https://github.com/prabirshrestha/asyncomplete.vim) — Async auto-completion
+- [asyncomplete-lsp.vim](https://github.com/prabirshrestha/asyncomplete-lsp.vim) — LSP source for asyncomplete
+- [async.vim](https://github.com/prabirshrestha/async.vim) — Async job control
+
+Add to `.vimrc` (Vundle):
 
 ```vim [.vimrc]
-if executable('solidity-language-server')
-  au User lsp_setup call lsp#register_server({
-      \ 'name': 'solidity-language-server',
-      \ 'cmd': {server_info -> ['solidity-language-server', '--stdio']},
-      \ 'root_uri': {server_info -> lsp#utils#path_to_uri(
-      \   empty(lsp#utils#find_nearest_parent_file_directory(
-      \     lsp#utils#get_buffer_path(), ['foundry.toml', '.git']))
-      \   ? getcwd()
-      \   : lsp#utils#find_nearest_parent_file_directory(
-      \     lsp#utils#get_buffer_path(), ['foundry.toml', '.git']))},
-      \ 'whitelist': ['solidity'],
-      \ })
-endif
+Plugin 'prabirshrestha/async.vim'
+Plugin 'prabirshrestha/vim-lsp'
+Plugin 'prabirshrestha/asyncomplete.vim'
+Plugin 'prabirshrestha/asyncomplete-lsp.vim'
 ```
 
-Optional per-buffer mappings:
+## LSP configuration
+
+Add this to `~/.vimrc`:
 
 ```vim [.vimrc]
-function! s:on_lsp_buffer_enabled() abort
-  setlocal omnifunc=lsp#complete
-  setlocal signcolumn=yes
-  nmap <buffer> gd <plug>(lsp-definition)
-  nmap <buffer> gr <plug>(lsp-references)
-  nmap <buffer> K <plug>(lsp-hover)
-  nmap <buffer> <leader>rn <plug>(lsp-rename)
-  nmap <buffer> [d <plug>(lsp-previous-diagnostic)
-  nmap <buffer> ]d <plug>(lsp-next-diagnostic)
-endfunction
+// [!include ~/snippets/setup/.vimrc]
 ```
 
 ## Lint options reference

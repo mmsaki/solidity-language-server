@@ -9,28 +9,25 @@ For VS Code (and Cursor), you can run through the Generic LSP Proxy extension:
 - Extension: [mjmorales.generic-lsp-proxy](https://marketplace.visualstudio.com/items?itemName=mjmorales.generic-lsp-proxy)
 - This proxy config is **in addition to** the `solidity-language-server.*` settings below (not a replacement).
 
-Config example:
+Add this to `.vscode/lsp-proxy.json` in your project root:
 
-```json [settings.json]
+```json [.vscode/lsp-proxy.json]
 [
   {
     "languageId": "solidity",
     "command": "solidity-language-server",
     "fileExtensions": [
       ".sol"
-    ],
-    "args": [
-      "--stdio"
     ]
   }
 ]
 ```
 
-## Language server settings
+## Additional configuration
 
-Add to `settings.json`:
+Optional: add to `.vscode/settings.json` for additional configuration:
 
-```json [settings.json]
+```json [.vscode/settings.json]
 // [!include ~/snippets/setup/vscode.json]
 ```
 

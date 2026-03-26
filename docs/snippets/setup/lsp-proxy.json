@@ -1,0 +1,9 @@
+[
+  {
+    "languageId": "solidity",
+    "command": "solidity-language-server",
+    "fileExtensions": [
+      ".sol"
+    ]
+  }
+]

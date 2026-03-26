@@ -5,28 +5,26 @@
         "path": "solidity-language-server",
         "arguments": ["--stdio"]
       },
-      "settings": {
-        "solidity-language-server": {
-          "inlayHints": {
-            "parameters": true,
-            "gasEstimates": true
-          },
-          "lint": {
-            "enabled": true,
-            "severity": [],
-            "only": [],
-            "exclude": []
-          },
-          "fileOperations": {
-            "templateOnCreate": true,
-            "updateImportsOnRename": true,
-            "updateImportsOnDelete": true
-          },
-          "projectIndex": {
-            "fullProjectScan": true,
-            "cacheMode": "v2",
-            "incrementalEditReindex": false
-          }
+      "initialization_options": {
+        "inlayHints": {
+          "parameters": true,
+          "gasEstimates": true
+        },
+        "lint": {
+          "enabled": true,
+          "severity": [],
+          "only": [],
+          "exclude": []
+        },
+        "fileOperations": {
+          "templateOnCreate": true,
+          "updateImportsOnRename": true,
+          "updateImportsOnDelete": true
+        },
+        "projectIndex": {
+          "fullProjectScan": true,
+          "cacheMode": "v2",
+          "incrementalEditReindex": false
         }
       }
     }

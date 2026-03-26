@@ -21,3 +21,8 @@ updateImportsOnDelete = true
 fullProjectScan = true
 cacheMode = "v2"
 incrementalEditReindex = false
+
+[[language]]
+name = "solidity"
+language-servers = ["solidity-language-server"]
+auto-format = false
