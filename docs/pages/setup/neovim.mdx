@@ -1,18 +1,16 @@
 # Neovim
 
-Example from your real setup in `~/.config/nvim/lsp`.
-
 For the full settings schema, see [Setup Overview](/setup).
 
-Server config:
+Add the following to `~/.config/nvim/lsp/solidity-language-server.lua`:
 
-```lua [.config/nvim/lsp/solidity-language-server.lua]
+```lua [~/.config/nvim/lsp/solidity-language-server.lua]
 // [!include ~/snippets/setup/neovim.lua]
 ```
 
-Enable the server:
+Add the following to `~/.config/nvim/plugin/solidity.lua`:
 
-```lua [.config/nvim/plugin/solidity.lua]
+```lua [~/.config/nvim/plugin/solidity.lua]
 // [!include ~/snippets/setup/neovim-plugin-lsp.lua]
 ```
 
@@ -28,7 +26,7 @@ If these events are not sent, the server cannot apply those file-operation edits
 
 Example (`oil.nvim`):
 
-```lua [.config/nvim/lua/plugins/oil.lua]
+```lua [~/.config/nvim/lua/plugins/oil.lua]
 // [!include ~/snippets/setup/neovim-oil.lua]
 ```
 
@@ -48,7 +46,7 @@ Neovim has built-in call hierarchy support (`vim.lsp.buf.incoming_calls()`, `vim
 
 Add custom handlers to jump to **call-site expressions** (`fromRanges`) with just the function name in quickfix text:
 
-```lua [.config/nvim/plugin/lsp.lua]
+```lua [~/.config/nvim/plugin/lsp.lua]
 // [!include ~/snippets/setup/neovim-call-hierarchy.lua]
 ```
 

@@ -2,14 +2,11 @@
 
 For the full settings schema, see [Setup Overview](/setup).
 
-## Using Generic LSP Proxy extension
+## Generic LSP Proxy extension
 
-For VS Code (and Cursor), you can run through the Generic LSP Proxy extension:
+Install the [Generic LSP Proxy](https://marketplace.visualstudio.com/items?itemName=mjmorales.generic-lsp-proxy) extension.
 
-- Extension: [mjmorales.generic-lsp-proxy](https://marketplace.visualstudio.com/items?itemName=mjmorales.generic-lsp-proxy)
-- This proxy config is **in addition to** the `solidity-language-server.*` settings below (not a replacement).
-
-Add this to `.vscode/lsp-proxy.json` in your project root:
+Add the following to `.vscode/lsp-proxy.json` in your project root:
 
 ```json [.vscode/lsp-proxy.json]
 [
@@ -25,15 +22,17 @@ Add this to `.vscode/lsp-proxy.json` in your project root:
 
 ## Additional configuration
 
-Optional: add to `.vscode/settings.json` for additional configuration:
+Add the following to `.vscode/settings.json` for additional configuration:
 
 ```json [.vscode/settings.json]
 // [!include ~/snippets/setup/vscode.json]
 ```
 
-## Example filtered lint setup
+## Lint options reference
 
 Lint options (severity, rule IDs, `only`, `exclude`) are documented in [Setup Overview → Lint values](/setup#lint-values).
+
+Example filtered lint setup:
 
 ```json [settings.json]
 {

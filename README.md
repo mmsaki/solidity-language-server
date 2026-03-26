@@ -11,13 +11,7 @@ The fastest Solidity language server — optimized for low-latency go-to-definit
 ## Install
 
 ```sh
-curl -fsSL https://solidity-language-server-docs.pages.dev/install.sh | sh
-```
-
-To install to a custom directory:
-
-```sh
-INSTALL_DIR=~/.local/bin curl -fsSL https://solidity-language-server-docs.pages.dev/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/mmsaki/solidity-language-server/main/install.sh | sh
 ```
 
 ### Alternative: Install from Cargo

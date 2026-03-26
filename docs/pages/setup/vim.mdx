@@ -1,21 +1,17 @@
 # Vim
 
-Credit: `leekt/vimsettings` — [vimrc reference](https://github.com/leekt/vimsettings/blob/a0166c68dec7f67c391993a9bbf90668577fb929/.vimrc#L108-L137)
-
 For the full settings schema, see [Setup Overview](/setup).
 
 ## Required plugins
-
-The following plugins are required for LSP support:
 
 - [vim-lsp](https://github.com/prabirshrestha/vim-lsp) — Language Server Protocol client
 - [asyncomplete.vim](https://github.com/prabirshrestha/asyncomplete.vim) — Async auto-completion
 - [asyncomplete-lsp.vim](https://github.com/prabirshrestha/asyncomplete-lsp.vim) — LSP source for asyncomplete
 - [async.vim](https://github.com/prabirshrestha/async.vim) — Async job control
 
-Add to `.vimrc` (Vundle):
+Install with Vundle (add to `~/.vimrc` before `call vundle#end()`):
 
-```vim [.vimrc]
+```vim [~/.vimrc]
 Plugin 'prabirshrestha/async.vim'
 Plugin 'prabirshrestha/vim-lsp'
 Plugin 'prabirshrestha/asyncomplete.vim'
@@ -24,12 +20,16 @@ Plugin 'prabirshrestha/asyncomplete-lsp.vim'
 
 ## LSP configuration
 
-Add this to `~/.vimrc`:
+Add the following to `~/.vimrc`:
 
-```vim [.vimrc]
+```vim [~/.vimrc]
 // [!include ~/snippets/setup/.vimrc]
 ```
 
 ## Lint options reference
 
 Lint options (severity, rule IDs, `only`, `exclude`) are documented in [Setup Overview → Lint values](/setup#lint-values).
+
+## Credits
+
+Based on [leekt/vimsettings](https://github.com/leekt/vimsettings/blob/a0166c68dec7f67c391993a9bbf90668577fb929/.vimrc#L108-L137).

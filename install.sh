@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 # Install solidity-language-server from GitHub releases
-# Usage: curl -fsSL https://solidity-language-server-docs.pages.dev/install.sh | sh
+# Usage: curl -fsSL https://raw.githubusercontent.com/mmsaki/solidity-language-server/main/install.sh | sh
 
 set -e
 
@@ -465,8 +465,56 @@ trap 'rm -rf "$TMPDIR"' EXIT
 echo "Downloading ${URL}..."
 curl -fsSL "$URL" -o "${TMPDIR}/${ARCHIVE}"
 
-# Extract
+# Download checksums and signature
+CHECKSUMS_URL="https://github.com/${REPO}/releases/download/${TAG}/checksums-sha256.txt"
+SIGNATURE_URL="https://github.com/${REPO}/releases/download/${TAG}/checksums-sha256.txt.asc"
+PUBLIC_KEY_URL="https://raw.githubusercontent.com/${REPO}/main/public-key.asc"
+
+curl -fsSL "$CHECKSUMS_URL" -o "${TMPDIR}/checksums-sha256.txt"
+curl -fsSL "$SIGNATURE_URL" -o "${TMPDIR}/checksums-sha256.txt.asc"
+curl -fsSL "$PUBLIC_KEY_URL" -o "${TMPDIR}/public-key.asc"
+
+# Verify release integrity
 cd "$TMPDIR"
+echo "Verifying release integrity..."
+
+# GPG signature
+if command -v gpg >/dev/null 2>&1; then
+    gpg --quiet --import public-key.asc 2>/dev/null
+    if gpg --quiet --verify checksums-sha256.txt.asc checksums-sha256.txt 2>/dev/null; then
+        echo "  GPG signature: verified"
+    else
+        echo "  GPG signature: FAILED" >&2
+        exit 1
+    fi
+else
+    echo "  GPG signature: skipped (gpg not installed)"
+fi
+
+# SHA-256 checksum
+EXPECTED=$(grep "$ARCHIVE" checksums-sha256.txt | awk '{print $1}')
+if command -v shasum >/dev/null 2>&1; then
+    ACTUAL=$(shasum -a 256 "$ARCHIVE" | awk '{print $1}')
+elif command -v sha256sum >/dev/null 2>&1; then
+    ACTUAL=$(sha256sum "$ARCHIVE" | awk '{print $1}')
+else
+    ACTUAL=""
+fi
+
+if [ -n "$ACTUAL" ]; then
+    if [ "$EXPECTED" = "$ACTUAL" ]; then
+        echo "  SHA-256 checksum: verified"
+    else
+        echo "  SHA-256 checksum: FAILED" >&2
+        echo "    expected: $EXPECTED" >&2
+        echo "    got:      $ACTUAL" >&2
+        exit 1
+    fi
+else
+    echo "  SHA-256 checksum: skipped (shasum/sha256sum not installed)"
+fi
+
+# Extract
 if [ "$OS" = "x86_64-pc-windows-msvc" ]; then
     unzip -q "$ARCHIVE"
 else
@@ -487,10 +535,21 @@ chmod +x "$INSTALL_DIR/$BIN_NAME" 2>/dev/null || true
 
 echo "Installed ${BINARY} ${TAG} to ${INSTALL_DIR}/${BIN_NAME}"
 
+# Create stable symlink at ~/.solidity-language-server/bin/
+SYMLINK_DIR="${BASE_DIR}/bin"
+mkdir -p "$SYMLINK_DIR"
+ln -sf "$INSTALL_DIR/$BIN_NAME" "$SYMLINK_DIR/$BIN_NAME"
+echo "Symlinked ${SYMLINK_DIR}/${BIN_NAME} -> ${TAG}"
+
 # Remind user to add to PATH if needed
 case ":$PATH:" in
-    *":${INSTALL_DIR}:"*) ;;
-    *) echo "Note: add ${INSTALL_DIR} to your PATH" ;;
+    *":${SYMLINK_DIR}:"*) ;;
+    *)
+        echo ""
+        echo "Add this to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
+        echo ""
+        echo "  export PATH=\"\$HOME/.solidity-language-server/bin:\$PATH\""
+        ;;
 esac
 
 # ── Editor setup prompt ──────────────────────────────────
