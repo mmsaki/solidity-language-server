@@ -4,6 +4,8 @@
 
 set -e
 
+main() {
+
 REPO="mmsaki/solidity-language-server"
 BINARY="solidity-language-server"
 DOCS_URL="https://solidity-language-server-docs.pages.dev"
@@ -12,7 +14,7 @@ DOCS_URL="https://solidity-language-server-docs.pages.dev"
 confirm_write() {
     if [ -f "$1" ]; then
         printf "%s already exists. Overwrite? [y/N] " "$1"
-        read -r REPLY </dev/tty
+        read -r REPLY
         case "$REPLY" in
             y|Y) return 0 ;;
             *)   echo "Skipped $1"; return 1 ;;
@@ -29,7 +31,7 @@ confirm_append() {
     fi
     if [ -f "$1" ]; then
         printf "%s exists. Append solidity config? [y/N] " "$1"
-        read -r REPLY </dev/tty
+        read -r REPLY
         case "$REPLY" in
             y|Y) return 0 ;;
             *)   echo "Skipped $1"; return 1 ;;
@@ -567,7 +569,7 @@ echo "  7) Sublime Text"
 echo "  8) Skip"
 echo ""
 printf "> "
-read -r EDITOR_CHOICE </dev/tty
+read -r EDITOR_CHOICE
 
 case "$EDITOR_CHOICE" in
     1) setup_neovim ;;
@@ -579,3 +581,7 @@ case "$EDITOR_CHOICE" in
     7) setup_sublime ;;
     *) echo "Skipping editor setup." ;;
 esac
+
+}
+
+main < /dev/tty
