@@ -14,7 +14,7 @@ DOCS_URL="https://solidity-language-server-docs.pages.dev"
 confirm_write() {
     if [ -f "$1" ]; then
         printf "%s already exists. Overwrite? [y/N] " "$1"
-        read -r REPLY
+        read -r REPLY < /dev/tty
         case "$REPLY" in
             y|Y) return 0 ;;
             *)   echo "Skipped $1"; return 1 ;;
@@ -31,7 +31,7 @@ confirm_append() {
     fi
     if [ -f "$1" ]; then
         printf "%s exists. Append solidity config? [y/N] " "$1"
-        read -r REPLY
+        read -r REPLY < /dev/tty
         case "$REPLY" in
             y|Y) return 0 ;;
             *)   echo "Skipped $1"; return 1 ;;
@@ -569,7 +569,7 @@ echo "  7) Sublime Text"
 echo "  8) Skip"
 echo ""
 printf "> "
-read -r EDITOR_CHOICE
+read -r EDITOR_CHOICE < /dev/tty
 
 case "$EDITOR_CHOICE" in
     1) setup_neovim ;;
@@ -584,4 +584,4 @@ esac
 
 }
 
-main < /dev/tty
+main
