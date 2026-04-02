@@ -7,7 +7,7 @@ The Solidity language server works with AI coding agents. Each agent integrates 
 | Agent | LSP Integration | Config File | Diagnostics | Code Intelligence |
 |-------|----------------|-------------|-------------|-------------------|
 | [OpenCode](/agents/opencode) | Direct (built-in) | `opencode.json` | Automatic via LSP | Hover, definition, references, symbols, call hierarchy |
-| [Claude Code](/agents/claude) | Via [plugin](https://github.com/asyncswap/solidity-language-server-plugin) | `CLAUDE.md` | Automatic via LSP | Hover, definition, references, symbols, call hierarchy |
+| [Claude Code](/agents/claude) | Via [plugin](https://github.com/asyncswap/skills) | `CLAUDE.md` | Automatic via LSP | Hover, definition, references, symbols, call hierarchy |
 | [Codex](/agents/codex) | None | `AGENTS.md` | Via `forge build` / shell | Terminal commands, test harnesses |
 
 ## How it works
@@ -18,7 +18,7 @@ OpenCode connects directly to `solidity-language-server` over stdio. The AI agen
 
 ### With LSP Plugin (Claude Code)
 
-Claude Code supports LSP through its plugin system. Install the [solidity-language-server plugin](https://github.com/asyncswap/solidity-language-server-plugin) to get full LSP integration — hover, go-to-definition, references, symbols, and call hierarchy — all through the LSP tool.
+Claude Code supports LSP through its plugin system. Install the [solidity-language-server plugin](https://github.com/asyncswap/skills) to get full LSP integration — hover, go-to-definition, references, symbols, and call hierarchy — all through the LSP tool.
 
 ### Without LSP (Codex)
 

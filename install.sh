@@ -607,7 +607,7 @@ setup_claude() {
     echo ""
     echo "Run these commands in Claude Code:"
     echo ""
-    echo "  /plugin marketplace add asyncswap/solidity-language-server-plugin"
+    echo "  /plugin marketplace add asyncswap/skills"
     echo "  /plugin install solidity-language-server@asyncswap"
     echo "  /reload-plugins"
     echo ""
