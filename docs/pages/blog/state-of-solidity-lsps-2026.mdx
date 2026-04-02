@@ -8,15 +8,17 @@ We benchmarked every major Solidity language server against Uniswap v4-core, one
 
 Five Solidity language servers exist today:
 
-| Server | Language | Maintainer | Status |
-|--------|----------|------------|--------|
-| [solidity-language-server](https://github.com/mmsaki/solidity-language-server) | Rust | mmsaki | Active |
-| [solc --lsp](https://docs.soliditylang.org/) | C++ | Solidity team | Abandoned |
-| [nomicfoundation-solidity-ls](https://github.com/NomicFoundation/hardhat-vscode) | TypeScript | Nomic Foundation | Active |
-| [vscode-solidity](https://github.com/juanfranblanco/vscode-solidity) | TypeScript | Juan Blanco | Active |
-| [solidity-ls (qiuxiang)](https://github.com/qiuxiang/solidity-ls) | TypeScript | qiuxiang | Active |
+| Server | Language | Maintainer | Status | Last commit |
+|--------|----------|------------|--------|-------------|
+| [solidity-language-server](https://github.com/mmsaki/solidity-language-server) | Rust | mmsaki | Active | April 2026 |
+| [solc --lsp](https://docs.soliditylang.org/) | C++ | Solidity team | Inactive | LSP abandoned |
+| [nomicfoundation-solidity-ls](https://github.com/NomicFoundation/hardhat-vscode) | TypeScript | Nomic Foundation | Active | March 2026 |
+| [vscode-solidity](https://github.com/juanfranblanco/vscode-solidity) | TypeScript | Juan Blanco | Stale | November 2025 |
+| [solidity-ls (qiuxiang)](https://github.com/qiuxiang/solidity-ls) | TypeScript | qiuxiang | Abandoned | February 2024 |
 
-Most Solidity developers use either the Nomic Foundation server (bundled with the Hardhat VS Code extension) or Juan Blanco's extension. These are the defaults. They've been around the longest and have the most installs.
+Of these five, only two are actively maintained: solidity-language-server and Nomic Foundation. Juan Blanco's extension hasn't been updated in five months with 152 open issues. qiuxiang's server hasn't seen a commit in over two years. The solc LSP is inactive — the Solidity team has stopped development on it entirely.
+
+Most Solidity developers still use either the Nomic Foundation server (bundled with the Hardhat VS Code extension) or Juan Blanco's extension. These are the defaults. They've been around the longest and have the most installs.
 
 One server that should be on this list — `solc --lsp`, the official LSP built into the Solidity compiler — is no longer a real option. The Solidity team has called it ["effectively abandoned experimental functionality"](https://github.com/ethereum/solidity/issues/16124) with no plans to revive it. It ships with [documented internal compiler errors](https://github.com/ethereum/solidity/issues/16476) during normal editor operations like rename and semantic tokens. Development stopped before the LSP reached stability.
 
