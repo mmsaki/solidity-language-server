@@ -1,0 +1,266 @@
+# The State of Solidity Language Servers in 2026
+
+Solidity tooling has come a long way. Foundry replaced Hardhat as the default build system. Solc ships monthly. But language servers — the thing you interact with every time you hit "go to definition" — have barely kept up.
+
+We benchmarked every major Solidity language server against Uniswap v4-core, one of the most widely deployed Solidity codebases. The results are not close.
+
+## The contenders
+
+Five Solidity language servers exist today:
+
+| Server | Language | Maintainer |
+|--------|----------|------------|
+| [solidity-language-server](https://github.com/mmsaki/solidity-language-server) | Rust | mmsaki |
+| [solc --lsp](https://docs.soliditylang.org/) | C++ | Solidity team |
+| [nomicfoundation-solidity-ls](https://github.com/NomicFoundation/hardhat-vscode) | TypeScript | Nomic Foundation |
+| [vscode-solidity](https://github.com/juanfranblanco/vscode-solidity) | TypeScript | Juan Blanco |
+| [solidity-ls (qiuxiang)](https://github.com/qiuxiang/solidity-ls) | TypeScript | qiuxiang |
+
+Most Solidity developers use either the Nomic Foundation server (bundled with the Hardhat VS Code extension) or Juan Blanco's extension. These are the defaults. They've been around the longest and have the most installs.
+
+The question is whether "most installed" still means "best."
+
+## The benchmark
+
+We used [lsp-bench](https://github.com/mmsaki/lsp-bench), an open-source tool that sends real LSP requests over JSON-RPC stdio and measures latency, correctness, and memory. No mocks, no synthetic files. Real requests against real projects.
+
+**Target project:** Uniswap v4-core — `src/libraries/Pool.sol` (line 102, col 15)
+
+**Setup:** 10 iterations, 2 warmup, 10-second timeout per request, 15-second index timeout.
+
+Every server was given the same file, the same cursor position, the same machine. Either you respond in time, or you don't.
+
+## Results
+
+### Initialization
+
+How long does it take to start the server and be ready to handle requests?
+
+| Server | Mean | Status |
+|--------|------|--------|
+| **solidity-language-server** | **4.13ms** | Pass |
+| qiuxiang | 70.60ms | Pass |
+| solc | 116.04ms | Pass |
+| juanfranblanco | 524.35ms | Pass |
+| nomicfoundation | 882.34ms | Pass |
+
+All servers initialize. But the gap is already 200x between fastest and slowest. When you open a file, you either get instant code intelligence or you wait almost a full second.
+
+### Go to definition
+
+The most common LSP operation. Click a symbol, jump to where it's defined.
+
+| Server | Mean | Status |
+|--------|------|--------|
+| **solidity-language-server** | **8.95ms** | Pass |
+| solc | — | Empty result |
+| nomicfoundation | — | Timeout |
+| juanfranblanco | — | Connection failure |
+| qiuxiang | — | Timeout |
+
+One server returned a result. Four did not.
+
+### Go to declaration
+
+| Server | Mean | Status |
+|--------|------|--------|
+| **solidity-language-server** | **9.04ms** | Pass |
+| solc | — | Unsupported |
+| nomicfoundation | — | Timeout |
+| juanfranblanco | — | Connection failure |
+| qiuxiang | — | Timeout |
+
+### Hover
+
+Show type information and documentation for the symbol under the cursor.
+
+| Server | Mean | Status |
+|--------|------|--------|
+| **solidity-language-server** | **14.01ms** | Pass |
+| solc | — | Empty result |
+| nomicfoundation | — | Timeout |
+| juanfranblanco | — | Connection failure |
+| qiuxiang | — | Timeout |
+
+### Find all references
+
+Find every usage of a symbol across the entire workspace, including dependencies.
+
+| Server | Mean | Status |
+|--------|------|--------|
+| **solidity-language-server** | **11.06ms** | Pass |
+| solc | — | Unsupported |
+| nomicfoundation | — | Timeout |
+| juanfranblanco | — | Connection failure |
+| qiuxiang | — | Timeout |
+
+### Document symbols
+
+List all contracts, functions, events, and variables in a file.
+
+| Server | Mean | Status |
+|--------|------|--------|
+| **solidity-language-server** | **8.72ms** | Pass |
+| solc | — | Unsupported |
+| nomicfoundation | — | Timeout |
+| juanfranblanco | — | Connection failure |
+| qiuxiang | — | Timeout |
+
+### Diagnostics
+
+Compilation errors and warnings.
+
+| Server | Mean | Status |
+|--------|------|--------|
+| **solc** | **136.80ms** | Pass |
+| solidity-language-server | 454.45ms | Pass |
+| nomicfoundation | — | Timeout |
+| juanfranblanco | — | Connection failure |
+| qiuxiang | — | Timeout |
+
+Solc wins diagnostics — it is the compiler. solidity-language-server delegates to solc for diagnostics so the overhead is the LSP layer. Both produce results. The other three do not.
+
+### Document links
+
+Clickable import paths and type references.
+
+| Server | Mean | Status |
+|--------|------|--------|
+| **solidity-language-server** | **64.32ms** | Pass |
+| solc | — | Unsupported |
+| nomicfoundation | — | Timeout |
+| juanfranblanco | — | Connection failure |
+| qiuxiang | — | Timeout |
+
+## Scorecard
+
+| Server | Gold | Silver | Bronze | Score | Features working |
+|--------|------|--------|--------|-------|------------------|
+| **solidity-language-server** | **7** | **1** | **0** | **23** | **8/8** |
+| solc | 1 | 0 | 1 | 4 | 3/8 |
+| qiuxiang | 0 | 1 | 0 | 2 | 1/8 |
+| nomicfoundation | 0 | 0 | 0 | 0 | 1/8 |
+| juanfranblanco | 0 | 0 | 0 | 0 | 0/8 |
+
+## Memory
+
+| Server | Peak RSS |
+|--------|----------|
+| solc | 26.2 MB |
+| **solidity-language-server** | **39.7 MB** |
+| qiuxiang | 70.1 MB |
+| nomicfoundation | 513.5 MB |
+
+solidity-language-server uses 39.7 MB while supporting 26 LSP methods. Nomic Foundation uses 513 MB and timed out on 7 of 8 benchmarks.
+
+## Why the others fail on v4-core
+
+Uniswap v4-core is not a toy project. It has deep import graphs, transient storage, custom types, and hundreds of cross-file references. Most Solidity language servers were built for small projects — a few contracts, a flat directory.
+
+When you scale to a real codebase:
+
+- **Nomic Foundation** re-analyzes the full project on every request. At v4-core scale, this exceeds any reasonable timeout.
+- **Juan Blanco** crashes during the diagnostic phase. It never reaches the navigation features.
+- **qiuxiang** initializes quickly but cannot complete any navigation request within 10 seconds.
+- **solc --lsp** returns results for diagnostics but leaves most LSP methods unimplemented or empty.
+
+These aren't edge cases. v4-core is the kind of project that Solidity developers actually work on.
+
+## What solidity-language-server does differently
+
+**Written in Rust.** Parsing, indexing, and navigation are all native. No JavaScript runtime, no garbage collection pauses.
+
+**Two-phase indexing.** Phase 1 compiles the src-closure for immediate code intelligence. Phase 2 compiles the full closure (src + test + script) in the background. You get results before the full index is built.
+
+**Parallel sub-cache compilation.** Library sub-projects build concurrently. On a real project with 1000+ library files, indexing completes in seconds, not minutes.
+
+**Stable cross-build file IDs.** A custom `PathInterner` assigns deterministic file IDs so references resolve correctly across compilation boundaries. This is what makes cross-dependency "Find All References" work — every file in `dependencies/`, `src/`, `test/`, and `script/` is in the same ID space.
+
+**Interface/implementation equivalence.** "Find All References" on `PoolManager.swap` returns call sites that reference `IPoolManager.swap`, and vice versa. This is how references should work in Solidity, but most servers don't do it.
+
+## Beyond navigation
+
+solidity-language-server implements 26 LSP methods — more than any other Solidity language server:
+
+- Go to definition, declaration, implementation
+- Find all references (cross-dependency, interface-aware)
+- Call hierarchy (incoming and outgoing)
+- Hover with NatSpec, selectors, and `@inheritdoc` resolution
+- Completions (scope-aware, import path completions)
+- Rename (project-wide, qualifier-aware)
+- Diagnostics (solc + forge lint)
+- Code actions (unused-import quickfix)
+- Inlay hints, semantic tokens, signature help
+- File operations (scaffold on create, update imports on rename/delete)
+- Formatting via `forge fmt`
+
+## AI agent support
+
+Language servers aren't just for editors anymore. AI coding agents — Claude Code, OpenCode, Codex — benefit from the same code intelligence.
+
+| Agent | Integration |
+|-------|------------|
+| [OpenCode](https://solidity-language-server-docs.pages.dev/agents/opencode) | Direct LSP over stdio |
+| [Claude Code](https://solidity-language-server-docs.pages.dev/agents/claude) | LSP via [plugin](https://github.com/mmsaki/solidity-language-server-plugin) |
+| [Codex](https://solidity-language-server-docs.pages.dev/agents/codex) | `AGENTS.md` + shell commands |
+
+When an AI agent can call `findReferences` and get 506 semantic results in 5ms instead of running `grep` and getting 587 noisy text matches, it writes better code. The language server becomes the agent's understanding of the codebase.
+
+## See it in action
+
+A full video tour of every feature is on X/Twitter: [@solidity_lsp feature thread](https://x.com/solidity_lsp/status/2038680250859561008)
+
+The thread walks through 16 features with short recordings:
+
+1. **Go to Definition** — jump to any symbol across files
+2. **Go to Declaration** — navigate to the declaration site
+3. **Go to Implementation** — jump from interface to concrete implementation
+4. **Find All References** — every usage across the workspace, including dependencies
+5. **Hover** — type signatures, NatSpec docs, function selectors
+6. **Completions** — scope-aware suggestions and import path completions
+7. **Signature Help** — parameter info on function calls and events
+8. **Diagnostics** — solc errors and forge lint warnings inline
+9. **Rename** — project-wide rename for variables, functions, contracts, aliases, and user-defined types
+10. **Document Symbols** — nested hierarchy in the editor outline view
+11. **Formatting** — format on save via `forge fmt`
+12. **Inlay Hints** — named parameters at call sites and on events
+13. **Code Actions** — quick fixes like removing unused imports
+14. **Will Create Files** — templates for `.sol`, `.t.sol`, and `.s.sol` files
+15. **Will Rename Files** — automatic import path updates on file rename
+16. **Incoming & Outgoing Calls** — trace the full call graph in both directions
+
+Every feature shown works at sub-15ms latency on production codebases.
+
+## Install
+
+```sh
+cargo install solidity-language-server
+```
+
+Or use the install script:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mmsaki/solidity-language-server/main/install.sh | sh
+```
+
+Editor setup: [Neovim](https://solidity-language-server-docs.pages.dev/setup/neovim) | [VS Code](https://solidity-language-server-docs.pages.dev/setup/vscode) | [Helix](https://solidity-language-server-docs.pages.dev/setup/helix) | [Zed](https://solidity-language-server-docs.pages.dev/setup/zed) | [Vim](https://solidity-language-server-docs.pages.dev/setup/vim) | [Emacs](https://solidity-language-server-docs.pages.dev/setup/emacs)
+
+## Reproduce the benchmarks
+
+All benchmarks are reproducible. Clone [lsp-bench](https://github.com/mmsaki/lsp-bench), install the servers, and run:
+
+```sh
+lsp-bench -c benchmarks/v4-core/config.yaml -s benchmarks/v4-core/servers.yaml
+```
+
+Full results: [lsp-bench/benchmarks/v4-core](https://github.com/mmsaki/lsp-bench/tree/main/benchmarks/v4-core)
+
+## Conclusion
+
+The Solidity language server ecosystem in 2026 has a clear performance leader. On real-world codebases, most existing servers either time out or crash. solidity-language-server is the only one that handles production-scale Solidity projects with sub-15ms latency across the full LSP feature set.
+
+The benchmarks are open. The tool is open. Try it on your codebase and see for yourself.
+
+---
+
+*Benchmark data from [lsp-bench](https://github.com/mmsaki/lsp-bench), run 2026-02-13. All servers tested on the same machine against Uniswap v4-core.*
