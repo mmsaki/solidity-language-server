@@ -81,7 +81,7 @@ Use the docs for complete editor-specific setup and config examples:
 ## AI Agents
 
 - [OpenCode](https://solidity-language-server-docs.pages.dev/agents/opencode) — direct LSP integration
-- [Claude Code](https://solidity-language-server-docs.pages.dev/agents/claude) — `CLAUDE.md` + shell commands
+- [Claude Code](https://solidity-language-server-docs.pages.dev/agents/claude) — LSP via [plugin](https://github.com/mmsaki/solidity-language-server-plugin)
 - [Codex](https://solidity-language-server-docs.pages.dev/agents/codex) — `AGENTS.md` + shell commands
 
 Minimal LSP command:

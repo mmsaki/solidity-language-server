@@ -1,3 +1,58 @@
 # Claude Code
 
-Work in progress.
+Claude Code supports Solidity language server through the official plugin system.
+
+## Install the Plugin
+
+1. Add the marketplace:
+
+```
+/plugin marketplace add mmsaki/solidity-language-server-plugin
+```
+
+2. Install the plugin:
+
+```
+/plugin install solidity-language-server@mmsaki
+```
+
+3. Reload plugins:
+
+```
+/reload-plugins
+```
+
+## Prerequisites
+
+The language server binary must be installed and available in your `PATH`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mmsaki/solidity-language-server/main/install.sh | sh
+```
+
+Or install from Cargo:
+
+```sh
+cargo install solidity-language-server
+```
+
+## LSP Features
+
+Once the plugin is installed, Claude Code can use the LSP tool on `.sol` files:
+
+| Operation | Description |
+|-----------|-------------|
+| `goToDefinition` | Find where a symbol is defined |
+| `findReferences` | Find all references to a symbol |
+| `hover` | Get documentation and type info |
+| `documentSymbol` | List all symbols in a file |
+| `workspaceSymbol` | Search symbols across the workspace |
+| `goToImplementation` | Find implementations of interfaces |
+| `incomingCalls` | Find callers of a function |
+| `outgoingCalls` | Find functions called by a function |
+
+## How It Works
+
+The plugin registers `solidity-language-server --stdio` as the LSP server for `.sol` files. Claude Code launches the server automatically when you use LSP operations on Solidity files.
+
+Source: [mmsaki/solidity-language-server-plugin](https://github.com/mmsaki/solidity-language-server-plugin)
