@@ -20,7 +20,7 @@ Go-to-definition must work in two very different editor states:
 In the clean state, AST byte offsets are reliable and fast.  
 In the dirty state, offsets can drift, so name/scope-based resolution is safer.
 
-This behavior was introduced to address the dirty-buffer reliability issue reported in [#2](https://github.com/mmsaki/solidity-language-server/issues/2).
+This behavior was introduced to address the dirty-buffer reliability issue reported in [#2](https://github.com/asyncswap/solidity-language-server/issues/2).
 
 ## Runtime flow
 

@@ -135,4 +135,4 @@ Or grab a pre-built binary from the release page.
 
 Benchmark source: [mmsaki/lsp-bench](https://github.com/mmsaki/lsp-bench)
 
-The server: [mmsaki/solidity-language-server](https://github.com/mmsaki/solidity-language-server)
+The server: [asyncswap/solidity-language-server](https://github.com/asyncswap/solidity-language-server)

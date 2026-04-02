@@ -11,7 +11,7 @@
   "params": {
     "files": [
       {
-        "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/NewContract.sol"
+        "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/NewContract.sol"
       }
     ]
   }
@@ -23,12 +23,12 @@
 **mmsaki** (0.1ms) — {"changes":{"file:///Users/meek/develope...
 
 <details>
-<summary>Summary: <code>{ changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/example/NewContract.sol: Array(1) [{ newTex...</code></summary>
+<summary>Summary: <code>{ changes: { file:///Users/meek/developer/asyncswap/solidity-language-server/example/NewContract.sol: Array(1) [{ newTex...</code></summary>
 
 ```json
 {
   "changes": {
-    "file:///Users/meek/developer/mmsaki/solidity-language-server/example/NewContract.sol": [
+    "file:///Users/meek/developer/asyncswap/solidity-language-server/example/NewContract.sol": [
       {
         "newText": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\ncontract NewContract {\n\n}\n",
         "range": {

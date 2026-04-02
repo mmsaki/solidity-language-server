@@ -33,7 +33,7 @@ const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Check GitHub releases for a newer version and notify the user.
 async fn check_for_updates(client: Client) {
-    let url = "https://api.github.com/repos/mmsaki/solidity-language-server/releases/latest";
+    let url = "https://api.github.com/repos/asyncswap/solidity-language-server/releases/latest";
 
     let http = match reqwest::Client::builder()
         .user_agent("solidity-language-server")

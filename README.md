@@ -1,9 +1,9 @@
 # The Solidity Language Server
 
 [![Crates.io](https://img.shields.io/crates/v/solidity-language-server)](https://crates.io/crates/solidity-language-server)
-[![Tests](https://github.com/mmsaki/solidity-language-server/actions/workflows/test.yml/badge.svg)](https://github.com/mmsaki/solidity-language-server/actions/workflows/test.yml)
-[![Release](https://github.com/mmsaki/solidity-language-server/actions/workflows/release.yml/badge.svg)](https://github.com/mmsaki/solidity-language-server/actions/workflows/release.yml)
-[![GitHub Release](https://img.shields.io/github/v/release/mmsaki/solidity-language-server)](https://github.com/mmsaki/solidity-language-server/releases/latest)
+[![Tests](https://github.com/asyncswap/solidity-language-server/actions/workflows/test.yml/badge.svg)](https://github.com/asyncswap/solidity-language-server/actions/workflows/test.yml)
+[![Release](https://github.com/asyncswap/solidity-language-server/actions/workflows/release.yml/badge.svg)](https://github.com/asyncswap/solidity-language-server/actions/workflows/release.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/asyncswap/solidity-language-server)](https://github.com/asyncswap/solidity-language-server/releases/latest)
 [![Telegram](https://img.shields.io/badge/Telegram-Join%20Chat-blue?logo=telegram)](https://t.me/+R1lW7xWJ55tlYzcx)
 
 The fastest Solidity language server — optimized for low-latency go-to-definition/declaration, references, hover, completions, and file operations. See [benchmarks](https://github.com/mmsaki/lsp-bench).
@@ -11,7 +11,7 @@ The fastest Solidity language server — optimized for low-latency go-to-definit
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/mmsaki/solidity-language-server/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/asyncswap/solidity-language-server/main/install.sh | sh
 ```
 
 ### Alternative: Install from Cargo
@@ -20,13 +20,13 @@ curl -fsSL https://raw.githubusercontent.com/mmsaki/solidity-language-server/mai
 cargo install solidity-language-server
 ```
 
-Or build from source, or download a pre-built binary from the [latest release](https://github.com/mmsaki/solidity-language-server/releases/latest).
+Or build from source, or download a pre-built binary from the [latest release](https://github.com/asyncswap/solidity-language-server/releases/latest).
 
 ## Benchmarks
 
 Benchmarked against `v4-core` — `test/PoolManager.t.sol` (`v0.1.30`, p95 latency).
 
-| Method | [mmsaki v0.1.30](https://github.com/mmsaki/solidity-language-server/releases/tag/v0.1.30) |
+| Method | [mmsaki v0.1.30](https://github.com/asyncswap/solidity-language-server/releases/tag/v0.1.30) |
 |--------|--------|
 | initialize | 22.4ms ⚡ |
 | textDocument/diagnostic | 2.8ms ⚡ |
@@ -81,7 +81,7 @@ Use the docs for complete editor-specific setup and config examples:
 ## AI Agents
 
 - [OpenCode](https://solidity-language-server-docs.pages.dev/agents/opencode) — direct LSP integration
-- [Claude Code](https://solidity-language-server-docs.pages.dev/agents/claude) — LSP via [plugin](https://github.com/mmsaki/solidity-language-server-plugin)
+- [Claude Code](https://solidity-language-server-docs.pages.dev/agents/claude) — LSP via [plugin](https://github.com/asyncswap/solidity-language-server-plugin)
 - [Codex](https://solidity-language-server-docs.pages.dev/agents/codex) — `AGENTS.md` + shell commands
 
 Minimal LSP command:
@@ -92,7 +92,7 @@ solidity-language-server --stdio
 
 ## Verify Release Binaries
 
-Release binaries are GPG-signed. Download `checksums-sha256.txt`, `checksums-sha256.txt.asc`, and [`public-key.asc`](public-key.asc) from the [release](https://github.com/mmsaki/solidity-language-server/releases/latest):
+Release binaries are GPG-signed. Download `checksums-sha256.txt`, `checksums-sha256.txt.asc`, and [`public-key.asc`](public-key.asc) from the [release](https://github.com/asyncswap/solidity-language-server/releases/latest):
 
 ```sh
 gpg --import public-key.asc

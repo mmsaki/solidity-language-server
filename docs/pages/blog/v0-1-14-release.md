@@ -67,4 +67,4 @@ The benchmarks are fully reproducible. Clone the repo, build with cargo, and run
 
 Benchmark source: [mmsaki/lsp-bench](https://github.com/mmsaki/lsp-bench)
 
-The LSP server: [mmsaki/solidity-language-server](https://github.com/mmsaki/solidity-language-server)
+The LSP server: [asyncswap/solidity-language-server](https://github.com/asyncswap/solidity-language-server)

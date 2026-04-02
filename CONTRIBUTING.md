@@ -9,7 +9,7 @@
 ## Setup
 
 ```sh
-git clone https://github.com/mmsaki/solidity-language-server.git
+git clone https://github.com/asyncswap/solidity-language-server.git
 cd solidity-language-server
 cargo build --release
 cargo test

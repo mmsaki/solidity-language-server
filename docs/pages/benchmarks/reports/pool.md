@@ -15,7 +15,7 @@ Benchmarked against `v4-core` — `src/libraries/Pool.sol`.
 
 | Server | Version |
 |--------|---------|
-| [mmsaki](https://github.com/mmsaki/solidity-language-server/releases/tag/v0.1.30) | `0.1.30` |
+| [mmsaki](https://github.com/asyncswap/solidity-language-server/releases/tag/v0.1.30) | `0.1.30` |
 
 ---
 

@@ -27,12 +27,12 @@
 **latest** (2.5ms, 10.2 MB) — 0 diagnostics
 
 <details>
-<summary>Summary: <code>{ diagnostics: [], uri: "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol" }</code></summary>
+<summary>Summary: <code>{ diagnostics: [], uri: "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol" }</code></summary>
 
 ```json
 {
   "diagnostics": [],
-  "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+  "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
 }
 ```
 </details>
@@ -74,7 +74,7 @@
       "line": 136
     },
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -99,7 +99,7 @@
       "line": 41
     }
   },
-  "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+  "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
 }
 ```
 </details>
@@ -120,7 +120,7 @@
       "line": 136
     },
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -145,7 +145,7 @@
       "line": 41
     }
   },
-  "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+  "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
 }
 ```
 </details>
@@ -166,7 +166,7 @@
       "line": 136
     },
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -209,7 +209,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
       "line": 136
     },
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -235,7 +235,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
         "line": 41
       }
     },
-    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+    "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
   },
   {
     "range": {
@@ -248,7 +248,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
         "line": 136
       }
     },
-    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+    "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
   }
 ]
 ```
@@ -274,7 +274,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
       "line": 136
     },
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -322,7 +322,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
       "line": 136
     },
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -386,7 +386,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
       "line": 136
     },
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -397,12 +397,12 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
 **latest** (2.3ms, 15.2 MB) — 2 edits in 1 files
 
 <details>
-<summary>Summary: <code>{ changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol: Array(2) [{ newText: "__l...</code></summary>
+<summary>Summary: <code>{ changes: { file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol: Array(2) [{ newText: "__l...</code></summary>
 
 ```json
 {
   "changes": {
-    "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol": [
+    "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol": [
       {
         "newText": "__lsp_bench_rename__",
         "range": {
@@ -451,7 +451,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
       "line": 136
     },
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -490,7 +490,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
   "method": "textDocument/documentSymbol",
   "params": {
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -942,7 +942,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
       "line": 136
     },
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -999,7 +999,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
   "method": "textDocument/documentLink",
   "params": {
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -1025,8 +1025,8 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
         "line": 265
       }
     },
-    "target": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/A.sol",
-    "tooltip": "/Users/meek/developer/mmsaki/solidity-language-server/example/A.sol"
+    "target": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/A.sol",
+    "tooltip": "/Users/meek/developer/asyncswap/solidity-language-server/example/A.sol"
   }
 ]
 ```
@@ -1048,7 +1048,7 @@ function addTax(uint256 amount, uint16 tax, uint16 base) internal...</code></sum
       "tabSize": 4
     },
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -1096,7 +1096,7 @@ pragma solidity ^0.8.0;
   "method": "textDocument/foldingRange",
   "params": {
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -1164,7 +1164,7 @@ pragma solidity ^0.8.0;
       }
     ],
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -1301,7 +1301,7 @@ pragma solidity ^0.8.0;
       }
     },
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -1378,7 +1378,7 @@ pragma solidity ^0.8.0;
   "method": "textDocument/semanticTokens/full",
   "params": {
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -1428,7 +1428,7 @@ pragma solidity ^0.8.0;
       }
     },
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -1493,7 +1493,7 @@ pragma solidity ^0.8.0;
           "line": 21
         }
       },
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     },
     "name": "Transaction"
   },
@@ -1511,7 +1511,7 @@ pragma solidity ^0.8.0;
           "line": 28
         }
       },
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     },
     "name": "Order"
   },
@@ -1529,7 +1529,7 @@ pragma solidity ^0.8.0;
           "line": 29
         }
       },
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     },
     "name": "buyer"
   },
@@ -1547,7 +1547,7 @@ pragma solidity ^0.8.0;
           "line": 30
         }
       },
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     },
     "name": "nonce"
   },
@@ -1565,7 +1565,7 @@ pragma solidity ^0.8.0;
           "line": 31
         }
       },
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     },
     "name": "amount"
   },
@@ -1587,8 +1587,8 @@ pragma solidity ^0.8.0;
   "params": {
     "files": [
       {
-        "newUri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/__lsp_bench_renamed__.sol",
-        "oldUri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+        "newUri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/__lsp_bench_renamed__.sol",
+        "oldUri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
       }
     ]
   }
@@ -1612,7 +1612,7 @@ pragma solidity ^0.8.0;
   "params": {
     "files": [
       {
-        "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/__lsp_bench_created__.sol"
+        "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/__lsp_bench_created__.sol"
       }
     ]
   }
@@ -1636,7 +1636,7 @@ pragma solidity ^0.8.0;
   "params": {
     "files": [
       {
-        "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+        "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
       }
     ]
   }
@@ -1714,7 +1714,7 @@ pragma solidity ^0.8.0;
     ],
     "edit": {
       "changes": {
-        "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol": [
+        "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol": [
           {
             "newText": "",
             "range": {

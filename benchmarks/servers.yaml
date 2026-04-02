@@ -7,7 +7,7 @@
 
 mmsaki:
   cmd: solidity-language-server
-  link: https://github.com/mmsaki/solidity-language-server
+  link: https://github.com/asyncswap/solidity-language-server
   versions:
     v0.1.17:
       cmd: /Users/meek/.solidity-lsp/0.1.17/bin/solidity-language-server
@@ -26,7 +26,7 @@ mmsaki:
     v0.1.25:
       cmd: ./target/release/solidity-language-server
     latest:
-      cmd: /Users/meek/developer/mmsaki/solidity-language-server/target/release/solidity-language-server
+      cmd: /Users/meek/developer/asyncswap/solidity-language-server/target/release/solidity-language-server
 
 solc:
   cmd: solc

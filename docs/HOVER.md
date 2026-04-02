@@ -390,7 +390,7 @@ cat pool-manager-ast.json | jq '.. | objects | select(.eventSelector != null) | 
 cat pool-manager-ast.json | jq '.. | objects | select(.name == "extsload" and .nodeType == "FunctionDefinition") | {id, name, functionSelector, scope}'
 
 # userdoc/devdoc from solc contract output (poolmanager.json)
-PM='.contracts["/Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/PoolManager.sol"]["PoolManager"]'
+PM='.contracts["/Users/meek/developer/asyncswap/solidity-language-server/v4-core/src/PoolManager.sol"]["PoolManager"]'
 
 # List all userdoc method keys (canonical ABI signatures)
 cat poolmanager.json | jq "$PM.userdoc.methods | keys"

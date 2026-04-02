@@ -11,8 +11,8 @@
   "params": {
     "files": [
       {
-        "newUri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/AA.sol",
-        "oldUri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/A.sol"
+        "newUri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/AA.sol",
+        "oldUri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/A.sol"
       }
     ]
   }
@@ -24,12 +24,12 @@
 **mmsaki** (0.2ms) — 1 edits in 1 files
 
 <details>
-<summary>Summary: <code>{ changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/example/B.sol: Array(1) [{ newText: ""./AA....</code></summary>
+<summary>Summary: <code>{ changes: { file:///Users/meek/developer/asyncswap/solidity-language-server/example/B.sol: Array(1) [{ newText: ""./AA....</code></summary>
 
 ```json
 {
   "changes": {
-    "file:///Users/meek/developer/mmsaki/solidity-language-server/example/B.sol": [
+    "file:///Users/meek/developer/asyncswap/solidity-language-server/example/B.sol": [
       {
         "newText": "\"./AA.sol\"",
         "range": {

@@ -1,12 +1,12 @@
 #!/usr/bin/env sh
 # Install solidity-language-server from GitHub releases
-# Usage: curl -fsSL https://raw.githubusercontent.com/mmsaki/solidity-language-server/main/install.sh | sh
+# Usage: curl -fsSL https://raw.githubusercontent.com/asyncswap/solidity-language-server/main/install.sh | sh
 
 set -e
 
 main() {
 
-REPO="mmsaki/solidity-language-server"
+REPO="asyncswap/solidity-language-server"
 BINARY="solidity-language-server"
 DOCS_URL="https://solidity-language-server-docs.pages.dev"
 
@@ -260,7 +260,7 @@ setup_vim() {
     if confirm_append "$VIMRC" "solidity-language-server"; then
         cat >> "$VIMRC" << 'VIMRC_CONTENT'
 
-" Solidity language server (https://github.com/mmsaki/solidity-language-server)
+" Solidity language server (https://github.com/asyncswap/solidity-language-server)
 if executable('solidity-language-server')
   au User lsp_setup call lsp#register_server({
       \ 'name': 'solidity-language-server',

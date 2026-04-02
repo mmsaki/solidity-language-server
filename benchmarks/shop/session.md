@@ -65,7 +65,7 @@
       "source": "forge-lint"
     }
   ],
-  "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+  "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
 }
 ```
 </details>
@@ -107,7 +107,7 @@
       "line": 137
     },
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -132,7 +132,7 @@
       "line": 68
     }
   },
-  "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+  "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
 }
 ```
 </details>
@@ -153,7 +153,7 @@
       "line": 137
     },
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -178,7 +178,7 @@
       "line": 69
     }
   },
-  "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+  "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
 }
 ```
 </details>
@@ -199,7 +199,7 @@
       "line": 42
     },
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -248,7 +248,7 @@ Utility lib...</code></summary>
       "line": 70
     },
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -274,7 +274,7 @@ Utility lib...</code></summary>
         "line": 61
       }
     },
-    "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+    "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
   }
 ]
 ```
@@ -300,7 +300,7 @@ Utility lib...</code></summary>
       "line": 160
     },
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -363,7 +363,7 @@ Utility lib...</code></summary>
       "line": 137
     },
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -427,7 +427,7 @@ Utility lib...</code></summary>
       "line": 70
     },
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -463,7 +463,7 @@ Utility lib...</code></summary>
       "line": 137
     },
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -502,7 +502,7 @@ Utility lib...</code></summary>
   "method": "textDocument/documentSymbol",
   "params": {
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -954,7 +954,7 @@ Utility lib...</code></summary>
       "line": 137
     },
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -1037,7 +1037,7 @@ Utility lib...</code></summary>
   "method": "textDocument/documentLink",
   "params": {
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -1063,8 +1063,8 @@ Utility lib...</code></summary>
         "line": 2
       }
     },
-    "target": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/A.sol",
-    "tooltip": "/Users/meek/developer/mmsaki/solidity-language-server/example/A.sol"
+    "target": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/A.sol",
+    "tooltip": "/Users/meek/developer/asyncswap/solidity-language-server/example/A.sol"
   }
 ]
 ```
@@ -1086,7 +1086,7 @@ Utility lib...</code></summary>
       "tabSize": 4
     },
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -1132,7 +1132,7 @@ import {A} from "./A....", range: { end...</code></summary>
   "method": "textDocument/foldingRange",
   "params": {
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -1200,7 +1200,7 @@ import {A} from "./A....", range: { end...</code></summary>
       }
     ],
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -1349,7 +1349,7 @@ import {A} from "./A....", range: { end...</code></summary>
       }
     },
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -1426,7 +1426,7 @@ import {A} from "./A....", range: { end...</code></summary>
   "method": "textDocument/semanticTokens/full",
   "params": {
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -1476,7 +1476,7 @@ import {A} from "./A....", range: { end...</code></summary>
       }
     },
     "textDocument": {
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     }
   }
 }
@@ -1541,7 +1541,7 @@ import {A} from "./A....", range: { end...</code></summary>
           "line": 22
         }
       },
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     },
     "name": "Transaction"
   },
@@ -1559,7 +1559,7 @@ import {A} from "./A....", range: { end...</code></summary>
           "line": 29
         }
       },
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     },
     "name": "Order"
   },
@@ -1577,7 +1577,7 @@ import {A} from "./A....", range: { end...</code></summary>
           "line": 30
         }
       },
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     },
     "name": "buyer"
   },
@@ -1595,7 +1595,7 @@ import {A} from "./A....", range: { end...</code></summary>
           "line": 31
         }
       },
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     },
     "name": "nonce"
   },
@@ -1613,7 +1613,7 @@ import {A} from "./A....", range: { end...</code></summary>
           "line": 32
         }
       },
-      "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+      "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
     },
     "name": "amount"
   },
@@ -1635,8 +1635,8 @@ import {A} from "./A....", range: { end...</code></summary>
   "params": {
     "files": [
       {
-        "newUri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/__lsp_bench_renamed__.sol",
-        "oldUri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+        "newUri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/__lsp_bench_renamed__.sol",
+        "oldUri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
       }
     ]
   }
@@ -1648,12 +1648,12 @@ import {A} from "./A....", range: { end...</code></summary>
 **mmsaki** (4.1ms, 14.4 MB) — 1 edits in 1 files
 
 <details>
-<summary>Summary: <code>{ changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol: Array(1) [{ newText: ""./...</code></summary>
+<summary>Summary: <code>{ changes: { file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol: Array(1) [{ newText: ""./...</code></summary>
 
 ```json
 {
   "changes": {
-    "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol": [
+    "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol": [
       {
         "newText": "\"./AA.sol\"",
         "range": {
@@ -1686,7 +1686,7 @@ import {A} from "./A....", range: { end...</code></summary>
   "params": {
     "files": [
       {
-        "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/__lsp_bench_created__.sol"
+        "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/__lsp_bench_created__.sol"
       }
     ]
   }
@@ -1710,7 +1710,7 @@ import {A} from "./A....", range: { end...</code></summary>
   "params": {
     "files": [
       {
-        "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol"
+        "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol"
       }
     ]
   }
@@ -1722,12 +1722,12 @@ import {A} from "./A....", range: { end...</code></summary>
 **mmsaki** (1.6ms, 14.4 MB) — {"changes":{"file:///Users/meek/develope...
 
 <details>
-<summary>Summary: <code>{ changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol: Array(1) [{ newText: "", ...</code></summary>
+<summary>Summary: <code>{ changes: { file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol: Array(1) [{ newText: "", ...</code></summary>
 
 ```json
 {
   "changes": {
-    "file:///Users/meek/developer/mmsaki/solidity-language-server/example/Shop.sol": [
+    "file:///Users/meek/developer/asyncswap/solidity-language-server/example/Shop.sol": [
       {
         "newText": "",
         "range": {

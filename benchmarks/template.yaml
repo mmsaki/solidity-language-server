@@ -25,5 +25,5 @@ exclude:
 
 servers:
   - label: mmsaki
-    link: https://github.com/mmsaki/solidity-language-server
+    link: https://github.com/asyncswap/solidity-language-server
     cmd: solidity-language-server

@@ -5,8 +5,8 @@ version = "0.1.32"
 edition = "2024"
 license = "MIT"
 readme = "README.md"
-homepage = "https://github.com/mmsaki/solidity-language-server"
-repository = "https://github.com/mmsaki/solidity-language-server"
+homepage = "https://github.com/asyncswap/solidity-language-server"
+repository = "https://github.com/asyncswap/solidity-language-server"
 keywords = ["language-server", "solidity", "lsp"]
 exclude = ["poolmanager.json", "v4-core"]
 

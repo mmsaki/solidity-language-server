@@ -10,7 +10,7 @@ Five Solidity language servers exist today:
 
 | Server | Language | Maintainer | Status | Last commit |
 |--------|----------|------------|--------|-------------|
-| [solidity-language-server](https://github.com/mmsaki/solidity-language-server) | Rust | mmsaki | Active | April 2026 |
+| [solidity-language-server](https://github.com/asyncswap/solidity-language-server) | Rust | mmsaki | Active | April 2026 |
 | [solc --lsp](https://docs.soliditylang.org/) | C++ | Solidity team | Inactive | LSP abandoned |
 | [nomicfoundation-solidity-ls](https://github.com/NomicFoundation/hardhat-vscode) | TypeScript | Nomic Foundation | Active | March 2026 |
 | [vscode-solidity](https://github.com/juanfranblanco/vscode-solidity) | TypeScript | Juan Blanco | Stale | November 2025 |
@@ -207,7 +207,7 @@ Language servers aren't just for editors anymore. AI coding agents — Claude Co
 | Agent | Integration |
 |-------|------------|
 | [OpenCode](https://solidity-language-server-docs.pages.dev/agents/opencode) | Direct LSP over stdio |
-| [Claude Code](https://solidity-language-server-docs.pages.dev/agents/claude) | LSP via [plugin](https://github.com/mmsaki/solidity-language-server-plugin) |
+| [Claude Code](https://solidity-language-server-docs.pages.dev/agents/claude) | LSP via [plugin](https://github.com/asyncswap/solidity-language-server-plugin) |
 | [Codex](https://solidity-language-server-docs.pages.dev/agents/codex) | `AGENTS.md` + shell commands |
 
 When an AI agent can call `findReferences` and get 506 semantic results in 5ms instead of running `grep` and getting 587 noisy text matches, it writes better code. The language server becomes the agent's understanding of the codebase.
@@ -246,7 +246,7 @@ cargo install solidity-language-server
 Or use the install script:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/mmsaki/solidity-language-server/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/asyncswap/solidity-language-server/main/install.sh | sh
 ```
 
 Editor setup: [Neovim](https://solidity-language-server-docs.pages.dev/setup/neovim) | [VS Code](https://solidity-language-server-docs.pages.dev/setup/vscode) | [Helix](https://solidity-language-server-docs.pages.dev/setup/helix) | [Zed](https://solidity-language-server-docs.pages.dev/setup/zed) | [Vim](https://solidity-language-server-docs.pages.dev/setup/vim) | [Emacs](https://solidity-language-server-docs.pages.dev/setup/emacs)

@@ -69,7 +69,7 @@ export default defineConfig({
   ],
   topNav: [
     { text: "CHANGELOG", link: "/changelog" },
-    { text: "GitHub", link: "https://github.com/mmsaki/solidity-language-server" },
+    { text: "GitHub", link: "https://github.com/asyncswap/solidity-language-server" },
     { text: "Crates.io", link: "https://crates.io/crates/solidity-language-server" }
   ]
 });

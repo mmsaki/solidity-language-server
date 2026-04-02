@@ -11,8 +11,8 @@
   "params": {
     "files": [
       {
-        "newUri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/__lsp_bench_renamed__.sol",
-        "oldUri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/B.sol"
+        "newUri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/__lsp_bench_renamed__.sol",
+        "oldUri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/B.sol"
       }
     ]
   }

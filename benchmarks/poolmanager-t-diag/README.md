@@ -15,7 +15,7 @@ Benchmarked against `v4-core` — `test/PoolManager.t.sol`.
 
 | Server | Version |
 |--------|---------|
-| [mmsaki v0.1.25](https://github.com/mmsaki/solidity-language-server) | `0.1.25` |
+| [mmsaki v0.1.25](https://github.com/asyncswap/solidity-language-server) | `0.1.25` |
 
 ---
 

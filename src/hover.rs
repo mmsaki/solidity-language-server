@@ -1891,7 +1891,7 @@ mod tests {
         );
 
         let pm_key = DocKey::Contract(
-            "/Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/PoolManager.sol:PoolManager".to_string(),
+            "/Users/meek/developer/asyncswap/solidity-language-server/v4-core/src/PoolManager.sol:PoolManager".to_string(),
         );
         let entry = index.get(&pm_key).expect("PoolManager contract entry");
         assert_eq!(entry.title.as_deref(), Some("PoolManager"));
@@ -2159,7 +2159,7 @@ mod tests {
         let index = build_doc_index(&ast);
 
         let key = DocKey::Contract(
-            "/Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/PoolManager.sol:PoolManager".to_string(),
+            "/Users/meek/developer/asyncswap/solidity-language-server/v4-core/src/PoolManager.sol:PoolManager".to_string(),
         );
         let entry = index.get(&key).expect("PoolManager contract entry");
         let formatted = format_doc_entry(entry);

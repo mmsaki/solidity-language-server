@@ -15,7 +15,7 @@ Benchmarked against `example` — `B.sol`.
 
 | Server | Version |
 |--------|---------|
-| [mmsaki](https://github.com/mmsaki/solidity-language-server/releases/tag/v0.1.25) | `0.1.25` |
+| [mmsaki](https://github.com/asyncswap/solidity-language-server/releases/tag/v0.1.25) | `0.1.25` |
 
 ---
 

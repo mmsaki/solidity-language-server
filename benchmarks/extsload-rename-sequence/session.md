@@ -11,8 +11,8 @@
   "params": {
     "files": [
       {
-        "newUri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/__lsp_bench_renamed__.sol",
-        "oldUri": "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/PoolManager.sol"
+        "newUri": "file:///Users/meek/developer/asyncswap/solidity-language-server/v4-core/src/__lsp_bench_renamed__.sol",
+        "oldUri": "file:///Users/meek/developer/asyncswap/solidity-language-server/v4-core/src/PoolManager.sol"
       }
     ]
   }
@@ -24,12 +24,12 @@
 **mmsaki** (93.1ms) — 3 edits in 3 files
 
 <details>
-<summary>Summary: <code>{ changes: { file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/PoolManager.sol: Array(1) [{ ne...</code></summary>
+<summary>Summary: <code>{ changes: { file:///Users/meek/developer/asyncswap/solidity-language-server/v4-core/src/PoolManager.sol: Array(1) [{ ne...</code></summary>
 
 ```json
 {
   "changes": {
-    "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/PoolManager.sol": [
+    "file:///Users/meek/developer/asyncswap/solidity-language-server/v4-core/src/PoolManager.sol": [
       {
         "newText": "\"./Extsloads.sol\"",
         "range": {
@@ -44,7 +44,7 @@
         }
       }
     ],
-    "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/src/test/ProxyPoolManager.sol": [
+    "file:///Users/meek/developer/asyncswap/solidity-language-server/v4-core/src/test/ProxyPoolManager.sol": [
       {
         "newText": "\"../Extsloads.sol\"",
         "range": {
@@ -59,7 +59,7 @@
         }
       }
     ],
-    "file:///Users/meek/developer/mmsaki/solidity-language-server/v4-core/test/Extsload.t.sol": [
+    "file:///Users/meek/developer/asyncswap/solidity-language-server/v4-core/test/Extsload.t.sol": [
       {
         "newText": "\"../src/Extsloads.sol\"",
         "range": {

@@ -11,7 +11,7 @@
   "params": {
     "files": [
       {
-        "uri": "file:///Users/meek/developer/mmsaki/solidity-language-server/example/A.sol"
+        "uri": "file:///Users/meek/developer/asyncswap/solidity-language-server/example/A.sol"
       }
     ]
   }

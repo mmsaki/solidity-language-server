@@ -1,4 +1,4 @@
-" Solidity language server (https://github.com/mmsaki/solidity-language-server)
+" Solidity language server (https://github.com/asyncswap/solidity-language-server)
 if executable('solidity-language-server')
   au User lsp_setup call lsp#register_server({
       \ 'name': 'solidity-language-server',
