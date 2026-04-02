@@ -543,14 +543,63 @@ mkdir -p "$SYMLINK_DIR"
 ln -sf "$INSTALL_DIR/$BIN_NAME" "$SYMLINK_DIR/$BIN_NAME"
 echo "Symlinked ${SYMLINK_DIR}/${BIN_NAME} -> ${TAG}"
 
-# Remind user to add to PATH if needed
+# Add to PATH if needed
+PATH_EXPORT='export PATH="$HOME/.solidity-language-server/bin:$PATH"'
 case ":$PATH:" in
-    *":${SYMLINK_DIR}:"*) ;;
+    *":${SYMLINK_DIR}:"*)
+        echo ""
+        echo "PATH already includes ${SYMLINK_DIR}"
+        ;;
     *)
-        echo ""
-        echo "Add this to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
-        echo ""
-        echo "  export PATH=\"\$HOME/.solidity-language-server/bin:\$PATH\""
+        # Detect shell rc file
+        SHELL_RC=""
+        case "$(basename "${SHELL:-/bin/sh}")" in
+            zsh)  SHELL_RC="${HOME}/.zshrc" ;;
+            bash)
+                if [ -f "${HOME}/.bashrc" ]; then
+                    SHELL_RC="${HOME}/.bashrc"
+                elif [ -f "${HOME}/.bash_profile" ]; then
+                    SHELL_RC="${HOME}/.bash_profile"
+                else
+                    SHELL_RC="${HOME}/.bashrc"
+                fi
+                ;;
+            fish)
+                # fish uses a different syntax
+                SHELL_RC=""
+                echo ""
+                echo "Add this to ~/.config/fish/config.fish:"
+                echo ""
+                echo "  set -gx PATH \$HOME/.solidity-language-server/bin \$PATH"
+                ;;
+            *)    SHELL_RC="${HOME}/.profile" ;;
+        esac
+
+        if [ -n "$SHELL_RC" ]; then
+            if [ -f "$SHELL_RC" ] && grep -qF '.solidity-language-server/bin' "$SHELL_RC" 2>/dev/null; then
+                echo ""
+                echo "PATH export already in ${SHELL_RC}"
+            else
+                printf "\nAdd solidity-language-server to PATH in %s? [Y/n] " "$SHELL_RC"
+                read -r PATH_REPLY < /dev/tty
+                case "$PATH_REPLY" in
+                    n|N)
+                        echo ""
+                        echo "Skipped. Add this manually to your shell profile:"
+                        echo ""
+                        echo "  ${PATH_EXPORT}"
+                        ;;
+                    *)
+                        echo "" >> "$SHELL_RC"
+                        echo "# solidity-language-server" >> "$SHELL_RC"
+                        echo "$PATH_EXPORT" >> "$SHELL_RC"
+                        echo "Added PATH export to ${SHELL_RC}"
+                        echo ""
+                        echo "Run 'source ${SHELL_RC}' or open a new terminal to use it."
+                        ;;
+                esac
+            fi
+        fi
         ;;
 esac
 
