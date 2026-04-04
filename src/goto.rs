@@ -12,17 +12,23 @@ use crate::utils::push_if_node_or_array;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeInfo {
     pub src: SrcLocation,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name_location: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub name_locations: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub referenced_declaration: Option<NodeId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub node_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub member_location: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub absolute_path: Option<String>,
     /// The AST `scope` field — the node ID of the containing declaration
     /// (contract, library, interface, function, etc.). Used to resolve the
     /// qualifier in qualified type paths like `Pool.State` where `scope`
     /// on the `State` struct points to the `Pool` library.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<NodeId>,
     /// The AST `baseFunctions` field — node IDs of interface/parent
     /// function declarations that this function implements or overrides.
@@ -30,7 +36,7 @@ pub struct NodeInfo {
     /// `VariableDeclaration` nodes. Used to build the bidirectional
     /// `base_function_implementation` index for interface ↔ implementation
     /// equivalence in references and call hierarchy.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub base_functions: Vec<NodeId>,
 }
 
@@ -2666,6 +2672,118 @@ contract B { uint256 public x; }
         let loc = find_best_declaration(source, &ctx, &uri).unwrap();
         // Should pick B's x (line 2), not A's x (line 1)
         assert_eq!(loc.range.start.line, 2);
+    }
+
+    /// Old cache format (explicit nulls/empty arrays) must still deserialize.
+    #[test]
+    fn node_info_deserialize_old_format_with_explicit_nulls() {
+        let json = r#"{
+            "src": "100:20:5",
+            "name_location": null,
+            "name_locations": [],
+            "referenced_declaration": null,
+            "node_type": "Block",
+            "member_location": null,
+            "absolute_path": null,
+            "scope": null,
+            "base_functions": []
+        }"#;
+        let info: NodeInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(info.src.as_str(), "100:20:5");
+        assert!(info.name_location.is_none());
+        assert!(info.name_locations.is_empty());
+        assert!(info.referenced_declaration.is_none());
+        assert_eq!(info.node_type.as_deref(), Some("Block"));
+        assert!(info.member_location.is_none());
+        assert!(info.absolute_path.is_none());
+        assert!(info.scope.is_none());
+        assert!(info.base_functions.is_empty());
+    }
+
+    /// New compact format (absent fields) must deserialize identically.
+    #[test]
+    fn node_info_deserialize_new_format_with_absent_fields() {
+        let json = r#"{
+            "src": "100:20:5",
+            "node_type": "Block"
+        }"#;
+        let info: NodeInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(info.src.as_str(), "100:20:5");
+        assert!(info.name_location.is_none());
+        assert!(info.name_locations.is_empty());
+        assert!(info.referenced_declaration.is_none());
+        assert_eq!(info.node_type.as_deref(), Some("Block"));
+        assert!(info.member_location.is_none());
+        assert!(info.absolute_path.is_none());
+        assert!(info.scope.is_none());
+        assert!(info.base_functions.is_empty());
+    }
+
+    /// Round-trip: serialize a sparse NodeInfo, then deserialize — nulls/empties must be omitted.
+    #[test]
+    fn node_info_round_trip_skips_null_empty() {
+        let info = NodeInfo {
+            src: crate::types::SrcLocation::new("50:10:3".to_string()),
+            name_location: None,
+            name_locations: vec![],
+            referenced_declaration: None,
+            node_type: Some("Identifier".to_string()),
+            member_location: None,
+            absolute_path: None,
+            scope: None,
+            base_functions: vec![],
+        };
+        let serialized = serde_json::to_string(&info).unwrap();
+        // Must NOT contain null-valued or empty-array keys
+        assert!(!serialized.contains("name_location"));
+        assert!(!serialized.contains("name_locations"));
+        assert!(!serialized.contains("referenced_declaration"));
+        assert!(!serialized.contains("member_location"));
+        assert!(!serialized.contains("absolute_path"));
+        assert!(!serialized.contains("scope"));
+        assert!(!serialized.contains("base_functions"));
+        // Must contain the populated fields
+        assert!(serialized.contains("\"src\""));
+        assert!(serialized.contains("\"node_type\""));
+
+        // Deserialize back and verify equality
+        let deserialized: NodeInfo = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized.src.as_str(), "50:10:3");
+        assert!(deserialized.name_location.is_none());
+        assert!(deserialized.base_functions.is_empty());
+    }
+
+    /// Round-trip: serialize a fully populated NodeInfo — all fields must be present.
+    #[test]
+    fn node_info_round_trip_preserves_populated_fields() {
+        use crate::types::NodeId;
+        let info = NodeInfo {
+            src: crate::types::SrcLocation::new("200:30:7".to_string()),
+            name_location: Some("205:4:7".to_string()),
+            name_locations: vec!["205:4:7".to_string(), "210:4:7".to_string()],
+            referenced_declaration: Some(NodeId(42)),
+            node_type: Some("FunctionDefinition".to_string()),
+            member_location: Some("220:6:7".to_string()),
+            absolute_path: Some("/src/Foo.sol".to_string()),
+            scope: Some(NodeId(10)),
+            base_functions: vec![NodeId(100), NodeId(200)],
+        };
+        let serialized = serde_json::to_string(&info).unwrap();
+        // All fields must be present
+        assert!(serialized.contains("name_location"));
+        assert!(serialized.contains("name_locations"));
+        assert!(serialized.contains("referenced_declaration"));
+        assert!(serialized.contains("member_location"));
+        assert!(serialized.contains("absolute_path"));
+        assert!(serialized.contains("scope"));
+        assert!(serialized.contains("base_functions"));
+
+        let deserialized: NodeInfo = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized.name_location.as_deref(), Some("205:4:7"));
+        assert_eq!(deserialized.name_locations.len(), 2);
+        assert_eq!(deserialized.referenced_declaration, Some(NodeId(42)));
+        assert_eq!(deserialized.scope, Some(NodeId(10)));
+        assert_eq!(deserialized.base_functions.len(), 2);
     }
 }
 // temp
