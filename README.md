@@ -1,3 +1,5 @@
+![Diagnostics image](./data/1-diagnostics.png)
+
 # The Solidity Language Server
 
 [![Crates.io](https://img.shields.io/crates/v/solidity-language-server)](https://crates.io/crates/solidity-language-server)
