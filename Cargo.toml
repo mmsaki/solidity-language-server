@@ -44,9 +44,9 @@ dhat-heap = ["dhat"]
 [profile.release]
 debug = 1 # needed for DHAT backtraces
 
-[[bin]]
-name = "solar-language-server"
-path = "src/bin/solar_lsp.rs"
+# [[bin]]
+# name = "solar-language-server"
+# path = "src/bin/solar_lsp.rs"
 
 [[bin]]
 name = "dhat-profile"
