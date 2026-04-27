@@ -12,6 +12,9 @@ on:
       - "src/**"
       - "tests/**"
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Test
