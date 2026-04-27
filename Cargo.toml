@@ -1,7 +1,7 @@
 [package]
 name = "solidity-language-server"
 description = "A fast Solidity language server powered by solc and Foundry"
-version = "0.1.32"
+version = "0.1.33"
 edition = "2024"
 license = "MIT"
 readme = "README.md"
@@ -32,7 +32,10 @@ svm = { package = "svm-rs", version = "0.5", default-features = false, features 
   "rustls",
 ] }
 semver = "1"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+reqwest = { version = "0.12", default-features = false, features = [
+  "rustls-tls",
+  "json",
+] }
 dhat = { version = "0.3", optional = true }
 
 [features]
@@ -40,6 +43,10 @@ dhat-heap = ["dhat"]
 
 [profile.release]
 debug = 1 # needed for DHAT backtraces
+
+[[bin]]
+name = "solar-language-server"
+path = "src/bin/solar_lsp.rs"
 
 [[bin]]
 name = "dhat-profile"
